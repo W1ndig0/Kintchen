@@ -1,0 +1,20 @@
+KITCHEN HUB 9.8.5 - THE GITHUB UPDATE
+=====================================
+Install: copy this shiftcal folder over /mnt/us/extensions/shiftcal (cloud.conf, hub.tsv and your settings
+are kept - this package no longer contains eco.conf or stocks.conf, so they can't be overwritten), then run
+Kitchen_Hub_Display.sh from Documents.
+
+This is the last USB install: from now on the hub updates itself from your GitHub site
+(Settings > Phone > CHECK FOR UPDATE, or the phone app: FRIDGE > Install update).
+
+Then set up the GitHub kit (kitchen_hub_9.8.5_github_kit.zip -> GITHUB_SETUP.txt, ~15 minutes on the PC).
+Everything on the fridge still works without it; the kit adds the cloud brain, phone pushes, calendar
+subscription, the TV dashboard, Siri and the PC command line. FEATURES.txt lists all 56 additions.
+
+NEW ON THE FRIDGE
+- Notes from the phone/PC/Siri in the bulletin strip and on the standby page (tap = read).
+- Remote control from the phone/PC (timer, sync, update, log, screen, contrast).
+- Repeating chores in the calendar; tonight's planned dinner on the dinner screen + front page.
+- Weather/news/recipes come as one file from the cloud brain when it's running: much shorter Wi-Fi time.
+- Self-update with checksums, daily log upload, settings backup/restore, Siri inbox.
+- Settings > Phone > GitHub cloud: status, update, log, backup, calendar + TV QR codes, cloud data on/off.

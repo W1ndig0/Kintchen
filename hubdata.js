@@ -246,6 +246,52 @@ var HubCal = (function() {
         return H;
     }
     function holiday(k) { return holidays(parseInt(k.substring(0, 4), 10))[k] || ""; }
-    return { key: key, shiftId: shiftId, parseShift: parseShift, parseEvent: parseEvent, eventText: eventText, fmtTime: fmtTime, holidays: holidays, holiday: holiday };
+    /* 9.8.5 repeating things (chores, garbage night, payday, birthdays):
+     * kind "repeat", text "RULE|HH:MM|Title|Note"   RULE is one of
+     *   daily | weekly:1,4 (0=Sun) | every2w:2:2026-11-17 (weekday + a date it falls on) |
+     *   monthly:15 | monthly:last | yearly:11-17                                                 */
+    function parseRepeat(text) {
+        var f = String(text).split("|");
+        if (f.length < 3 || !/^(daily|weekly:[0-6](,[0-6])*|every2w:[0-6]:\d{4}-\d\d-\d\d|monthly:(\d{1,2}|last)|yearly:\d\d-\d\d)$/.test(f[0])) return null;
+        return { rule: f[0], time: /^\d\d:\d\d$/.test(f[1]) ? f[1] : "", title: f[2], note: f.slice(3).join("|") };
+    }
+    function repeatText(rule, time, title, note) { return rule + "|" + (time || "") + "|" + String(title).replace(/\|/g, "/") + "|" + String(note || "").replace(/\|/g, "/"); }
+    function dayNum(k) { return Math.round(Date.UTC(+k.substring(0, 4), +k.substring(5, 7) - 1, +k.substring(8, 10)) / 86400000); }
+    function repeatOn(r, k) {      // does repeat r fall on day k (YYYY-MM-DD)?
+        var p = r.rule.split(":"), d = new Date(dayNum(k) * 86400000), dow = d.getUTCDay(), dom = d.getUTCDate();
+        if (p[0] === "daily") return true;
+        if (p[0] === "weekly") return ("," + p[1] + ",").indexOf("," + dow + ",") >= 0;
+        if (p[0] === "every2w") return dow === +p[1] && ((dayNum(k) - dayNum(p[2])) % 14 + 14) % 14 === 0;
+        if (p[0] === "monthly") {
+            if (p[1] === "last") return new Date((dayNum(k) + 1) * 86400000).getUTCDate() === 1;
+            var last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+            return dom === Math.min(+p[1], last);          // the 31st becomes the last day in short months
+        }
+        if (p[0] === "yearly") return k.substring(5) === p[1];
+        return false;
+    }
+    function ruleLabel(rule) {
+        var D = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], p = rule.split(":");
+        if (p[0] === "daily") return "every day";
+        if (p[0] === "weekly") return "every " + p[1].split(",").map(function(x) { return D[+x]; }).join(", ");
+        if (p[0] === "every2w") return "every 2nd " + D[+p[1]];
+        if (p[0] === "monthly") return p[1] === "last" ? "last day of the month" : "monthly on the " + p[1];
+        if (p[0] === "yearly") return "every year";
+        return rule;
+    }
+    // items: [{id, text}] of kind "repeat" (already unlocked) -> {date: [{id, time, title, note, rep}]}
+    function expandRepeats(items, fromKey, days) {
+        var out = {}, rs = [], i, j;
+        for (i = 0; i < items.length; i++) { var r = parseRepeat(items[i].text); if (r) { r.id = items[i].id; rs.push(r); } }
+        if (!rs.length) return out;
+        var n0 = dayNum(fromKey);
+        for (j = 0; j < days; j++) {
+            var d = new Date((n0 + j) * 86400000), k = key(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+            for (i = 0; i < rs.length; i++) if (repeatOn(rs[i], k)) (out[k] = out[k] || []).push({ id: rs[i].id, date: k, time: rs[i].time, title: rs[i].title, note: rs[i].note, rep: rs[i].rule });
+        }
+        return out;
+    }
+    return { key: key, shiftId: shiftId, parseShift: parseShift, parseEvent: parseEvent, eventText: eventText, fmtTime: fmtTime, holidays: holidays, holiday: holiday,
+             parseRepeat: parseRepeat, repeatText: repeatText, repeatOn: repeatOn, ruleLabel: ruleLabel, expandRepeats: expandRepeats };
 })();
 if (typeof module !== "undefined") { module.exports.HubCrypt = HubCrypt; module.exports.HubCal = HubCal; }

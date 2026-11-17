@@ -1,0 +1,483 @@
+#!/usr/bin/env node
+/* Kitchen Hub cloud brain (runs in GitHub Actions every ~15 min; see .github/workflows/kitchen-cloud.yml)
+ *
+ * Reads your private list gist, and then:
+ *   - turns Siri/Shortcut/PC "inbox" notes into locked list items, re-locks anything left plain
+ *   - handles requests from the phone (import a recipe from a link, re-roll the meal plan, test push)
+ *   - fills an empty week of dinners (meal plan), keeps repeating chores in the calendar
+ *   - phone pushes (ntfy): shift tomorrow / in an hour, events, chores, birthdays, holidays,
+ *     a morning briefing, a Sunday week-ahead, weather warnings, "the Kindle went quiet", low battery
+ *   - publishes to a second private gist: calendar.ics (subscribe on iPhone/PC), tv.json (locked, for
+ *     the TV page) and bundle.txt (weather+news+recipes fetched here, so the Kindle downloads ONE file)
+ *
+ * The logs of a public repo are public: this script prints counts only, never item text.
+ * Env: GIST_ID GIST_TOKEN HUB_PASS [NTFY_TOPIC] [NTFY_URL] [GH_API] [TZ_HOURS=-7] [BRAIN_NOW=epoch ms, tests]
+ *      [SKIP_BUNDLE=1] [OFFLINE=1] [LAT LON]
+ */
+"use strict";
+const fs = require("fs"), path = require("path"), os = require("os"), cp = require("child_process");
+const HubData = require("./hubdata.js"), HubCrypt = HubData.HubCrypt, HubCal = HubData.HubCal;
+
+const API = process.env.GH_API || "https://api.github.com";
+const GIST = process.env.GIST_ID, TOKEN = process.env.GIST_TOKEN, PASS = process.env.HUB_PASS || "";
+const TOPIC = process.env.NTFY_TOPIC || "", NTFY = process.env.NTFY_URL || "https://ntfy.sh";
+const TZH = +(process.env.TZ_HOURS || -7);
+const NOW = +(process.env.BRAIN_NOW || Date.now());
+const OFFLINE = process.env.OFFLINE === "1";
+const LAT = process.env.LAT || "53.9171", LON = process.env.LON || "-122.7497";
+const REPO_DIR = path.resolve(__dirname, "..");
+const out = []; function log(s) { out.push(s); console.log("brain: " + s); }
+
+// ---------- time (the hub lives in one fixed zone, like the Kindle) ----------
+function local(ms) { return new Date(ms + TZH * 3600000); }           // read with getUTC*
+const L = local(NOW);
+function p2(n) { return (n < 10 ? "0" : "") + n; }
+function keyOf(d) { return d.getUTCFullYear() + "-" + p2(d.getUTCMonth() + 1) + "-" + p2(d.getUTCDate()); }
+function addK(k, n) { const d = new Date(Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10) + n)); return keyOf(d); }
+const TODAY = keyOf(L), TOMORROW = addK(TODAY, 1), HOUR = L.getUTCHours() + L.getUTCMinutes() / 60, DOW = L.getUTCDay();
+function msAt(k, hh, mm) { return Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10), hh, mm || 0) - TZH * 3600000; }
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function dayName(k) { return k === TODAY ? "Today" : k === TOMORROW ? "Tomorrow" : DAYS[new Date(Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10))).getUTCDay()]; }
+
+// ---------- GitHub ----------
+async function gh(method, url, body) {
+    const r = await fetch(url.startsWith("http") ? url : API + url, {
+        method, headers: { Authorization: "Bearer " + TOKEN, Accept: "application/vnd.github+json", "User-Agent": "KitchenHubBrain", "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "Content-Type": "application/json" } : {}) },
+        body: body ? JSON.stringify(body) : undefined
+    });
+    if (!r.ok) throw new Error(method + " " + url.replace(/[0-9a-f]{20,}/g, "<id>") + " -> " + r.status);
+    return r.json();
+}
+async function fileText(f) {
+    if (!f) return null;
+    if (!f.truncated && typeof f.content === "string") return f.content;
+    const r = await fetch(f.raw_url); return r.ok ? r.text() : null;
+}
+async function get(url, ms, opts) {
+    if (OFFLINE) return null;
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms || 15000);
+    try { const r = await fetch(url, { signal: ctl.signal, headers: { "User-Agent": "Mozilla/5.0 KitchenHub" }, ...(opts || {}) }); return r.ok ? await r.text() : null; }
+    catch (e) { return null; } finally { clearTimeout(t); }
+}
+
+// ---------- store helpers ----------
+let store = HubData.HEADER + "\n", storeChanged = false;
+function items(kind) {
+    return HubData.items(store, kind).map(it => { const t = HubCrypt.unlock(it.text, PASS); return { id: it.id, kind: it.kind, state: it.state, ts: it.ts, text: t === null ? null : t, raw: it.text }; });
+}
+function edit(id, kind, state, text) { store = HubData.edit(store, id, kind, state, PASS ? HubCrypt.lock(text, PASS) : text, NOW); storeChanged = true; }
+function newId() { return HubData.newId("c"); }
+function hasId(id) { return store.split("\n").some(l => { const it = HubData.parseLine(l); return it && it.id === id; }); }
+
+// ---------- inbox: Shortcuts / PC drop plain lines into gist files named inbox-*.txt ----------
+//   milk                       -> shopping list      note: back at 6, love you  -> fridge note
+//   event: 2026-11-20 15:30 Dentist                   timer: 10                  -> start a 10 min timer
+//   chore: weekly:2 19:00 Garbage out                 recipe: https://...        -> import a recipe
+function inboxLine(line) {
+    line = String(line).replace(/\r/g, "").trim();
+    if (!line || line.charAt(0) === "#") return 0;
+    let m;
+    if ((m = /^note\s*:\s*(.+)$/i.exec(line))) { edit(newId(), "msg", "open", m[1].slice(0, 280)); return 1; }
+    if ((m = /^timer\s*:\s*(\d{1,3})/i.exec(line))) { edit(newId(), "cmd", "open", "timer|" + m[1]); return 1; }
+    if ((m = /^recipe\s*:\s*(https?:\/\/\S+)/i.exec(line))) { edit(newId(), "req", "open", "import|" + m[1]); return 1; }
+    if ((m = /^event\s*:\s*(\d{4}-\d\d-\d\d)\s+(?:(\d{1,2}:\d\d)\s+)?(.+)$/i.exec(line))) {
+        const t = m[2] ? p2(+m[2].split(":")[0]) + ":" + m[2].split(":")[1] : "";
+        edit(newId(), "event", "open", HubCal.eventText(m[1], t, m[3], "")); return 1;
+    }
+    if ((m = /^chore\s*:\s*(\S+)\s+(?:(\d{1,2}:\d\d)\s+)?(.+)$/i.exec(line))) {
+        const txt = HubCal.repeatText(m[1], m[2] ? p2(+m[2].split(":")[0]) + ":" + m[2].split(":")[1] : "", m[3], "");
+        if (HubCal.parseRepeat(txt)) { edit(newId(), "repeat", "open", txt); return 1; }
+        return 0;
+    }
+    if ((m = /^(?:shop|buy|list)\s*:\s*(.+)$/i.exec(line))) line = m[1];
+    line.split(/\s*,\s*/).forEach(x => { if (x) edit(newId(), "shop", "open", x.slice(0, 80)); });
+    return 1;
+}
+
+// ---------- recipe import from a link (JSON-LD recipe card, same as the Kindle reader) ----------
+function decodeEnts(s) { return String(s || "").replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n)).replace(/&#x([0-9a-f]+);/gi, (m, n) => String.fromCharCode(parseInt(n, 16))).replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#039;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " "); }
+function txt(s) { return decodeEnts(String(s || "")).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim(); }
+function recipeFromHtml(html) {
+    const blocks = String(html).split(/<script/i).filter(b => /application\/ld\+json/i.test(b.slice(0, 200)));
+    for (const b of blocks) {
+        const json = b.replace(/^[^>]*>/, "").replace(/<\/script>[\s\S]*$/i, "");
+        let ld; try { ld = JSON.parse(json); } catch (e) { continue; }
+        const found = [];
+        (function walk(o) {
+            if (!o || typeof o !== "object") return;
+            if (Array.isArray(o)) return o.forEach(walk);
+            const t = o["@type"]; if (t === "Recipe" || (Array.isArray(t) && t.indexOf("Recipe") >= 0)) found.push(o);
+            if (o["@graph"]) walk(o["@graph"]);
+        })(ld);
+        if (!found.length) continue;
+        const r = found[0], steps = [];
+        (function st(s) { if (!s) return; if (typeof s === "string") return void steps.push(txt(s)); if (Array.isArray(s)) return s.forEach(st); if (s.itemListElement) return st(s.itemListElement); if (s.text) steps.push(txt(s.text)); })(r.recipeInstructions);
+        const ing = (r.recipeIngredient || []).map(txt).filter(Boolean);
+        let img = r.image; if (Array.isArray(img)) img = img[0]; if (img && typeof img === "object") img = img.url;
+        return { title: txt(r.name) || "Recipe", ing, steps: steps.filter(Boolean), img: img || "" };
+    }
+    return null;
+}
+function recipeText(r, url) { return [r.title].concat(r.ing.map(i => "* " + i), r.steps, url ? ["(from " + url + ")"] : []).join("\n"); }
+
+// ---------- shift / event helpers ----------
+function shiftTimes(v) {      // "10:45-2:45p" "1-7:15p" "07-15" "9-5" -> {s:[h,m], e:[h,m]} | null
+    const m = /^\s*(\d{1,2})(?::?(\d\d))?\s*([ap])?m?\s*[-\u2013to ]+\s*(\d{1,2})(?::?(\d\d))?\s*([ap])?m?/i.exec(String(v || ""));
+    if (!m) return null;
+    let sh = +m[1], sm = +(m[2] || 0), eh = +m[4], em = +(m[5] || 0);
+    const sa = (m[3] || "").toLowerCase(), ea = (m[6] || "").toLowerCase();
+    if (sh > 23 || eh > 24) return null;
+    if (sa === "p" && sh < 12) sh += 12; if (sa === "a" && sh === 12) sh = 0;
+    if (ea === "p" && eh < 12) eh += 12;
+    if (!sa && !/^0/.test(m[1]) && sh < 7) sh += 12;            // "1-7:15p" is an afternoon start
+    if (!ea && eh * 60 + em <= sh * 60 + sm && eh < 12) eh += 12;  // "9-5"
+    return { s: [sh, sm], e: [eh, em] };
+}
+function isOff(v) { return !v || /^\s*(off|x|-|vac|vacation|sick|stat)\s*$/i.test(v); }
+function fmtT(h, m) { const ap = h >= 12 ? "pm" : "am"; return (h % 12 || 12) + (m ? ":" + p2(m) : "") + ap; }
+
+function calendar() {
+    const sh = {}, ev = {};
+    items("shift").forEach(it => { if (it.state === "del" || it.text === null) return; const s = HubCal.parseShift(it.text); if (s && s.v) sh[s.date] = s.v; });
+    items("event").forEach(it => { if (it.state === "del" || it.text === null) return; const e = HubCal.parseEvent(it.text); if (e) { e.id = it.id; (ev[e.date] = ev[e.date] || []).push(e); } });
+    const reps = items("repeat").filter(it => it.state !== "del" && it.text !== null);
+    const rx = HubCal.expandRepeats(reps, addK(TODAY, -1), 45);
+    Object.keys(rx).forEach(k => { (ev[k] = ev[k] || []).push(...rx[k]); });
+    Object.keys(ev).forEach(k => ev[k].sort((a, b) => (a.time || "") < (b.time || "") ? -1 : 1));
+    return { sh, ev, reps };
+}
+
+// ---------- ntfy ----------
+let pushes = 0;
+async function push(title, body, tags, prio) {
+    if (!TOPIC) return false;
+    if (OFFLINE && !process.env.NTFY_URL) return false;
+    try {
+        const r = await fetch(NTFY + "/" + TOPIC, { method: "POST", body: body, headers: { Title: title.replace(/[^\x20-\x7e]/g, ""), Tags: tags || "fork_and_knife", Priority: String(prio || 3) } });
+        if (r.ok) pushes++;
+        return r.ok;
+    } catch (e) { return false; }
+}
+
+// ---------- weather (Open-Meteo, same as the Kindle) ----------
+const WMO = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Cloudy", 45: "Fog", 48: "Freezing fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 66: "Freezing rain", 67: "Freezing rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 77: "Snow grains", 80: "Showers", 81: "Showers", 82: "Heavy showers", 85: "Snow showers", 86: "Heavy snow showers", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" };
+let WX = null;
+async function weather() {
+    if (WX || process.env.OFFLINE_WX) return WX;
+    const t = await get("https://api.open-meteo.com/v1/forecast?latitude=" + LAT + "&longitude=" + LON + "&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,snowfall_sum&timezone=Etc%2FGMT%2B7&forecast_days=7");
+    try { WX = t ? JSON.parse(t) : null; } catch (e) { WX = null; }
+    return WX;
+}
+function wxLine(w, i) {
+    if (!w || !w.daily) return "";
+    const d = w.daily;
+    return (WMO[d.weather_code[i]] || "") + ", " + Math.round(d.temperature_2m_max[i]) + "\u00b0/" + Math.round(d.temperature_2m_min[i]) + "\u00b0" +
+        (d.precipitation_probability_max[i] >= 40 ? ", " + d.precipitation_probability_max[i] + "% precip" : "") + (d.snowfall_sum[i] >= 1 ? ", " + Math.round(d.snowfall_sum[i]) + " cm snow" : "");
+}
+
+// ---------- ICS calendar ----------
+function icsEsc(s) { return String(s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n"); }
+function fold(line) { const o = []; let s = line; while (Buffer.byteLength(s) > 74) { let n = 74; while (Buffer.byteLength(s.slice(0, n)) > 74) n--; o.push(s.slice(0, n)); s = " " + s.slice(n); } o.push(s); return o.join("\r\n"); }
+function dt(k, h, m) { return k.replace(/-/g, "") + "T" + p2(h) + p2(m) + "00"; }
+function buildIcs(cal) {
+    const L2 = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Kitchen Hub//EN", "CALSCALE:GREGORIAN", "X-WR-CALNAME:Kitchen Hub", "X-PUBLISHED-TTL:PT30M", "REFRESH-INTERVAL;VALUE=DURATION:PT30M"];
+    const stamp = TODAY.replace(/-/g, "") + "T000000Z";       // stable within a day: the file only changes when the calendar does
+    function ev(uid, start, end, title, extra) { L2.push("BEGIN:VEVENT", "UID:" + uid + "@kitchenhub", "DTSTAMP:" + stamp, start, end, fold("SUMMARY:" + icsEsc(title))); (extra || []).forEach(x => L2.push(fold(x))); L2.push("END:VEVENT"); }
+    Object.keys(cal.sh).forEach(k => {
+        const v = cal.sh[k]; if (isOff(v)) return;
+        const t = shiftTimes(v);
+        if (t) { const ek = t.e[0] >= 24 ? addK(k, 1) : k; ev("shift-" + k, "DTSTART:" + dt(k, t.s[0], t.s[1]), "DTEND:" + dt(ek, t.e[0] % 24, t.e[1]), "Shift " + v, ["CATEGORIES:Shift"]); }
+        else ev("shift-" + k, "DTSTART;VALUE=DATE:" + k.replace(/-/g, ""), "DTEND;VALUE=DATE:" + addK(k, 1).replace(/-/g, ""), "Shift " + v);
+    });
+    items("event").forEach(it => {
+        if (it.state === "del" || it.text === null) return;
+        const e = HubCal.parseEvent(it.text); if (!e) return;
+        if (e.time) { const h = +e.time.slice(0, 2), m = +e.time.slice(3); ev(it.id, "DTSTART:" + dt(e.date, h, m), "DTEND:" + dt(e.date, Math.min(23, h + 1), m), e.title, e.note ? ["DESCRIPTION:" + icsEsc(e.note), "BEGIN:VALARM", "TRIGGER:-PT30M", "ACTION:DISPLAY", "DESCRIPTION:" + icsEsc(e.title), "END:VALARM"] : ["BEGIN:VALARM", "TRIGGER:-PT30M", "ACTION:DISPLAY", "DESCRIPTION:" + icsEsc(e.title), "END:VALARM"]); }
+        else ev(it.id, "DTSTART;VALUE=DATE:" + e.date.replace(/-/g, ""), "DTEND;VALUE=DATE:" + addK(e.date, 1).replace(/-/g, ""), e.title, e.note ? ["DESCRIPTION:" + icsEsc(e.note)] : []);
+    });
+    const BYDAY = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+    cal.reps.forEach(it => {
+        const r = HubCal.parseRepeat(it.text); if (!r) return;
+        const p = r.rule.split(":"); let rr = "", first = TODAY;
+        if (p[0] === "daily") rr = "FREQ=DAILY";
+        else if (p[0] === "weekly") rr = "FREQ=WEEKLY;BYDAY=" + p[1].split(",").map(x => BYDAY[+x]).join(",");
+        else if (p[0] === "every2w") { rr = "FREQ=WEEKLY;INTERVAL=2;BYDAY=" + BYDAY[+p[1]]; first = p[2]; }
+        else if (p[0] === "monthly") rr = p[1] === "last" ? "FREQ=MONTHLY;BYMONTHDAY=-1" : "FREQ=MONTHLY;BYMONTHDAY=" + p[1];
+        else if (p[0] === "yearly") { rr = "FREQ=YEARLY"; first = L.getUTCFullYear() + "-" + p[1]; }
+        for (let i = 0; i < 400 && !HubCal.repeatOn(r, first); i++) first = addK(first, 1);
+        if (r.time) { const h = +r.time.slice(0, 2), m = +r.time.slice(3); ev("rep-" + it.id, "DTSTART:" + dt(first, h, m), "DTEND:" + dt(first, Math.min(23, h + 1), m), r.title, ["RRULE:" + rr]); }
+        else ev("rep-" + it.id, "DTSTART;VALUE=DATE:" + first.replace(/-/g, ""), "DTEND;VALUE=DATE:" + addK(first, 1).replace(/-/g, ""), r.title, ["RRULE:" + rr]);
+    });
+    [L.getUTCFullYear(), L.getUTCFullYear() + 1].forEach(y => { const H = HubCal.holidays(y); Object.keys(H).forEach(k => ev("hol-" + k, "DTSTART;VALUE=DATE:" + k.replace(/-/g, ""), "DTEND;VALUE=DATE:" + addK(k, 1).replace(/-/g, ""), H[k] + " (stat)", ["TRANSP:TRANSPARENT"])); });
+    L2.push("END:VCALENDAR");
+    return L2.join("\r\n") + "\r\n";
+}
+
+// ---------- bundle: run the Kindle's own sync_data.sh here, ship the results as one text file ----------
+function packDir(dir, kindleFiles, stateFiles) {
+    let o = "@@KH-BUNDLE " + Math.floor(NOW / 1000) + "\n";
+    const add = (rel) => { const f = path.join(dir, rel); if (fs.existsSync(f) && fs.statSync(f).isFile()) { const c = fs.readFileSync(f, "utf8"); o += "@@FILE " + rel + "\n" + c + (c.endsWith("\n") ? "" : "\n"); } };
+    kindleFiles.forEach(add); stateFiles.forEach(add);
+    const urls = path.join(dir, ".img_urls");
+    if (fs.existsSync(urls)) {
+        const seen = {}, data = fs.existsSync(path.join(dir, "mesquite/data.js")) ? fs.readFileSync(path.join(dir, "mesquite/data.js"), "utf8") : "";
+        fs.readFileSync(urls, "utf8").split("\n").reverse().forEach(l => { const m = /^(img\/[0-9a-z]+\.(jpg|png|gif)) (https?:\S+)$/.exec(l); if (m && !seen[m[1]] && data.indexOf(m[1]) >= 0) { seen[m[1]] = 1; o += "@@IMG " + m[1] + " " + m[3] + "\n"; } });
+    }
+    return o + "@@END\n";
+}
+function unpack(text, dir) {
+    let cur = null, buf = [];
+    const flush = () => { if (cur && /^[A-Za-z0-9._\/-]+$/.test(cur) && cur.indexOf("..") < 0) { const f = path.join(dir, cur); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, buf.join("\n") + "\n"); } };
+    String(text).split("\n").forEach(l => {
+        if (l.startsWith("@@FILE ")) { flush(); cur = l.slice(7).trim(); buf = []; }
+        else if (l.startsWith("@@IMG ") || l.startsWith("@@END") || l.startsWith("@@KH-BUNDLE")) { flush(); cur = null; buf = []; }
+        else if (cur) buf.push(l);
+    });
+    flush();
+}
+let KINDLE = null;    // kindle.json: the fridge's own news + markets choices
+async function makeBundle(prev) {
+    const sync = path.join(REPO_DIR, "kindle", "shiftcal", "sync_data.sh");
+    if (!fs.existsSync(sync)) { log("bundle: kindle/shiftcal/sync_data.sh not in the repo - skipped"); return null; }
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "khb-"));
+    fs.mkdirSync(path.join(dir, "mesquite/rcp"), { recursive: true });
+    if (prev) unpack(prev, dir);                                       // caches, due-stamps and recipe cards carry over
+    ["stocks.conf", "news.conf"].forEach(f => { const s = path.join(REPO_DIR, "kindle", f); if (fs.existsSync(s)) fs.copyFileSync(s, path.join(dir, f)); });
+    if (KINDLE && typeof KINDLE.news === "string") {
+        const lines = KINDLE.news.split(";").filter(l => /^https:\/\/[^|\s]+\|[A-Za-z0-9 +.&-]{1,24}\|\d{1,2}$/.test(l));
+        if (lines.length) fs.writeFileSync(path.join(dir, "news.conf"), lines.join("\n") + "\n");
+    }
+    if (KINDLE && typeof KINDLE.stocks === "string" && /^[A-Za-z0-9^=.:&+ -]{1,400}$/.test(KINDLE.stocks.trim())) fs.writeFileSync(path.join(dir, "stocks.conf"), KINDLE.stocks.trim().split(/\s+/).join("\n") + "\n");
+    try { fs.unlinkSync(path.join(dir, ".img_urls")); } catch (e) {}
+    try { cp.execFileSync("sh", [sync], { env: { ...process.env, HUB_DIR: dir, CLOUD_BUNDLE: "1" }, timeout: 240000, stdio: "ignore" }); }
+    catch (e) { log("bundle: sync_data.sh ended early (" + (e.status || e.signal) + ")"); }
+    const rcp = fs.readdirSync(path.join(dir, "mesquite/rcp")).filter(f => /\.js$/.test(f)).map(f => "mesquite/rcp/" + f);
+    const state = fs.readdirSync(dir).filter(f => /^\.(due_|stocks_cache|whatson_cache|otd_)/.test(f));
+    const b = packDir(dir, ["mesquite/data.js", "mesquite/whatson.js", "mesquite/rfeed.js", "mesquite/horo.js"].concat(rcp), state);
+    let data = null;
+    try { const t = fs.readFileSync(path.join(dir, "mesquite/data.js"), "utf8"); data = new Function("window", t + "; return window.HUB_DATA;")({}); } catch (e) {}
+    let whatson = null, rfeed = null;
+    try { whatson = new Function("window", fs.readFileSync(path.join(dir, "mesquite/whatson.js"), "utf8") + "; return window.HUB_WHATSON;")({}); } catch (e) {}
+    try { rfeed = new Function("window", fs.readFileSync(path.join(dir, "mesquite/rfeed.js"), "utf8") + "; return window.HUB_RFEED;")({}); } catch (e) {}
+    log("bundle: " + Math.round(b.length / 1024) + " KB, " + rcp.length + " recipe cards");
+    return { text: b, data, whatson, rfeed };
+}
+function bundleParts(text) {     // read data out of an existing bundle (when this run doesn't make a new one)
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "khr-")); unpack(text, dir);
+    const rd = (f, v) => { try { return new Function("window", fs.readFileSync(path.join(dir, f), "utf8") + "; return window." + v + ";")({}); } catch (e) { return null; } };
+    return { data: rd("mesquite/data.js", "HUB_DATA"), whatson: rd("mesquite/whatson.js", "HUB_WHATSON"), rfeed: rd("mesquite/rfeed.js", "HUB_RFEED") };
+}
+
+// =====================================================================
+async function main() {
+    if (!GIST || !TOKEN) { log("GIST_ID / GIST_TOKEN secrets are not set - nothing to do"); return; }
+    let g = await gh("GET", "/gists/" + GIST);
+    const owner = (g.owner && g.owner.login) || process.env.GITHUB_REPOSITORY_OWNER || "";
+    store = HubData.merge([(await fileText(g.files["hub.tsv"])) || HubData.HEADER + "\n"], NOW);
+    let brain = {}; try { brain = JSON.parse((await fileText(g.files["brain.json"])) || "{}"); } catch (e) {}
+    let kindle = null; try { kindle = JSON.parse((await fileText(g.files["kindle.json"])) || "null"); } catch (e) {}
+    KINDLE = kindle;
+    brain.sent = brain.sent || {};
+    const brainIn = JSON.parse(JSON.stringify(brain));
+    const sent = (k) => !!brain.sent[k], mark = (k) => { brain.sent[k] = NOW; };
+    Object.keys(brain.sent).forEach(k => { if (NOW - brain.sent[k] > 12 * 86400000) delete brain.sent[k]; });
+    const gistFiles = {};    // main gist edits besides hub.tsv
+
+    // 1. inbox files
+    let nIn = 0;
+    for (const name of Object.keys(g.files)) {
+        if (!/^inbox[-_][A-Za-z0-9._-]*\.txt$/.test(name)) continue;
+        const t = await fileText(g.files[name]) || "";
+        t.split("\n").forEach(l => { nIn += inboxLine(l); });
+        gistFiles[name] = null;
+    }
+    if (nIn) log("inbox: " + nIn + " lines");
+
+    // 2. re-lock anything plain (Kindle shell / Shortcuts write plain)
+    if (PASS) {
+        let n = 0;
+        HubData.items(store).forEach(it => { if (it.state !== "del" && !HubCrypt.isLocked(it.text)) { store = HubData.edit(store, it.id, it.kind, it.state, HubCrypt.lock(it.text, PASS), NOW); n++; } });
+        if (n) { storeChanged = true; log("relocked " + n); }
+    }
+
+    // 3. requests from the phone
+    for (const r of items("req")) {
+        if (r.state !== "open" || r.text === null) continue;
+        const f = r.text.split("|");
+        if (f[0] === "import" && /^https?:\/\//.test(f[1] || "")) {
+            const html = await get(f[1], 20000), rec = html ? recipeFromHtml(html) : null;
+            if (rec && (rec.ing.length || rec.steps.length)) { edit(newId(), "recipe", "open", recipeText(rec, f[1])); edit(r.id, "req", "done", "import|" + f[1] + "|ok|" + rec.title); log("imported a recipe"); }
+            else edit(r.id, "req", "done", "import|" + f[1] + "|fail|" + (html ? "no recipe card on that page" : "could not open the page"));
+        } else if (f[0] === "replan") {
+            items("plan").forEach(p => { const d = (p.text || "").slice(0, 10); if (d >= TODAY && p.state === "open") edit(p.id, "plan", "del", p.text || ""); });
+            brain.replan = 1; edit(r.id, "req", "done", r.text + "|ok");
+        } else if (f[0] === "pushtest") {
+            const ok = await push("Kitchen Hub", "Test from the cloud brain - phone alerts work.", "white_check_mark");
+            edit(r.id, "req", "done", "pushtest|" + (ok ? "ok" : "fail|no NTFY_TOPIC secret or ntfy unreachable"));
+        } else if (f[0] === "cloudlog") { brain.wantLog = NOW; edit(r.id, "req", "done", "cloudlog|ok"); }
+        else edit(r.id, "req", "done", r.text + "|fail|unknown request");
+    }
+
+    // 4. bundle + data for the TV and the meal plan
+    let cloud = brain.cloudGist || process.env.CLOUD_GIST_ID || "";
+    let cg = null;
+    if (cloud) { try { cg = await gh("GET", "/gists/" + cloud); } catch (e) { cloud = ""; } }
+    if (!cloud) {
+        cg = await gh("POST", "/gists", { public: false, description: "Kitchen Hub cloud (written by the GitHub Action; safe to leave alone)", files: { "README.md": { content: "Made by your Kitchen Hub cloud brain. calendar.ics = subscribe link, tv.json = TV page (locked), bundle.txt = the Kindle's data.\n" } } });
+        cloud = cg.id; brain.cloudGist = cloud; log("made the cloud gist");
+    }
+    const cloudFiles = {};
+    const prevBundle = cg && cg.files && cg.files["bundle.txt"] ? await fileText(cg.files["bundle.txt"]) : null;
+    let parts = null;
+    const wantBundle = process.env.SKIP_BUNDLE !== "1" && (!brain.bundleAt || NOW - brain.bundleAt > 25 * 60000 || !prevBundle);
+    if (wantBundle) {
+        const b = await makeBundle(prevBundle);
+        if (b && b.data) { cloudFiles["bundle.txt"] = { content: b.text }; brain.bundleAt = NOW; parts = b; }
+    }
+    if (!parts && prevBundle) parts = bundleParts(prevBundle);
+
+    // 5. meal plan: fill empty dinners for the next 7 days (never touches a day you changed or cleared)
+    const saved = items("recipe").filter(r => r.state === "open" && r.text).map(r => ({ title: r.text.split("\n")[0], src: "saved:" + r.id }));
+    const feed = ((parts && parts.rfeed && parts.rfeed.items) || []).map(x => ({ title: decodeEnts(x.t), src: x.l }));
+    const pool = saved.concat(feed);
+    if (pool.length) {
+        const used = {}; items("plan").forEach(p => { if (p.text) used[p.text.split("|")[1]] = 1; });
+        let seed = Math.floor(NOW / 86400000) + (brain.replan ? Math.floor(NOW / 60000) : 0), n = 0;
+        for (let i = 0; i < 7; i++) {
+            const k = addK(TODAY, i), id = "m" + k.replace(/-/g, "");
+            if (hasId(id) && (!brain.replan || items("plan").some(p => p.id === id))) continue;   // a day you set or cleared stays that way
+            let pick = null;
+            for (let t = 0; t < pool.length && !pick; t++) { const c = pool[(seed + t * 7 + i * 3) % pool.length]; if (!used[c.title]) pick = c; }
+            pick = pick || pool[(seed + i) % pool.length];
+            used[pick.title] = 1; edit(id, "plan", "open", k + "|" + pick.title + "|" + pick.src); n++;
+        }
+        if (n) log("meal plan: " + n + " dinners");
+    }
+    delete brain.replan;
+
+    // 6. pushes
+    const cal = calendar();
+    if (TOPIC) {
+        const w = await weather();
+        const quiet = HOUR < 6.5 || HOUR >= 22;
+        const plan = {}; items("plan").forEach(p => { if (p.state === "open" && p.text) plan[p.text.slice(0, 10)] = p.text.split("|")[1]; });
+        const openList = items("shop").filter(s => s.state === "open" && s.text);
+        // morning briefing
+        if (HOUR >= 7 && HOUR < 11 && !sent("brief" + TODAY)) {
+            mark("brief" + TODAY);
+            const lines = [];
+            if (w) lines.push("Weather: " + wxLine(w, 0));
+            if (HubCal.holiday(TODAY)) lines.push("Holiday: " + HubCal.holiday(TODAY));
+            if (cal.sh[TODAY] && !isOff(cal.sh[TODAY])) lines.push("Shift " + cal.sh[TODAY]);
+            (cal.ev[TODAY] || []).forEach(e => lines.push((e.time ? HubCal.fmtTime(e.time) + " " : "") + e.title));
+            if (plan[TODAY]) lines.push("Dinner: " + plan[TODAY]);
+            if (openList.length) lines.push(openList.length + " on the shopping list");
+            await push("Good morning - " + DAYS[DOW], lines.join("\n") || "Nothing on today.", "sunrise", 2);
+        }
+        // shift tomorrow (evening) and shift soon
+        if (HOUR >= 20 && HOUR < 22 && cal.sh[TOMORROW] && !isOff(cal.sh[TOMORROW]) && !sent("shtm" + TOMORROW)) {
+            mark("shtm" + TOMORROW); await push("Tomorrow: shift " + cal.sh[TOMORROW], (w ? "Weather: " + wxLine(w, 1) : "") + (plan[TOMORROW] ? "\nDinner plan: " + plan[TOMORROW] : ""), "briefcase");
+        }
+        const st = cal.sh[TODAY] && !isOff(cal.sh[TODAY]) ? shiftTimes(cal.sh[TODAY]) : null;
+        if (st) {
+            const start = msAt(TODAY, st.s[0], st.s[1]), left = (start - NOW) / 60000;
+            if (left > 0 && left <= 75 && !sent("shsoon" + TODAY)) { mark("shsoon" + TODAY); await push("Shift at " + fmtT(st.s[0], st.s[1]), "Starts in " + Math.round(left) + " min." + (w && w.current ? " It's " + Math.round(w.current.temperature_2m) + "\u00b0 out." : ""), "alarm_clock", 4); }
+        }
+        // timed events and chores
+        for (const e of (cal.ev[TODAY] || [])) {
+            if (!e.time) continue;
+            const at = msAt(TODAY, +e.time.slice(0, 2), +e.time.slice(3)), left = (at - NOW) / 60000, k = "ev" + e.id + TODAY;
+            if (e.rep) { if (left <= 0 && left > -20 && !sent(k)) { mark(k); await push(e.title, "Now (" + HubCal.fmtTime(e.time) + ")", "repeat"); } }
+            else if (left > 0 && left <= 60 && !sent(k)) { mark(k); await push(e.title + " at " + HubCal.fmtTime(e.time), e.note || "In " + Math.round(left) + " min", "calendar", 4); }
+        }
+        // birthdays / anniversaries a week and a day ahead
+        if (HOUR >= 9 && !quiet) for (const ahead of [7, 1]) {
+            const k = addK(TODAY, ahead);
+            for (const e of (cal.ev[k] || [])) if (/birthday|bday|b-day|anniversary/i.test(e.title) && !sent("bd" + ahead + e.id + k)) { mark("bd" + ahead + e.id + k); await push((ahead === 1 ? "Tomorrow: " : "In a week: ") + e.title, "Card? Gift? Cake? It's on " + dayName(k) + ".", "birthday"); }
+        }
+        // holiday tomorrow
+        if (HOUR >= 19 && HOUR < 22 && HubCal.holiday(TOMORROW) && !sent("hol" + TOMORROW)) { mark("hol" + TOMORROW); await push("Tomorrow is " + HubCal.holiday(TOMORROW), "B.C. statutory holiday - check store hours.", "flag-ca", 2); }
+        // Sunday: the week ahead
+        if (DOW === 0 && HOUR >= 18 && HOUR < 21 && !sent("week" + TODAY)) {
+            mark("week" + TODAY);
+            const lines = [];
+            for (let i = 1; i <= 7; i++) {
+                const k = addK(TODAY, i), bits = [];
+                if (cal.sh[k] && !isOff(cal.sh[k])) bits.push("shift " + cal.sh[k]);
+                (cal.ev[k] || []).forEach(e => bits.push(e.title));
+                if (plan[k]) bits.push("dinner: " + plan[k]);
+                if (bits.length) lines.push(DAYS[(DOW + i) % 7].slice(0, 3) + ": " + bits.join(" / "));
+            }
+            await push("Your week", lines.join("\n") || "A quiet week.", "spiral_calendar", 2);
+        }
+        // Saturday: long shopping list
+        if (DOW === 6 && HOUR >= 10 && HOUR < 13 && openList.length >= 8 && !sent("shop" + TODAY)) { mark("shop" + TODAY); await push(openList.length + " things on the list", openList.slice(0, 12).map(s => s.text).join(", "), "shopping_cart", 2); }
+        // the Kindle: quiet for too long, battery low
+        if (kindle && kindle.ts) {
+            const quietMin = (NOW / 1000 - kindle.ts) / 60, lim = Math.max(180, (kindle.interval || 60) * 3);
+            if (quietMin > lim && !brain.kindleQuiet) { brain.kindleQuiet = NOW; await push("The fridge hub went quiet", "No check-in for " + Math.round(quietMin / 60) + " h (battery " + (kindle.pct || "?") + "% last time). Dead battery, Wi-Fi, or it crashed.", "warning", 4); }
+            if (quietMin < lim) delete brain.kindleQuiet;
+            if (kindle.charging) delete brain.battWarned;
+            else if (kindle.left7 > 0 && kindle.left7 <= 18 && !kindle.reminded && !brain.battWarned && !quiet) { brain.battWarned = NOW; await push("Fridge hub battery " + kindle.pct + "%", "About " + kindle.left7 + " h left at the current rate.", "battery", 4); }
+        }
+        // new weather warnings
+        const ec = process.env.OFFLINE_WX ? null : await get("https://weather.gc.ca/rss/weather/53.912_-122.776_e.xml", 12000);
+        if (ec) {
+            const warn = ec.split("</entry>").filter(e => /term="Warnings and Watches"/i.test(e)).map(e => (/<title>([^<]*)<\/title>/.exec(e) || [])[1]).filter(t => t && !/No watches or warnings/i.test(t));
+            for (const t of warn) { const k = "wx" + TODAY + t.slice(0, 60); if (!sent(k)) { mark(k); await push(decodeEnts(t), "Environment Canada - Prince George", "cloud_with_snow", 4); } }
+        }
+        if (pushes) log("pushes: " + pushes);
+    }
+
+    // 7. calendar.ics + tv.json
+    const ics = buildIcs(cal);
+    if (!cg || !cg.files || !cg.files["calendar.ics"] || (await fileText(cg.files["calendar.ics"])) !== ics) cloudFiles["calendar.ics"] = { content: ics };
+    const w = await weather();
+    const tv = {
+        ts: Math.floor(NOW / 1000), today: TODAY, tz: TZH,
+        weather: w ? { now: w.current, daily: w.daily } : null,
+        shifts: {}, events: {}, plan: {},
+        list: items("shop").filter(s => s.state === "open" && s.text).map(s => s.text),
+        notes: items("msg").filter(m => m.state === "open" && m.text).map(m => ({ t: m.text, ts: m.ts })).slice(-5),
+        chores: cal.reps.map(r => { const x = HubCal.parseRepeat(r.text); return x ? { title: x.title, when: HubCal.ruleLabel(x.rule) + (x.time ? " " + HubCal.fmtTime(x.time) : "") } : null; }).filter(Boolean),
+        recipes: items("recipe").filter(r => r.state === "open" && r.text).slice(0, 40).map(r => { const ls = r.text.split("\n"); return { title: ls[0], ing: ls.slice(1).filter(l => l.indexOf("* ") === 0).map(l => l.slice(2)), steps: ls.slice(1).filter(l => l.trim() && l.indexOf("* ") !== 0 && !/^\(from /.test(l)) }; }),
+        news: ((parts && parts.data && parts.data.articles) || []).slice(0, 12).map(a => ({ s: a.s, t: decodeEnts(a.t), b: decodeEnts(String(a.b || "").slice(0, 400)) })),
+        alerts: (parts && parts.whatson && parts.whatson.alerts) || [],
+        whatson: parts && parts.whatson ? (parts.whatson.pg || []).slice(0, 6).map(a => decodeEnts(a.t)) : [],
+        otd: parts && parts.data ? parts.data.onThisDay : null,
+        stocks: parts && parts.data ? parts.data.stocks : [],
+        feed: ((parts && parts.rfeed && parts.rfeed.items) || []).slice(0, 8).map(x => ({ t: decodeEnts(x.t), s: x.s })),
+        kindle: kindle
+    };
+    for (let i = -1; i < 21; i++) { const k = addK(TODAY, i); if (cal.sh[k]) tv.shifts[k] = cal.sh[k]; if (cal.ev[k]) tv.events[k] = cal.ev[k].map(e => ({ time: e.time, title: e.title, rep: !!e.rep })); }
+    items("plan").forEach(p => { if (p.state === "open" && p.text && p.text.slice(0, 10) >= addK(TODAY, -1)) tv.plan[p.text.slice(0, 10)] = p.text.split("|")[1]; });
+    const tvHash = require("crypto").createHash("sha1").update(JSON.stringify({ ...tv, ts: 0 })).digest("hex");
+    if (tvHash !== brain.tvHash || !brain.tvAt || NOW - brain.tvAt > 30 * 60000) {        // unchanged data: refresh every 30 min only
+        cloudFiles["tv.json"] = { content: JSON.stringify({ v: 1, locked: PASS ? HubCrypt.lock(JSON.stringify(tv), PASS) : null, plain: PASS ? null : tv }) };
+        brain.tvHash = tvHash; brain.tvAt = NOW;
+    }
+
+    // 8. write: cloud gist first, then the main gist (merged with a fresh copy: someone may have edited meanwhile)
+    if (Object.keys(cloudFiles).length) await gh("PATCH", "/gists/" + cloud, { files: cloudFiles });
+    const links = "# written by the cloud brain - the Kindle reads this\nBUNDLE_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/bundle.txt\nCLOUD_GIST=" + cloud + "\nICS_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar.ics\nTV_REF=" + owner + "/" + cloud + "\n";
+    const before = JSON.stringify({ ...brainIn, lastRun: 0, pushes: 0 });
+    brain.v = "9.8.5"; brain.owner = owner; brain.pushes = pushes;
+    brain.ics = "https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar.ics";
+    brain.tv = owner + "/" + cloud;
+    if (brain.wantLog && kindle && kindle.ts * 1000 > brain.wantLog) delete brain.wantLog;
+    // the list gist only changes when something happened (or once an hour, so "cloud brain ran" stays fresh):
+    // fewer revisions, and the fridge's/phone's "has it changed?" check stays a tiny 304 most of the time
+    const files = { ...gistFiles };
+    if (JSON.stringify({ ...brain, lastRun: 0, pushes: 0 }) !== before || !brain.lastRun || NOW - brain.lastRun > 55 * 60000 || pushes || storeChanged || Object.keys(gistFiles).length) {
+        brain.lastRun = NOW; files["brain.json"] = { content: JSON.stringify(brain) };
+    }
+    if ((await fileText(g.files["kindle.conf"])) !== links) files["kindle.conf"] = { content: links };
+    if (storeChanged) {
+        const fresh = await gh("GET", "/gists/" + GIST);
+        store = HubData.merge([store, (await fileText(fresh.files["hub.tsv"])) || ""], NOW);
+        files["hub.tsv"] = { content: store };
+    }
+    if (Object.keys(files).length) await gh("PATCH", "/gists/" + GIST, { files });
+    log("done" + (storeChanged ? ", list updated" : "") + (Object.keys(files).length ? "" : " (nothing new to write)"));
+}
+main().catch(e => { console.error("brain: " + String(e.message || e).replace(/github_pat_\w+/g, "<token>")); process.exit(1); });

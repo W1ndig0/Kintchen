@@ -1,0 +1,22 @@
+# Optional TV photo frame: drop .jpg/.png files into photos/ and this keeps photos/list.json up to date.
+# NOTE: this repo is public (GitHub Pages), so anything in photos/ is public on the internet.
+name: photos
+on:
+  push:
+    paths: ["photos/**"]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cd photos
+          ls -1 | grep -iE '\.(jpe?g|png|webp|gif)$' | python3 -c 'import sys,json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))' > list.json
+          cd ..
+          git config user.name "kitchen-hub-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add photos/list.json
+          git diff --cached --quiet || (git commit -m "photo list" && git push)

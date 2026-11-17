@@ -1,0 +1,45 @@
+{
+    "items": [
+        {
+            "name": "Kitchen Hub",
+            "priority": 1,
+            "items": [
+                {
+                    "name": "Launch - Eco (sleeps between updates)",
+                    "action": "/bin/sh /mnt/us/extensions/shiftcal/run_hub.sh eco",
+                    "exitmenu": false
+                },
+                {
+                    "name": "Launch - Always on",
+                    "action": "/bin/sh /mnt/us/extensions/shiftcal/run_hub.sh always",
+                    "exitmenu": false
+                },
+                {
+                    "name": "Stop background updates / restore normal sleep",
+                    "action": "/bin/sh /mnt/us/extensions/shiftcal/stop_hub.sh",
+                    "exitmenu": false
+                },
+                {
+                    "name": "Restore original screensavers",
+                    "action": "/bin/sh /mnt/us/extensions/shiftcal/restore_screensavers.sh",
+                    "exitmenu": false
+                },
+                {
+                    "name": "Status bar probe (writes statusbar_probe.txt)",
+                    "action": "/bin/sh /mnt/us/extensions/shiftcal/probe_statusbar.sh",
+                    "exitmenu": false
+                },
+                {
+                    "name": "Diagnose power (writes diag.txt)",
+                    "action": "/bin/sh /mnt/us/extensions/shiftcal/diag.sh",
+                    "exitmenu": false
+                },
+                {
+                    "name": "Test sleep for 20 seconds (writes diag.txt)",
+                    "action": "/bin/sh /mnt/us/extensions/shiftcal/diag.sh test",
+                    "exitmenu": false
+                }
+            ]
+        }
+    ]
+}

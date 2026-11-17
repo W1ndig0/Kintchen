@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets"
+        xmlns:kindle="http://kindle.amazon.com/ns/widget-extensions"
+        id="http://custom.local/kitchenhub"
+        version="9.8.5"
+        viewmodes="maximized">
+    <name>Kitchen Hub</name>
+    <content src="index.html"/>
+    <kindle:messaging>
+        <kindle:app name="com.custom.kitchenhub" value="yes"/>
+    </kindle:messaging>
+    <kindle:permissions>
+        <kindle:permission name="local-port-access"/>
+        <kindle:permission name="internet-access"/>
+    </kindle:permissions>
+    <kindle:chrome>
+        <kindle:asset key="configureSearchBar" value="none"/>
+    </kindle:chrome>
+</widget>

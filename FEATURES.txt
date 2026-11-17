@@ -1,0 +1,83 @@
+KITCHEN HUB 9.8.5 - 56 NEW THINGS, AND WHAT EACH ONE IMPROVES
+==============================================================
+Inspiration: MagInkDash and Timeframe (e-ink family dashboards), FamQuest (fridge chores), Hanselman's wall
+calendar, "keepalive" Actions, ntfy, Apple Shortcuts. Everything below is built and tested here; the TV and
+Siri parts depend on the Apple apps described in GITHUB_SETUP.txt / SHORTCUTS.txt.
+
+THE CLOUD BRAIN (GitHub Actions, every 15 min, free)
+ 1. Cloud data bundle - weather, news, what's on, recipes and horoscopes fetched on GitHub; the Kindle downloads
+    ONE file instead of ~25: a few seconds of Wi-Fi instead of a minute-plus of fetching -> battery.
+ 2. Falls back to fetching directly if the bundle is missing or over 2 h old - never worse than 9.8.
+ 3. Your news sources and markets list (fridge Settings) travel to the cloud with the fridge's check-in.
+ 4. No quiet hours in the cloud: night-time news is fresh in the morning without the fridge spending battery.
+ 5. Morning briefing push (7 am): weather, shift, events, chores, tonight's dinner, list count.
+ 6. "Tomorrow: shift 10:45-2:45p" push at 8 pm, with tomorrow's weather.
+ 7. "Shift at 10:45am - starts in 55 min, it's -4 out" push.
+ 8. Event reminder an hour before (events with a time).
+ 9. Chore pushes at their time (garbage night!).
+10. Birthdays/anniversaries: a week ahead and the day before.
+11. "Tomorrow is Family Day" stat-holiday heads-up (store hours).
+12. Sunday 6 pm: your week ahead in one push.
+13. Saturday: "12 things on the list - shopping day?"
+14. Watchdog: "The fridge hub went quiet" if it misses its check-ins (dead battery, Wi-Fi, crash).
+15. Low-battery push from the cloud as a backup to the fridge's own reminder.
+16. New Environment Canada warnings for Prince George pushed once each.
+17. Meal plan: fills empty dinners for the next 7 days from your saved recipes + the recipe feeds; never
+    touches a day you set or cleared.
+18. Recipe import from any link (JSON-LD recipe card) - from the phone, PC, or the iPhone share sheet.
+19. Calendar feed (.ics): shifts with real start/end times, events with a 30-min alert, chores as true repeats,
+    B.C. stat holidays - subscribe on iPhone, Outlook, Google Calendar.
+20. TV data, locked with your passphrase.
+21. Siri/PC inbox: plain "milk, eggs" lines become locked list items within minutes.
+22. Re-locks anything that arrived unlocked.
+23. "Test phone push" request from the phone app.
+24. Keep-alive: GitHub stops schedules after 60 quiet days; the brain commits one tiny file a month so it never dies.
+25. Writes only when something changed (fewer gist revisions; the fridge's check stays a tiny 304).
+26. Update manifest built automatically when you upload new fridge files.
+
+THE FRIDGE (Kindle)
+27. Updates itself from your GitHub site: every file checksum-verified, all-or-nothing, then it restarts itself.
+    No more USB after this one. (Tested: a tampered file aborts the update and nothing changes.)
+28. Fridge notes from the phone/PC/Siri appear in the bulletin strip and on the standby front page; tap = read
+    (the phone sees "read").
+29. Remote control from the phone/PC: timer, sync now, check/install update, upload log, front page/tiles,
+    contrast, open a screen, reload. Each runs once and reports back.
+30. Repeating chores in every calendar view (tile, day sheet, full calendar), marked with their rule.
+31. Tonight's planned dinner on the dinner screen and the standby front page.
+32. Check-in (kindle.json): battery, 7-day drain, hours left, version, last sync - for the phone, TV and brain.
+33. Log upload (daily + on demand) to your cloud gist: you can send me logs without a cable.
+34. Settings backup/restore: your layout and every Feel setting, locked in the gist; one tap after a reinstall.
+35. Reads the Siri/PC inbox itself at every sync, so "add milk" shows up at the next wake.
+36. Settings > Phone > GitHub cloud: brain status, update button, log button, backup/restore,
+    calendar QR (scan to subscribe) and TV QR.
+37. "Data from the cloud" on/off switch.
+
+THE PHONE APP
+38. FRIDGE tab: battery %, days/hours left, last check-in (warns if quiet), version, cloud-data status.
+39. Pin a note on the fridge.
+40. Remote control buttons (timers, sync, update, log, screen, contrast, reload).
+41. Read the fridge's log right on the phone.
+42. Chores editor: weekly (any days), every 2 weeks, monthly, last day of month, yearly, daily - optional time.
+43. Meal plan: this week's dinners, tap a day to change it, x to clear, re-roll the week.
+44. Import a recipe from a link.
+45. Subscribe-to-calendar and TV links (open/copy).
+46. Test-push button. Also fixed: the add-item bar no longer floats over other tabs; 5 tabs fit an iPhone.
+
+THE TV (Apple TV / any big screen)
+47. Living-room dashboard in the almanac style: Today (big clock, notes, shift, events, dinner, weather, alerts,
+    list), Week (7 columns with shifts, events, chores, dinners), Kitchen (list, chores, dinner plan),
+    News (+ what's on in P.G.), Fridge (battery, On This Day, markets, new recipes).
+48. Cook on the TV: down arrow -> pick a recipe -> ingredients -> big steps with the remote.
+49. Night mode 11 pm-6 am (just the clock and tomorrow); dark colours in the evening, light by day (D toggles).
+50. Burn-in care (the page drifts a few pixels), auto-refresh every 5 min, offline-tolerant.
+51. Optional photo frame slide from photos/ (public - read the warning).
+
+THE PC
+52. kh command line: add, list, done, note, timer, event, chore, recipe, plan, status, log, tv, cal, sync,
+    update, remotelog - same encryption as the fridge (self-tested before every write).
+53. "kh tv" opens the dashboard - perfect second-monitor view (F11).
+54. Desktop notifications via ntfy in the browser (timers, shifts, briefing).
+
+SIRI / APPLE WATCH / HOMEPOD
+55. "Hey Siri, add to fridge list" / "leave a fridge note" / "fridge timer" (also from the Watch and HomePod).
+56. Share any recipe page from Safari to the hub; NFC tag on the fridge door; arrive-at-the-store automation.

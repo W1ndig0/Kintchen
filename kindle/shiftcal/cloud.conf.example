@@ -1,0 +1,19 @@
+# Kitchen Hub cloud lists - copy this file to cloud.conf and fill in your own values.
+# Without cloud.conf the shopping list, board and recipes still work on the fridge alone.
+#
+# 1. gist.github.com -> new SECRET gist, one file named hub.tsv containing:  #hub v1
+#    The GIST_ID is the long code at the end of the gist's address.
+# 2. github.com -> Settings -> Developer settings -> Fine-grained tokens -> new token,
+#    Account permissions -> Gists: Read and write. Longest expiry it offers.
+# 3. Make a public repo (e.g. kitchen-hub), upload the 4 files from the phone/ folder,
+#    Settings -> Pages -> deploy from branch. That address is PAGES_URL.
+# Locks the list text in the gist so only your phone and the Kindle can read it.
+# The phone learns it from the pairing QR. Change it on BOTH sides if you ever change it.
+PASSPHRASE=Holy
+GIST_ID=paste_gist_id_here
+GH_TOKEN=paste_token_here
+PAGES_URL=https://yourname.github.io/kitchen-hub/
+# (the repo address github.com/you/repo works too - the hub converts it)
+
+# Optional: your own ntfy channel for timer alerts (otherwise the hub makes a private random one)
+# NTFY_TOPIC=kitchenhub-yourname-12345

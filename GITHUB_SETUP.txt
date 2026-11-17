@@ -1,0 +1,85 @@
+KITCHEN HUB 9.8.5 - THE GITHUB KIT
+==================================
+This folder is your GitHub Pages repository (github.com/W1ndig0/Kintchen), plus a "cloud brain" that runs
+on GitHub for free every 15 minutes. About 15 minutes of setup, once. Do it on the PC.
+
+WHAT'S IN HERE
+  index.html, extra.js, hubdata.js, sw.js, manifest.json   the phone app (new FRIDGE tab, chores, meal plan, import)
+  tv.html                                                   the TV / PC dashboard
+  cloud/brain.js                                            the cloud brain (pushes, calendar, meal plan, data for the fridge)
+  .github/workflows/                                        runs the brain every 15 min + builds the update manifest
+  kindle/shiftcal/ + kindle/manifest.txt                    the fridge's own files: it updates itself from here
+  pc/kh.ps1, pc/kh.cmd                                      the PC command line ("kh add milk")
+  photos/                                                   optional photo frame for the TV (PUBLIC - see below)
+  SHORTCUTS.txt                                             "Hey Siri, add to the fridge list"
+
+1. PUT THE FRIDGE ON 9.8.5 (one last time by USB)
+   Copy the shiftcal folder from kitchen_hub_9.8.5.zip over /mnt/us/extensions/shiftcal, run
+   Kitchen_Hub_Display.sh from Documents. From now on, updates come from GitHub (step 6).
+
+2. UPLOAD THIS KIT TO YOUR REPO
+   github.com/W1ndig0/Kintchen -> Add file -> Upload files -> drag EVERYTHING in this folder in
+   (including the .github folder) -> Commit changes.
+   It replaces the old phone app files - that's intended.
+   If the .github folder won't drag in: Add file -> Create new file, type the name
+   .github/workflows/kitchen-cloud.yml and paste that file's text. Same for kindle-manifest.yml and photos.yml.
+
+3. MAKE A TOKEN JUST FOR THE BRAIN
+   github.com -> your picture -> Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens
+   -> Generate new token. Name "kitchen brain", longest expiry, Account permissions -> Gists: Read and write.
+   Copy it. (Never paste a token into a chat - it goes only into the box in step 4.)
+
+4. ADD 4 SECRETS
+   Repo -> Settings -> Secrets and variables -> Actions -> New repository secret, four times:
+     GIST_ID      the same gist id as in the Kindle's cloud.conf
+     GIST_TOKEN   the token from step 3
+     HUB_PASS     Holy
+     NTFY_TOPIC   the fridge's alert channel: Kindle Settings > Phone > "Timer alerts on your phone" shows it
+   Secrets are hidden, even though the repo is public. The brain's logs only ever show counts, never your items.
+
+5. TURN IT ON
+   Repo -> Actions tab -> "I understand my workflows, go ahead and enable them" ->
+   kitchen-cloud -> Run workflow. After ~1 minute it should be green.
+   (Red? Click it: "secrets are not set" = step 4; "-> 401" = token; "-> 404" = gist id.)
+   Then it runs by itself every 15 minutes. GitHub sometimes starts scheduled runs a few minutes late.
+
+6. ON THE FRIDGE
+   Settings > Phone > SYNC LISTS NOW. The new "GitHub cloud" section shows "Cloud brain: ran X min ago",
+   a calendar QR code and a TV QR code. CHECK FOR UPDATE now says "Up to date (9.8.5)".
+   Future updates: I give you new kindle/ files, you upload them to the repo, the fridge (or your phone:
+   FRIDGE > Install update) installs them. Every file is checksum-verified; nothing changes if one fails.
+
+7. ON THE PHONE
+   Open the app (pull to refresh once). New FRIDGE tab: battery and check-in, pin a note, remote control,
+   the fridge's log, TV link, calendar subscribe.
+
+8. TV (Apple TV) AND PC
+   Apple TV has no built-in browser. Two ways:
+     a) Install a browser app on the Apple TV (e.g. "Web for Apple TV"). On the phone: FRIDGE > Copy TV link,
+        then in the TV app's address box use the iPhone keyboard pop-up and paste.
+     b) Or on the iPhone: FRIDGE > Open TV page > Share > AirPlay / Screen Mirroring to the Apple TV.
+   Remote: left/right = screens, OK = pause, down on the kitchen screen = cook a recipe step by step.
+   PC: "kh tv" (below), or paste the TV link in Chrome/Edge and press F11. Great on a second monitor.
+   The TV page locks its data with your passphrase (it's in the link after k=).
+
+9. PC COMMAND LINE (Windows)
+   Copy the pc folder to C:\Users\<you>\KitchenHub. On the phone: LIST tab > Copy pairing link.
+   Open PowerShell in that folder:   .\kh.cmd pair "<paste the link>"
+   Then:  .\kh.cmd add milk eggs   |  .\kh.cmd list   |  .\kh.cmd note "Back at 6"   |  .\kh.cmd status
+          .\kh.cmd tv   |   .\kh.cmd cal   |   .\kh.cmd recipe https://...   |   .\kh.cmd help
+   It checks its own encryption against the fridge's before writing anything (kh selftest).
+   Desktop notifications too: open https://ntfy.sh/app in Chrome/Edge, subscribe to your NTFY_TOPIC,
+   allow notifications - timers, shift reminders and the morning briefing pop up on the PC.
+
+10. CALENDAR
+   Phone: FRIDGE > Subscribe to calendar (or scan the fridge's calendar QR with the camera).
+   PC/Outlook: kh cal. Shifts get real start/end times, events get a 30-min alert, chores repeat, B.C. stat
+   holidays are in. It refreshes every ~30 min. Anyone who has that exact link can read it - keep it to yourself.
+
+PRIVACY, HONESTLY
+  - Your lists, calendar, notes and recipes stay locked (passphrase) in your secret gist, as before.
+  - The cloud brain unlocks them only inside GitHub's runner to send pushes and build the calendar/TV data.
+  - calendar.ics is NOT locked (calendar apps can't unlock) - it lives in a second secret gist the brain makes.
+  - The repo is public (GitHub Pages needs that on a free account): code and photos/ are visible to anyone.
+    Don't put private photos in photos/.
+  - The token in GIST_TOKEN can only touch your gists. Revoke it any time; the brain just stops.

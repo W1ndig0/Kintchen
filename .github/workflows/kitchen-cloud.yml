@@ -1,0 +1,43 @@
+# Kitchen Hub cloud brain. Runs every 15 minutes (GitHub may start it a few minutes late; that's normal).
+# Needs repository secrets (Settings > Secrets and variables > Actions > New repository secret):
+#   GIST_ID     your list gist id (same as cloud.conf on the Kindle)
+#   GIST_TOKEN  a token that can read/write gists (same as cloud.conf GH_TOKEN, or a new one)
+#   HUB_PASS    your passphrase (Holy)
+#   NTFY_TOPIC  the phone alert topic (Kindle Settings > Phone shows it)
+name: kitchen-cloud
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: write          # only used once a month to keep the schedule alive (see the last step)
+concurrency:
+  group: kitchen-cloud
+  cancel-in-progress: false
+jobs:
+  brain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run the brain
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          HUB_PASS: ${{ secrets.HUB_PASS }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: node cloud/brain.js
+      # GitHub pauses scheduled workflows in a public repo after 60 days without a commit.
+      # This writes one tiny file a month so the brain never silently stops.
+      - name: Keep the schedule alive
+        run: |
+          last=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - last )) -gt $(( 45 * 86400 )) ]; then
+            date -u +%FT%TZ > cloud/keepalive.txt
+            git config user.name "kitchen-hub-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add cloud/keepalive.txt && git commit -m "keepalive" && git push
+          fi

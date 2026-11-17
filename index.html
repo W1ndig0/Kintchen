@@ -15,7 +15,8 @@ html, body { margin: 0; background: var(--paper); color: var(--ink); font-family
 header { position: sticky; top: 0; background: var(--ink); color: #fff; padding: calc(env(safe-area-inset-top) + 12px) 16px 10px; z-index: 2; }
 header h1 { margin: 0; font: 900 22px/1.1 Georgia, "Times New Roman", serif; letter-spacing: .14em; text-transform: uppercase; }
 #tabs { display: flex; margin-top: 10px; border: 2px solid #fff; }
-#tabs span { flex: 1; text-align: center; padding: 7px 0; font: 800 12px/1 -apple-system, Arial, sans-serif; letter-spacing: .14em; }
+#tabs span { flex: 1; text-align: center; padding: 7px 0; font: 800 11px/1 -apple-system, Arial, sans-serif; letter-spacing: .06em; }
+[hidden] { display: none !important; }
 #tabs span.sel { background: #fff; color: var(--ink); }
 #status { margin-top: 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
 #status.warn::before { content: "\25CF  "; }
@@ -53,7 +54,7 @@ li.day .hol { font-size: 12px; font-weight: 800; letter-spacing: .1em; border: 1
 </head>
 <body>
 <header><h1>Kitchen Hub</h1><div id="status">Starting…</div>
-<div id="tabs" hidden><span data-tab="list" class="sel">LIST</span><span data-tab="cal">CALENDAR</span><span data-tab="recipes">RECIPES</span><span data-tab="board">BOARD</span></div></header>
+<div id="tabs" hidden><span data-tab="list" class="sel">LIST</span><span data-tab="cal">CALENDAR</span><span data-tab="recipes">RECIPES</span><span data-tab="board">BOARD</span><span data-tab="fridge">FRIDGE</span></div></header>
 <main>
   <section id="setup" hidden>
     <p>Scan the pairing code in the fridge's Settings with your camera.</p>
@@ -75,7 +76,8 @@ li.day .hol { font-size: 12px; font-weight: 800; letter-spacing: .1em; border: 1
     <p class="row" style="margin-top:28px"><button class="btn ghost" id="copy">Copy pairing link</button><span id="copied"></span></p>
   </section>
   <section id="app-c" hidden>
-    <div class="row" style="margin-top:14px"><button class="btn" id="c-addev">+ Event</button><button class="btn ghost" id="c-addsh">+ Shift</button></div>
+    <div class="row" style="margin-top:14px"><button class="btn" id="c-addev">+ Event</button><button class="btn ghost" id="c-addsh">+ Shift</button><button class="btn ghost" id="c-addch">+ Chore</button></div>
+    <div id="c-chore" hidden></div>
     <div id="c-form" hidden style="margin-top:10px;border:2px solid var(--ink);padding:12px;background:#fff">
       <h2 id="c-fh" style="margin-top:0">New event</h2>
       <label class="fl">Date<input type="date" id="c-date"></label>
@@ -89,6 +91,8 @@ li.day .hol { font-size: 12px; font-weight: 800; letter-spacing: .1em; border: 1
     <ul id="c-list"></ul>
   </section>
   <section id="app-r" hidden>
+    <div id="r-plan"></div>
+    <div id="r-import"></div>
     <h2>Recipes</h2>
     <ul id="r-list"></ul>
     <p><button class="btn" id="r-new">New recipe</button></p>
@@ -102,6 +106,7 @@ Cook 3 minutes a side.    (steps, one per line — 'N minutes' offers a timer on
       <p class="row"><button class="btn" id="r-save">Save</button><button class="btn ghost" id="r-del">Delete</button><button class="btn ghost" id="r-cancel">Cancel</button></p>
     </div>
   </section>
+  <section id="app-f" hidden></section>
   <section id="app-b" hidden>
     <h2>The notice board <span style="float:right;font-weight:400">(shows on the fridge)</span></h2>
     <div id="b-tools" style="margin:6px 0">
@@ -117,6 +122,7 @@ Cook 3 minutes a side.    (steps, one per line — 'N minutes' offers a timer on
 </main>
 <form id="add" hidden><input id="add-t" placeholder="Add an item" autocomplete="off" enterkeyhint="done"><button>Add</button></form>
 <script src="hubdata.js"></script>
+<script src="extra.js" defer></script>
 <script>
 "use strict";
 var K = { cfg: "kh_cfg", store: "kh_store", remote: "kh_remote", synced: "kh_synced", etag: "kh_etag" };
@@ -176,6 +182,9 @@ function render() {
   if (TAB === "list") renderSoon();
   if (TAB === "recipes") renderRecipes();
   if (TAB === "board") renderBoardTab();
+  $("app-f").hidden = TAB !== "fridge";
+  if (TAB === "fridge" && window.renderFridge) renderFridge();
+  if (TAB === "recipes" && window.renderPlanImport) renderPlanImport();
   var all = itemsOf("shop"), pend = pendingIds(), open = [], done = [];
   all.forEach(function(it) { (it.state === "done" ? done : open).push(it); });
   open.sort(function(a, b) { return a.ts - b.ts; });
@@ -241,7 +250,7 @@ function sync() {
   if (!cfg) return Promise.resolve();
   if (busy) { again = true; return Promise.resolve(); }
   busy = true;
-  return api("GET").then(fileOf).then(function(rem) {
+  return api("GET").then(function(g) { if (g && window.saveExtras) saveExtras(g); return fileOf(g); }).then(function(rem) {
     remote = HubData.merge([rem]);
     store = HubData.merge([store, rem]);
     relockPlain();
@@ -269,6 +278,7 @@ function calData() {
   var sh = {}, ev = {};
   itemsOf("shift").forEach(function(it) { var s = HubCal.parseShift(it.text); if (s && s.v) sh[s.date] = s.v; });
   itemsOf("event").forEach(function(it) { var e = HubCal.parseEvent(it.text); if (e) { e.id = it.id; e.raw = it.text; (ev[e.date] = ev[e.date] || []).push(e); } });
+  if (window.repeatEvents) repeatEvents(ev);
   Object.keys(ev).forEach(function(k) { ev[k].sort(function(a, b) { return (a.time || "") < (b.time || "") ? -1 : 1; }); });
   return { sh: sh, ev: ev };
 }
@@ -290,6 +300,7 @@ function renderCal() {
       row.innerHTML = '<span class="t"></span><span class="w"></span><button class="x" aria-label="Delete">&times;</button>';
       row.querySelector(".t").textContent = e.time ? HubCal.fmtTime(e.time) : "ALL DAY";
       row.querySelector(".w").textContent = e.title + (e.note ? " — " + e.note : "");
+      if (e.rep) { row.querySelector(".x").hidden = true; row.querySelector(".w").textContent = "\u21bb " + e.title; }
       row.querySelector(".x").addEventListener("click", function() {
         if (!confirm("Delete " + e.title + "?")) return;
         store = lockEdit(store, e.id, "event", "del", e.raw); ls.set(K.store, store); render(); syncSoon(400);
