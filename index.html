@@ -34,14 +34,26 @@ form { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; p
 form input { flex: 1; font-size: 18px; padding: 12px; border: 2px solid var(--ink); border-radius: 0; background: #fff; }
 form button, .btn { font: 800 14px/1 -apple-system, Arial, sans-serif; letter-spacing: .12em; text-transform: uppercase; background: var(--ink); color: #fff; border: 0; padding: 0 18px; min-height: 48px; }
 .btn.ghost { background: none; color: var(--ink); border: 2px solid var(--ink); }
-.row { display: flex; justify-content: space-between; align-items: center; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fl { display: block; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; margin: 8px 0; }
+.fl input, .fl select { display: block; width: 100%; font-size: 17px; padding: 9px; border: 2px solid var(--ink); border-radius: 0; background: #fff; margin-top: 4px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+li.day { display: block; padding: 10px 0; min-height: 0; }
+li.day .dh { font: 800 13px/1.2 -apple-system, Arial, sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+li.day.today .dh { background: var(--ink); color: #fff; display: inline-block; padding: 2px 6px; }
+li.day .hol { font-size: 12px; font-weight: 800; letter-spacing: .1em; border: 1px solid var(--ink); padding: 1px 5px; margin-left: 6px; }
+.ce { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 17px; }
+.ce .t { width: 62px; font-weight: 800; font-size: 13px; letter-spacing: .06em; }
+.ce .x { margin-left: auto; border: 0; background: none; font-size: 20px; color: var(--mute); }
+.pill { background: var(--ink); color: #fff; font-weight: 800; font-size: 13px; padding: 3px 8px; }
+#soon li { min-height: 44px; font-size: 16px; }
+#soon .k { width: 92px; flex: none; font: 800 12px/1.2 -apple-system, Arial, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
 #setup { padding: 24px 0; line-height: 1.5; }
 #setup input { width: 100%; font-size: 16px; padding: 10px; border: 2px solid var(--ink); margin: 4px 0 12px; }
 </style>
 </head>
 <body>
 <header><h1>Kitchen Hub</h1><div id="status">Starting…</div>
-<div id="tabs" hidden><span data-tab="list" class="sel">LIST</span><span data-tab="recipes">RECIPES</span><span data-tab="board">BOARD</span></div></header>
+<div id="tabs" hidden><span data-tab="list" class="sel">LIST</span><span data-tab="cal">CALENDAR</span><span data-tab="recipes">RECIPES</span><span data-tab="board">BOARD</span></div></header>
 <main>
   <section id="setup" hidden>
     <p>Scan the pairing code in the fridge's Settings with your camera.</p>
@@ -58,7 +70,23 @@ form button, .btn { font: 800 14px/1 -apple-system, Arial, sans-serif; letter-sp
     <ul id="open"></ul>
     <div class="row"><h2>In the cart</h2><button class="btn ghost" id="clear" hidden>Clear</button></div>
     <ul id="done"></ul>
+    <h2>Coming up</h2>
+    <ul id="soon"></ul>
     <p class="row" style="margin-top:28px"><button class="btn ghost" id="copy">Copy pairing link</button><span id="copied"></span></p>
+  </section>
+  <section id="app-c" hidden>
+    <div class="row" style="margin-top:14px"><button class="btn" id="c-addev">+ Event</button><button class="btn ghost" id="c-addsh">+ Shift</button></div>
+    <div id="c-form" hidden style="margin-top:10px;border:2px solid var(--ink);padding:12px;background:#fff">
+      <h2 id="c-fh" style="margin-top:0">New event</h2>
+      <label class="fl">Date<input type="date" id="c-date"></label>
+      <div id="c-evf"><label class="fl">Time (leave empty for all day)<input type="time" id="c-time"></label>
+        <label class="fl">What<input id="c-title" placeholder="Dentist, Mom's birthday…"></label>
+        <label class="fl">Note<input id="c-note" placeholder="optional"></label></div>
+      <div id="c-shf" hidden><label class="fl">Shift<input id="c-shift" placeholder="9-5, 1-7:15p, 07-15, OFF (empty = clear)"></label>
+        <label class="fl">Repeat for<select id="c-rep"><option value="1">just this day</option><option value="7">7 days</option><option value="14">14 days</option><option value="28">28 days</option></select></label></div>
+      <p class="row"><button class="btn" id="c-save">Save</button><button class="btn ghost" id="c-cancel">Cancel</button></p>
+    </div>
+    <ul id="c-list"></ul>
   </section>
   <section id="app-r" hidden>
     <h2>Recipes</h2>
@@ -102,9 +130,25 @@ var $ = function(id) { return document.getElementById(id); };
 var TAB = "list";
 
 // pairing link from the fridge: https://you.github.io/kitchen/#pair=GISTID.TOKEN  (the part after # never leaves the phone)
+// passphrase lock (cloud.conf PASSPHRASE on the fridge; it arrives in the pairing link as &k=)
+function pk() { return (cfg && cfg.k) || ""; }
+function itemsOf(kind) {
+  return HubData.items(store, kind).map(function(it) {
+    var t = HubCrypt.unlock(it.text, pk());
+    return { ts: it.ts, id: it.id, kind: it.kind, state: it.state, text: t === null ? "(locked)" : t, locked: t === null, line: it.line };
+  });
+}
+function lockEdit(st, id, kind, state, text) { return HubData.edit(st, id, kind, state, HubCrypt.lock(text, pk())); }
+function relockPlain() {
+  if (!pk()) return;
+  var n = 0;
+  HubData.items(store).forEach(function(it) { if (it.state !== "del" && !HubCrypt.isLocked(it.text)) { store = HubData.edit(store, it.id, it.kind, it.state, HubCrypt.lock(it.text, pk())); n++; } });
+  if (n) ls.set(K.store, store);
+}
 function readPair(text) {
+  var k = /[&#?]k=([^&\s]+)/.exec(text || "");
   var m = /pair=([A-Za-z0-9]+)\.([A-Za-z0-9_]+)(?:&api=([^&\s]+))?/.exec(text || "");
-  return m ? { gist: m[1], token: m[2], api: m[3] ? decodeURIComponent(m[3]) : "https://api.github.com" } : null;
+  return m ? { gist: m[1], token: m[2], api: m[3] ? decodeURIComponent(m[3]) : "https://api.github.com", k: k ? decodeURIComponent(k[1]) : "" } : null;
 }
 (function() {
   var c = readPair(location.hash);
@@ -116,21 +160,23 @@ function pairLink() {
 }
 
 function edit(id, state, text) {
-  store = HubData.edit(store, id, "shop", state, text);
+  store = lockEdit(store, id, "shop", state, text);
   ls.set(K.store, store); render(); syncSoon(1500);     // a burst of ticks at the store = one upload
 }
 function pendingIds() {
-  var r = {}, mine = HubData.items(store), theirs = {}, i;
+  var r = {}, mine = HubData.items(store), theirs = {}, i; // raw lines on purpose
   HubData.items(remote).forEach(function(it) { theirs[it.id] = it.line; });
   for (i = 0; i < mine.length; i++) if (theirs[mine[i].id] !== mine[i].line) r[mine[i].id] = 1;
   return r;
 }
 function render() {
   $("app").hidden = !(TAB === "list"); $("add").hidden = !cfg || TAB !== "list";
-  $("app-r").hidden = TAB !== "recipes"; $("app-b").hidden = TAB !== "board";
+  $("app-r").hidden = TAB !== "recipes"; $("app-b").hidden = TAB !== "board"; $("app-c").hidden = TAB !== "cal";
+  if (TAB === "cal") renderCal();
+  if (TAB === "list") renderSoon();
   if (TAB === "recipes") renderRecipes();
   if (TAB === "board") renderBoardTab();
-  var all = HubData.items(store, "shop"), pend = pendingIds(), open = [], done = [];
+  var all = itemsOf("shop"), pend = pendingIds(), open = [], done = [];
   all.forEach(function(it) { (it.state === "done" ? done : open).push(it); });
   open.sort(function(a, b) { return a.ts - b.ts; });
   done.sort(function(a, b) { return b.ts - a.ts; });
@@ -198,6 +244,7 @@ function sync() {
   return api("GET").then(fileOf).then(function(rem) {
     remote = HubData.merge([rem]);
     store = HubData.merge([store, rem]);
+    relockPlain();
     if (store === remote) return;
     return api("PATCH", { files: { "hub.tsv": { content: store } } }).then(fileOf).then(function(saved) {
       remote = HubData.merge([saved]);
@@ -214,6 +261,82 @@ function sync() {
 var soon = 0;
 function syncSoon(ms) { clearTimeout(soon); soon = setTimeout(sync, ms); }
 
+// ---------- calendar ----------
+function p2(n) { return (n < 10 ? "0" : "") + n; }
+function todayK() { var d = new Date(); return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()); }
+function addD(k, n) { var p = k.split("-"), d = new Date(+p[0], +p[1] - 1, +p[2] + n); return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()); }
+function calData() {
+  var sh = {}, ev = {};
+  itemsOf("shift").forEach(function(it) { var s = HubCal.parseShift(it.text); if (s && s.v) sh[s.date] = s.v; });
+  itemsOf("event").forEach(function(it) { var e = HubCal.parseEvent(it.text); if (e) { e.id = it.id; e.raw = it.text; (ev[e.date] = ev[e.date] || []).push(e); } });
+  Object.keys(ev).forEach(function(k) { ev[k].sort(function(a, b) { return (a.time || "") < (b.time || "") ? -1 : 1; }); });
+  return { sh: sh, ev: ev };
+}
+var DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function dayLabel(k) { var p = k.split("-"), d = new Date(+p[0], +p[1] - 1, +p[2]); return DOW[d.getDay()] + " " + MON[d.getMonth()] + " " + d.getDate(); }
+function renderCal() {
+  var D = calData(), ul = $("c-list"), t = todayK(), k = t;
+  ul.innerHTML = "";
+  for (var i = 0; i < 60; i++, k = addD(k, 1)) {
+    var hol = HubCal.holiday(k), sh = D.sh[k], ev = D.ev[k] || [];
+    if (!hol && !sh && !ev.length && i > 0) continue;
+    var li = document.createElement("li"); li.className = "day" + (k === t ? " today" : "");
+    li.innerHTML = '<span class="dh"></span>' + (hol ? '<span class="hol"></span>' : "") + (sh ? ' <span class="pill"></span>' : "");
+    li.querySelector(".dh").textContent = k === t ? "Today · " + dayLabel(k) : dayLabel(k);
+    if (hol) li.querySelector(".hol").textContent = hol;
+    if (sh) li.querySelector(".pill").textContent = /^\s*off\s*$/i.test(sh) ? "OFF" : sh;
+    ev.forEach(function(e) {
+      var row = document.createElement("div"); row.className = "ce";
+      row.innerHTML = '<span class="t"></span><span class="w"></span><button class="x" aria-label="Delete">&times;</button>';
+      row.querySelector(".t").textContent = e.time ? HubCal.fmtTime(e.time) : "ALL DAY";
+      row.querySelector(".w").textContent = e.title + (e.note ? " — " + e.note : "");
+      row.querySelector(".x").addEventListener("click", function() {
+        if (!confirm("Delete " + e.title + "?")) return;
+        store = lockEdit(store, e.id, "event", "del", e.raw); ls.set(K.store, store); render(); syncSoon(400);
+      });
+      li.appendChild(row);
+    });
+    if (k === t && !sh && !ev.length && !hol) { var n = document.createElement("div"); n.className = "ce"; n.textContent = "Nothing today."; li.appendChild(n); }
+    ul.appendChild(li);
+  }
+}
+function renderSoon() {
+  var D = calData(), ul = $("soon"), t = todayK(), k = t, rows = [];
+  for (var i = 0; i < 30 && rows.length < 5; i++, k = addD(k, 1)) {
+    var lab = i === 0 ? "Today" : (i === 1 ? "Tomorrow" : dayLabel(k));
+    if (HubCal.holiday(k)) rows.push([lab, HubCal.holiday(k)]);
+    if (D.sh[k] && !/^\s*off\s*$/i.test(D.sh[k])) rows.push([lab, "Shift " + D.sh[k]]);
+    (D.ev[k] || []).forEach(function(e) { rows.push([lab, (e.time ? HubCal.fmtTime(e.time) + " " : "") + e.title]); });
+  }
+  ul.innerHTML = "";
+  rows.slice(0, 5).forEach(function(r) { var li = document.createElement("li"); li.innerHTML = '<span class="k"></span><span class="txt"></span>'; li.querySelector(".k").textContent = r[0]; li.querySelector(".txt").textContent = r[1]; ul.appendChild(li); });
+  if (!rows.length) ul.innerHTML = '<li class="empty">Nothing on the calendar for the next month.</li>';
+}
+var C_MODE = "ev";
+function openCalForm(mode) {
+  C_MODE = mode; $("c-form").hidden = false;
+  $("c-fh").textContent = mode === "ev" ? "New event" : "Shift";
+  $("c-evf").hidden = mode !== "ev"; $("c-shf").hidden = mode === "ev";
+  $("c-date").value = todayK(); $("c-time").value = ""; $("c-title").value = ""; $("c-note").value = ""; $("c-shift").value = ""; $("c-rep").value = "1";
+  (mode === "ev" ? $("c-title") : $("c-shift")).focus();
+}
+$("c-addev").addEventListener("click", function() { openCalForm("ev"); });
+$("c-addsh").addEventListener("click", function() { openCalForm("sh"); });
+$("c-cancel").addEventListener("click", function() { $("c-form").hidden = true; });
+$("c-save").addEventListener("click", function() {
+  var d = $("c-date").value;
+  if (!/^\d{4}-\d\d-\d\d$/.test(d)) { alert("Pick a date"); return; }
+  if (C_MODE === "ev") {
+    var t = $("c-title").value.trim();
+    if (!t) { $("c-title").focus(); return; }
+    store = lockEdit(store, HubData.newId("p"), "event", "open", HubCal.eventText(d, $("c-time").value, t, $("c-note").value.trim()));
+  } else {
+    var v = $("c-shift").value.trim(), n = +$("c-rep").value;
+    for (var i = 0; i < n; i++) { var k = addD(d, i); store = lockEdit(store, HubCal.shiftId(k), "shift", v ? "open" : "del", k + "|" + v); }
+  }
+  ls.set(K.store, store); $("c-form").hidden = true; render(); syncSoon(400);
+});
+
 // ---------- recipes ----------
 var R_OPEN = null;
 function parseRecipe(text) {
@@ -221,7 +344,7 @@ function parseRecipe(text) {
   return { title: lines[0] || "Recipe", body: lines.slice(1).join("\n") };
 }
 function renderRecipes() {
-  var rs = HubData.items(store, "recipe");
+  var rs = itemsOf("recipe");
   var keep = $("r-list"); keep.innerHTML = "";
   rs.forEach(function(it) {
     var r = parseRecipe(it.text), steps = r.body.split("\n").filter(function(l) { return l.trim() && l.indexOf("* ") !== 0; }).length;
@@ -236,7 +359,7 @@ function renderRecipes() {
 function openRecipe(id) {
   R_OPEN = id;
   var cur = null;
-  HubData.items(store, "recipe").forEach(function(it) { if (it.id === id) cur = it; });
+  itemsOf("recipe").forEach(function(it) { if (it.id === id) cur = it; });
   var r = parseRecipe(cur ? cur.text : "");
   $("r-edit-h").textContent = cur ? "Edit recipe" : "New recipe";
   $("r-title").value = cur ? r.title : "";
@@ -249,13 +372,13 @@ $("r-new").addEventListener("click", function() { openRecipe(HubData.newId("p"))
 $("r-cancel").addEventListener("click", closeRecipe);
 $("r-save").addEventListener("click", function() {
   var t = $("r-title").value.replace(/^\s+|\s+$/g, "") || "Recipe";
-  store = HubData.edit(store, R_OPEN, "recipe", "open", t + "\n" + $("r-body").value.replace(/\r/g, ""));
+  store = lockEdit(store, R_OPEN, "recipe", "open", t + "\n" + $("r-body").value.replace(/\r/g, ""));
   ls.set(K.store, store); closeRecipe(); render(); syncSoon(400);
 });
 $("r-del").addEventListener("click", function() {
   var cur = null;
-  HubData.items(store, "recipe").forEach(function(it) { if (it.id === R_OPEN) cur = it; });
-  if (cur) { store = HubData.edit(store, cur.id, "recipe", "del", cur.text); ls.set(K.store, store); }
+  itemsOf("recipe").forEach(function(it) { if (it.id === R_OPEN) cur = it; });
+  if (cur) { store = lockEdit(store, cur.id, "recipe", "del", cur.text); ls.set(K.store, store); }
   closeRecipe(); render(); syncSoon(400);
 });
 
@@ -268,7 +391,7 @@ function strokePts(text) {
 }
 function renderBoardTab() {
   var svg = $("b-svg"), h = "";
-  HubData.items(store, "sketch").forEach(function(it) {
+  itemsOf("sketch").forEach(function(it) {
     var st = strokePts(it.text);
     if (!st.pts.length) return;
     var d = st.pts.map(function(p) { return p[0] + "," + p[1]; }).join(" ");
@@ -286,13 +409,13 @@ $("b-svg").addEventListener("pointerdown", function(e) {
   var p = bXY(e);
   if (B.tool === "erase") {
     var best = null, bd = 1e9;
-    HubData.items(store, "sketch").forEach(function(it) {
+    itemsOf("sketch").forEach(function(it) {
       strokePts(it.text).pts.forEach(function(q) {
         var dd = (q[0] - p[0]) * (q[0] - p[0]) + (q[1] - p[1]) * (q[1] - p[1]);
         if (dd < bd) { bd = dd; best = it; }
       });
     });
-    if (best && bd < 1600) { store = HubData.edit(store, best.id, "sketch", "del", best.text); ls.set(K.store, store); render(); syncSoon(600); }
+    if (best && bd < 1600) { store = lockEdit(store, best.id, "sketch", "del", best.text); ls.set(K.store, store); render(); syncSoon(600); }
     return;
   }
   B.drawing = true; B.pts = [p];
@@ -310,7 +433,7 @@ window.addEventListener("pointerup", function() {
   B.drawing = false;
   if (B.pts.length > 400) B.pts = B.pts.filter(function(_, i) { return i % Math.ceil(B.pts.length / 400) === 0; });
   var d = B.pts.map(function(q) { return q[0] + "," + q[1]; }).join(";");
-  store = HubData.edit(store, HubData.newId("p"), "sketch", "open", "w" + (B.tool === "mark" ? 16 : 6) + "|" + d);
+  store = lockEdit(store, HubData.newId("p"), "sketch", "open", "w" + (B.tool === "mark" ? 16 : 6) + "|" + d);
   ls.set(K.store, store); render(); syncSoon(800);
 });
 Array.prototype.forEach.call(document.querySelectorAll(".b-t"), function(b) {
@@ -321,7 +444,7 @@ Array.prototype.forEach.call(document.querySelectorAll(".b-t"), function(b) {
 });
 $("b-clear").addEventListener("click", function() {
   if (!confirm("Clear the whole board?")) return;
-  HubData.items(store, "sketch").forEach(function(it) { store = HubData.edit(store, it.id, "sketch", "del", it.text); });
+  itemsOf("sketch").forEach(function(it) { store = lockEdit(store, it.id, "sketch", "del", it.text); });
   ls.set(K.store, store); render(); syncSoon(400);
 });
 
@@ -340,7 +463,7 @@ $("add").addEventListener("submit", function(e) {
   $("add-t").value = "";
 });
 $("clear").addEventListener("click", function() {
-  HubData.items(store, "shop").forEach(function(it) { if (it.state === "done") store = HubData.edit(store, it.id, "shop", "del", it.text); });
+  itemsOf("shop").forEach(function(it) { if (it.state === "done") store = lockEdit(store, it.id, "shop", "del", it.text); });
   ls.set(K.store, store); render(); syncSoon(300);
 });
 $("s-save").addEventListener("click", function() {
