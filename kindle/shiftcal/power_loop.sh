@@ -1,5 +1,5 @@
 #!/bin/sh
-# Kitchen Hub v9.8.5 power loop: wake -> (sync in background) -> awake window -> standby screenshot -> deep sleep
+# Kitchen Hub v9.9 power loop: wake -> (sync in background) -> awake window -> standby screenshot -> deep sleep
 #
 # v9.2 fixes
 #   * Button wake: an early wake from suspend (rc=0, well before the alarm) is treated as YOU pressing
@@ -14,7 +14,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="9.8.5"
+VERSION="9.9"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -517,8 +517,8 @@ write_cloud_js() {
           Q() { echo "$1" | sed 's/[\\"]//g'; }
           LK() { sed -n "s/^$1=\\([A-Za-z0-9:/._-]*\\)\$/\\1/p" "$DIR/.cloud_links" 2>/dev/null | head -1; }
           CDA=$(cat "$DIR/.cloud_data_at" 2>/dev/null | tr -cd '0-9'); BA=$(LK BRAIN_AT | tr -cd '0-9')
-          printf 'window.HUB_CLOUD={pages:"%s",gist:"%s",token:"%s",pass:"%s",wake:%s,ntfy:"%s",alerts:%s,cdata:%s,cdataAt:%s,ics:"%s",tv:"%s",cgist:"%s",brainAt:%s};\n' "$(Q "$PAGES_URL")" "$(Q "$GIST_ID")" "$(Q "$GH_TOKEN")" "$(Q "$PASSPHRASE")" "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" \
-              "$USE_CLOUD_DATA" "${CDA:-0}" "$(LK ICS_URL)" "$(LK TV_REF)" "$(LK CLOUD_GIST)" "${BA:-0}" > "$MESQ/cloud.js.tmp" && mv "$MESQ/cloud.js.tmp" "$MESQ/cloud.js" )
+          printf 'window.HUB_CLOUD={pages:"%s",gist:"%s",token:"%s",pass:"%s",wake:%s,ntfy:"%s",alerts:%s,cdata:%s,cdataAt:%s,ics:"%s",ics2:"%s",tv:"%s",cgist:"%s",brainAt:%s};\n' "$(Q "$PAGES_URL")" "$(Q "$GIST_ID")" "$(Q "$GH_TOKEN")" "$(Q "$PASSPHRASE")" "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" \
+              "$USE_CLOUD_DATA" "${CDA:-0}" "$(LK ICS_URL)" "$(LK ICS2_URL)" "$(LK TV_REF)" "$(LK CLOUD_GIST)" "${BA:-0}" > "$MESQ/cloud.js.tmp" && mv "$MESQ/cloud.js.tmp" "$MESQ/cloud.js" )
     else
         printf 'window.HUB_CLOUD={pages:"",gist:"",token:"",pass:"",wake:%s,ntfy:"%s",alerts:%s};\n' "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" > "$MESQ/cloud.js"
     fi
@@ -642,16 +642,18 @@ suspend_for() {
         SLEPT=$((T1 - T0))
         WR=$(head -n 1 "$WAKE_REASON_F" 2>/dev/null | tr -d '\r' | cut -c1-60)
         if [ "$RC" -eq 0 ] && [ "$SLEPT" -ge $((REM - 10)) ]; then
-            log "woke on schedule after ${SLEPT}s${WR:+ (reason: $WR)}"
+            log "woke on schedule after ${SLEPT}s${WR:+ (reason: $WR)}$([ "$ATTEMPTS" -gt 0 ] && echo " - suspended on try $((ATTEMPTS + 1))")"
             RESULT=0; break
         fi
         if [ "$RC" -eq 0 ] && [ "$SLEPT" -ge 1 ]; then
             log "woke early after ${SLEPT}s of ${REM}s - treating as power button${WR:+ (reason: $WR)}"
             RESULT=2; break
         fi
-        log "suspend refused (rc=$RC, slept ${SLEPT}s) - retrying"
+        # 9.9: the kernel says no while the screen or Wi-Fi is still finishing up. Back off a little more each
+        # time (3 s, then 6 s) and log only the first refusal, so the log stays readable.
+        [ "$ATTEMPTS" -eq 0 ] && log "suspend refused (rc=$RC, slept ${SLEPT}s) - retrying with back-off"
         ATTEMPTS=$((ATTEMPTS + 1))
-        sleep 3
+        B=$((3 * ATTEMPTS)); [ "$B" -gt 6 ] && B=6; sleep "$B"
     done
     thaw_powerd
     return $RESULT

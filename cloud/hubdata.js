@@ -200,14 +200,84 @@ var HubCal = (function() {
     function key(y, m, d) { return y + "-" + p2(m + 1) + "-" + p2(d); }
     function shiftId(k) { return "s" + k.replace(/-/g, ""); }
     function parseShift(text) { var i = String(text).indexOf("|"); return i === 10 ? { date: text.substring(0, 10), v: text.substring(11) } : null; }
+    // 9.9: an optional 5th field says whose it is: p1 (you), p2 (roommate) or nothing/all (shared)
     function parseEvent(text) {
         var f = String(text).split("|");
         if (f.length < 3 || !/^\d{4}-\d\d-\d\d$/.test(f[0])) return null;
-        return { date: f[0], time: /^\d\d:\d\d$/.test(f[1]) ? f[1] : "", title: f[2], note: f.slice(3).join("|") };
+        var who = f.length >= 5 && /^(p1|p2|all)?$/.test(f[f.length - 1]) ? f.pop() : "";
+        return { date: f[0], time: /^\d\d:\d\d$/.test(f[1]) ? f[1] : "", title: f[2], note: f.slice(3).join("|"), who: who === "all" ? "" : who };
     }
-    function eventText(date, time, title, note) {
-        return date + "|" + (time || "") + "|" + String(title).replace(/\|/g, "/") + "|" + String(note || "").replace(/\|/g, "/");
+    function eventText(date, time, title, note, who) {
+        return date + "|" + (time || "") + "|" + String(title).replace(/\|/g, "/") + "|" + String(note || "").replace(/\|/g, "/") + (who ? "|" + who : "");
     }
+    // shifts: "s20261117" = you, "q20261117" = your roommate (same text "YYYY-MM-DD|value")
+    function shiftIdFor(k, who) { return (who === "p2" ? "q" : "s") + k.replace(/-/g, ""); }
+    function whoOfShift(id) { return String(id).charAt(0) === "q" ? "p2" : "p1"; }
+    // shopping items: "Milk" or "Milk|p2|2|the 2% one"  (name | who added it | how many | note)
+    function parseShop(text) {
+        var f = String(text || "").split("|");
+        return { name: f[0], who: /^p[12]$/.test(f[1] || "") ? f[1] : "", qty: Math.max(1, parseInt(f[2], 10) || 1), note: f.slice(3).join(" ") };
+    }
+    function shopText(name, who, qty, note) {
+        var c = function(x) { return String(x || "").replace(/\|/g, "/"); };
+        if (!who && (!qty || qty === 1) && !note) return c(name);
+        return c(name) + "|" + (who || "") + "|" + (qty && qty > 1 ? qty : "") + (note ? "|" + c(note) : "");
+    }
+    // "10:45-2:45p" "1-7:15p" "07-15" "9-5" "7a-3:30p" "22-6" -> {s: minutes, e: minutes (may pass 1440)} | null
+    function shiftSpan(v) {
+        var m = /^\s*(\d{1,2})(?::?(\d\d))?\s*([ap])?m?\s*(?:-|\u2013|to)\s*(\d{1,2})(?::?(\d\d))?\s*([ap])?m?/i.exec(String(v || ""));
+        if (!m) return null;
+        var sh = +m[1], sm = +(m[2] || 0), eh = +m[4], em = +(m[5] || 0), sa = (m[3] || "").toLowerCase(), ea = (m[6] || "").toLowerCase();
+        if (sh > 23 || eh > 24 || sm > 59 || em > 59) return null;
+        if (sa === "p" && sh < 12) sh += 12; if (sa === "a" && sh === 12) sh = 0;
+        if (ea === "p" && eh < 12) eh += 12; if (ea === "a" && eh === 12) eh = 0;
+        if (!sa && m[1].charAt(0) !== "0" && sh < 7) sh += 12;          // "1-7:15p" starts in the afternoon
+        var s = sh * 60 + sm, e = eh * 60 + em;
+        if (!ea && e <= s && eh < 12 && eh + 12 > sh) e += 720;          // "9-5"
+        if (e <= s) e += 1440;                                            // overnight "22-6"
+        return { s: s, e: e };
+    }
+    /* Pay (B.C. Employment Standards defaults, all switchable):
+     *   unpaid 30-min meal break on shifts over 5 h; daily overtime 1.5x after 8 h, 2x after 12 h;
+     *   weekly overtime 1.5x after 40 regular hours (Sun-Sat); working a stat holiday 1.5x (first 12 h, 2x after).
+     * cfg: {rate, cycle: weekly|biweekly|semimonthly, start: "YYYY-MM-DD" (any first day of a period),
+     *       payLag: days from period end to payday, brk: 0|1, ot: 0|1, stat: 0|1}
+     * shifts: {date: value}. Returns {from, to, payday, reg, ot15, ot2, hours, gross, days: [{k, v, h, pay}]}     */
+    function periodOf(k, cfg) {
+        var d = dayNum(k), y = +k.substring(0, 4), mo = +k.substring(5, 7) - 1, dom = +k.substring(8, 10), from, to;
+        if (cfg.cycle === "semimonthly") {
+            if (dom <= 15) { from = key(y, mo, 1); to = key(y, mo, 15); }
+            else { from = key(y, mo, 16); to = key(y, mo, new Date(Date.UTC(y, mo + 1, 0)).getUTCDate()); }
+        } else {
+            var len = cfg.cycle === "weekly" ? 7 : 14, a = dayNum(cfg.start || "2026-01-04"), off = ((d - a) % len + len) % len;
+            from = keyN(d - off); to = keyN(d - off + len - 1);
+        }
+        return { from: from, to: to, payday: keyN(dayNum(to) + (cfg.payLag === undefined ? 6 : +cfg.payLag)) };
+    }
+    function keyN(n) { var x = new Date(n * 86400000); return key(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()); }
+    function payFor(shifts, fromK, toK, cfg) {
+        var rate = +cfg.rate || 0, out = { from: fromK, to: toK, reg: 0, ot15: 0, ot2: 0, hours: 0, gross: 0, days: [] };
+        var weekReg = {}, n0 = dayNum(fromK), n1 = dayNum(toK);
+        for (var n = n0; n <= n1; n++) {
+            var k = keyN(n), v = shifts[k], sp = v ? shiftSpan(v) : null;
+            if (!sp) continue;
+            var h = (sp.e - sp.s) / 60;
+            if (cfg.brk !== 0 && h > 5) h -= 0.5;
+            var r = h, o15 = 0, o2 = 0;
+            if (cfg.ot !== 0) { if (h > 12) { o2 = h - 12; o15 = 4; r = 8; } else if (h > 8) { o15 = h - 8; r = 8; } }
+            var wk = n - new Date(n * 86400000).getUTCDay();                  // the Sunday of that week
+            if (cfg.ot !== 0) { var before = weekReg[wk] || 0; if (before + r > 40) { var over = before + r - Math.max(40, before); o15 += over; r -= over; } weekReg[wk] = before + r; }
+            var mult = cfg.stat !== 0 && holiday(k) ? 1.5 : 1, pay;
+            if (mult > 1) pay = rate * (Math.min(h, 12) * 1.5 + Math.max(0, h - 12) * 2);
+            else pay = rate * (r + o15 * 1.5 + o2 * 2);
+            out.reg += r; out.ot15 += o15; out.ot2 += o2; out.hours += h; out.gross += pay;
+            out.days.push({ k: k, v: v, h: Math.round(h * 100) / 100, pay: Math.round(pay * 100) / 100, stat: mult > 1 });
+        }
+        ["reg", "ot15", "ot2", "hours"].forEach(function(f) { out[f] = Math.round(out[f] * 100) / 100; });
+        out.gross = Math.round(out.gross * 100) / 100;
+        return out;
+    }
+    function payPeriod(shifts, k, cfg) { var p = periodOf(k, cfg), r = payFor(shifts, p.from, p.to, cfg); r.payday = p.payday; return r; }
     function fmtTime(t) {
         if (!t) return "";
         var h = parseInt(t.substring(0, 2), 10), m = t.substring(3, 5), ap = h >= 12 ? "p" : "a";
@@ -253,9 +323,10 @@ var HubCal = (function() {
     function parseRepeat(text) {
         var f = String(text).split("|");
         if (f.length < 3 || !/^(daily|weekly:[0-6](,[0-6])*|every2w:[0-6]:\d{4}-\d\d-\d\d|monthly:(\d{1,2}|last)|yearly:\d\d-\d\d)$/.test(f[0])) return null;
-        return { rule: f[0], time: /^\d\d:\d\d$/.test(f[1]) ? f[1] : "", title: f[2], note: f.slice(3).join("|") };
+        var who = f.length >= 5 && /^(p1|p2|all)?$/.test(f[f.length - 1]) ? f.pop() : "";
+        return { rule: f[0], time: /^\d\d:\d\d$/.test(f[1]) ? f[1] : "", title: f[2], note: f.slice(3).join("|"), who: who === "all" ? "" : who };
     }
-    function repeatText(rule, time, title, note) { return rule + "|" + (time || "") + "|" + String(title).replace(/\|/g, "/") + "|" + String(note || "").replace(/\|/g, "/"); }
+    function repeatText(rule, time, title, note, who) { return rule + "|" + (time || "") + "|" + String(title).replace(/\|/g, "/") + "|" + String(note || "").replace(/\|/g, "/") + (who ? "|" + who : ""); }
     function dayNum(k) { return Math.round(Date.UTC(+k.substring(0, 4), +k.substring(5, 7) - 1, +k.substring(8, 10)) / 86400000); }
     function repeatOn(r, k) {      // does repeat r fall on day k (YYYY-MM-DD)?
         var p = r.rule.split(":"), d = new Date(dayNum(k) * 86400000), dow = d.getUTCDay(), dom = d.getUTCDate();
@@ -287,11 +358,13 @@ var HubCal = (function() {
         var n0 = dayNum(fromKey);
         for (j = 0; j < days; j++) {
             var d = new Date((n0 + j) * 86400000), k = key(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-            for (i = 0; i < rs.length; i++) if (repeatOn(rs[i], k)) (out[k] = out[k] || []).push({ id: rs[i].id, date: k, time: rs[i].time, title: rs[i].title, note: rs[i].note, rep: rs[i].rule });
+            for (i = 0; i < rs.length; i++) if (repeatOn(rs[i], k)) (out[k] = out[k] || []).push({ id: rs[i].id, date: k, time: rs[i].time, title: rs[i].title, note: rs[i].note, rep: rs[i].rule, who: rs[i].who });
         }
         return out;
     }
     return { key: key, shiftId: shiftId, parseShift: parseShift, parseEvent: parseEvent, eventText: eventText, fmtTime: fmtTime, holidays: holidays, holiday: holiday,
-             parseRepeat: parseRepeat, repeatText: repeatText, repeatOn: repeatOn, ruleLabel: ruleLabel, expandRepeats: expandRepeats };
+             parseRepeat: parseRepeat, repeatText: repeatText, repeatOn: repeatOn, ruleLabel: ruleLabel, expandRepeats: expandRepeats,
+             shiftIdFor: shiftIdFor, whoOfShift: whoOfShift, parseShop: parseShop, shopText: shopText, shiftSpan: shiftSpan,
+             periodOf: periodOf, payFor: payFor, payPeriod: payPeriod };
 })();
 if (typeof module !== "undefined") { module.exports.HubCrypt = HubCrypt; module.exports.HubCal = HubCal; }

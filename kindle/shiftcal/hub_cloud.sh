@@ -113,7 +113,7 @@ push() {
 # ---------- 9.8.5 ----------
 # kindle.conf in the list gist (written by the cloud brain): where the bundle / cloud gist live
 save_links() {
-    { tr -d '\r' < "$T/b.$$" | grep -o '\(BUNDLE_URL\|CLOUD_GIST\|ICS_URL\|TV_REF\)=[^\\" ]*'
+    { tr -d '\r' < "$T/b.$$" | grep -o '\(BUNDLE_URL\|CLOUD_GIST\|ICS_URL\|ICS2_URL\|TV_REF\)=[^\\" ]*'
       tr -d '\r' < "$T/b.$$" | grep -o 'lastRun\\*"*: *[0-9]\{13\}' | head -1 | sed 's/.*\([0-9]\{10\}\)[0-9]\{3\}$/BRAIN_AT=\1/'; } | sort -u > "$T/links.$$"
     if [ -s "$T/links.$$" ]; then cmp -s "$T/links.$$" "$DIR/.cloud_links" || { mv "$T/links.$$" "$DIR/.cloud_links"; say "cloud brain links saved"; }
     else rm -f "$T/links.$$"; fi

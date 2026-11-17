@@ -45,7 +45,20 @@ li.day .hol { font-size: 12px; font-weight: 800; letter-spacing: .1em; border: 1
 .ce { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 17px; }
 .ce .t { width: 62px; font-weight: 800; font-size: 13px; letter-spacing: .06em; }
 .ce .x { margin-left: auto; border: 0; background: none; font-size: 20px; color: var(--mute); }
-.pill { background: var(--ink); color: #fff; font-weight: 800; font-size: 13px; padding: 3px 8px; }
+.pill { background: var(--ink); color: #fff; font-weight: 800; font-size: 13px; padding: 3px 8px; margin-right: 4px; display: inline-block; }
+.who-solid { background: #111 !important; color: #fff !important; border: 2px solid #111; }
+.who-outline { background: #fff !important; color: #111 !important; border: 2px solid #111; }
+.who-striped { background: repeating-linear-gradient(45deg, #111 0 2px, #fff 2px 7px) !important; color: #111 !important; border: 2px solid #111; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+.who-dotted { background: #fff !important; color: #111 !important; border: 2px dotted #111; }
+.who-double { background: #fff !important; color: #111 !important; border: 4px double #111; }
+.who-underline { background: #fff !important; color: #111 !important; border-bottom: 3px solid #111; }
+.wb { display: inline-block; min-width: 18px; text-align: center; font: 800 11px/16px -apple-system, Arial, sans-serif; margin-left: 6px; padding: 0 3px; }
+.aisle { list-style: none; font: 800 11px/1 -apple-system, Arial, sans-serif; letter-spacing: .16em; padding: 14px 0 4px !important; min-height: 0 !important; border-bottom: 2px solid var(--ink) !important; }
+.qty { font-weight: 800; margin-left: 6px; } .inote { color: var(--mute); font-style: italic; font-size: 14px; margin-left: 6px; }
+.pay-card { border: 2px solid var(--ink); background: #fff; padding: 12px; margin-top: 12px; }
+.pay-card b.big { font: 900 30px/1.1 Georgia, serif; display: block; }
+body.store #open li { min-height: 64px; font-size: 24px; }
+body.store #open .box { width: 30px; height: 30px; }
 #soon li { min-height: 44px; font-size: 16px; }
 #soon .k { width: 92px; flex: none; font: 800 12px/1.2 -apple-system, Arial, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
 #setup { padding: 24px 0; line-height: 1.5; }
@@ -67,7 +80,7 @@ li.day .hol { font-size: 12px; font-weight: 800; letter-spacing: .1em; border: 1
     <button class="btn" id="s-save">Connect</button>
   </section>
   <section id="app" hidden>
-    <h2>Shopping list</h2>
+    <div class="row"><h2>Shopping list</h2><button class="btn ghost" id="storemode">Store mode</button></div>
     <ul id="open"></ul>
     <div class="row"><h2>In the cart</h2><button class="btn ghost" id="clear" hidden>Clear</button></div>
     <ul id="done"></ul>
@@ -76,10 +89,12 @@ li.day .hol { font-size: 12px; font-weight: 800; letter-spacing: .1em; border: 1
     <p class="row" style="margin-top:28px"><button class="btn ghost" id="copy">Copy pairing link</button><span id="copied"></span></p>
   </section>
   <section id="app-c" hidden>
+    <div id="c-pay"></div>
     <div class="row" style="margin-top:14px"><button class="btn" id="c-addev">+ Event</button><button class="btn ghost" id="c-addsh">+ Shift</button><button class="btn ghost" id="c-addch">+ Chore</button></div>
     <div id="c-chore" hidden></div>
     <div id="c-form" hidden style="margin-top:10px;border:2px solid var(--ink);padding:12px;background:#fff">
       <h2 id="c-fh" style="margin-top:0">New event</h2>
+      <label class="fl" id="c-whol">For<select id="c-who"></select></label>
       <label class="fl">Date<input type="date" id="c-date"></label>
       <div id="c-evf"><label class="fl">Time (leave empty for all day)<input type="time" id="c-time"></label>
         <label class="fl">What<input id="c-title" placeholder="Dentist, Mom's birthday…"></label>
@@ -138,6 +153,24 @@ var TAB = "list";
 // pairing link from the fridge: https://you.github.io/kitchen/#pair=GISTID.TOKEN  (the part after # never leaves the phone)
 // passphrase lock (cloud.conf PASSPHRASE on the fridge; it arrives in the pairing link as &k=)
 function pk() { return (cfg && cfg.k) || ""; }
+// 9.9: people (names, letters, looks) live in the cfg item "people", set on the fridge
+var PEOPLE = { p1: { name: "Me", init: "M", style: "solid" }, p2: { name: "", init: "", style: "outline" } }, PAYCFG = {};
+function loadPeople() {
+  var c = itemsOf("cfg").filter(function(it) { return it.id === "people" && !it.locked; })[0];
+  if (!c) return;
+  try { var j = JSON.parse(c.text); ["p1", "p2"].forEach(function(w) { if (j.people && j.people[w]) PEOPLE[w] = j.people[w]; }); PAYCFG = j.pay || {}; } catch (e) {}
+}
+function hasP2() { return !!(PEOPLE.p2 && PEOPLE.p2.name); }
+function me() { return (cfg && cfg.who) || "p1"; }
+function pName(w) { return (PEOPLE[w] && PEOPLE[w].name) || (w === "p2" ? "Roommate" : "Me"); }
+function pInit(w) { return ((PEOPLE[w] && PEOPLE[w].init) || pName(w).charAt(0)).toUpperCase(); }
+function badge(w) { return w && hasP2() ? '<span class="wb who-' + ((PEOPLE[w] || {}).style || "solid") + '">' + pInit(w).replace(/</g, "") + '</span>' : ""; }
+var AISLES = [["Produce", /\b(apple|banana|orange|lemon|lime|grape|berr|lettuce|spinach|kale|tomato|potato|onion|garlic|carrot|celery|pepper|cucumber|broccoli|mushroom|avocado|herb|fruit|veg|salad|cabbage)/i],
+  ["Meat & fish", /\b(chicken|beef|pork|bacon|sausage|ham|turkey|steak|ground|fish|salmon|tuna|shrimp|deli)/i], ["Dairy & eggs", /\b(milk|cheese|butter|yogurt|cream|egg)/i],
+  ["Bakery", /\b(bread|bun|bagel|tortilla|wrap|pita|muffin)/i], ["Frozen", /\b(frozen|ice cream|pizza|fries|waffle)/i],
+  ["Pantry", /\b(rice|pasta|noodle|flour|sugar|oil|sauce|salsa|soup|bean|cereal|oat|coffee|tea|spice|salt|honey|jam|peanut|chip|cracker|cookie|snack|canned|broth|ketchup|mustard|mayo|juice|pop|soda)/i],
+  ["Household", /\b(paper|towel|toilet|tissue|soap|detergent|laundry|dish|garbage|bag|foil|cleaner|bleach|sponge|batter|shampoo|toothpaste)/i]];
+function aisleOf(n) { for (var i = 0; i < AISLES.length; i++) if (AISLES[i][1].test(n)) return i; return AISLES.length; }
 function itemsOf(kind) {
   return HubData.items(store, kind).map(function(it) {
     var t = HubCrypt.unlock(it.text, pk());
@@ -154,7 +187,8 @@ function relockPlain() {
 function readPair(text) {
   var k = /[&#?]k=([^&\s]+)/.exec(text || "");
   var m = /pair=([A-Za-z0-9]+)\.([A-Za-z0-9_]+)(?:&api=([^&\s]+))?/.exec(text || "");
-  return m ? { gist: m[1], token: m[2], api: m[3] ? decodeURIComponent(m[3]) : "https://api.github.com", k: k ? decodeURIComponent(k[1]) : "" } : null;
+  var w = /[&#?]who=(p[12])/.exec(text || "");
+  return m ? { gist: m[1], token: m[2], api: m[3] ? decodeURIComponent(m[3]) : "https://api.github.com", k: k ? decodeURIComponent(k[1]) : "", who: w ? w[1] : "p1" } : null;
 }
 (function() {
   var c = readPair(location.hash);
@@ -187,13 +221,17 @@ function render() {
   if (TAB === "recipes" && window.renderPlanImport) renderPlanImport();
   var all = itemsOf("shop"), pend = pendingIds(), open = [], done = [];
   all.forEach(function(it) { (it.state === "done" ? done : open).push(it); });
-  open.sort(function(a, b) { return a.ts - b.ts; });
+  loadPeople();
+  open.sort(function(a, b) { var x = aisleOf(HubCal.parseShop(a.text).name), y = aisleOf(HubCal.parseShop(b.text).name); return x - y || a.ts - b.ts; });
   done.sort(function(a, b) { return b.ts - a.ts; });
   function li(it) {
     var el = document.createElement("li"); if (it.state === "done") el.className = "done";
     el.innerHTML = '<span class="box">' + (it.state === "done" ? "&#10003;" : "") + '</span><span class="txt"></span>' +
       (pend[it.id] ? '<span class="wait">WAITING</span>' : "") + '<button class="del" aria-label="Remove">&times;</button>';
-    el.querySelector(".txt").textContent = it.text;
+    var sp = HubCal.parseShop(it.text);
+    el.querySelector(".txt").textContent = sp.name;
+    el.querySelector(".txt").insertAdjacentHTML("beforeend", (sp.qty > 1 ? '<span class="qty">×' + sp.qty + '</span>' : "") + (sp.note ? '<span class="inote"></span>' : "") + badge(sp.who));
+    if (sp.note) el.querySelector(".inote").textContent = sp.note;
     el.addEventListener("click", function(e) {
       if (e.target.className === "del") edit(it.id, "del", it.text);
       else edit(it.id, it.state === "done" ? "open" : "done", it.text);
@@ -201,7 +239,12 @@ function render() {
     return el;
   }
   $("open").innerHTML = ""; $("done").innerHTML = "";
-  open.forEach(function(it) { $("open").appendChild(li(it)); });
+  var lastA = -1;
+  open.forEach(function(it) {
+    var a = aisleOf(HubCal.parseShop(it.text).name);
+    if (open.length > 3 && a !== lastA) { var h = document.createElement("li"); h.className = "aisle"; h.textContent = a < AISLES.length ? AISLES[a][0] : "Other"; $("open").appendChild(h); lastA = a; }
+    $("open").appendChild(li(it));
+  });
   done.forEach(function(it) { $("done").appendChild(li(it)); });
   if (!open.length) $("open").innerHTML = '<li class="empty">Nothing to buy.</li>';
   $("clear").hidden = !done.length;
@@ -276,30 +319,49 @@ function todayK() { var d = new Date(); return d.getFullYear() + "-" + p2(d.getM
 function addD(k, n) { var p = k.split("-"), d = new Date(+p[0], +p[1] - 1, +p[2] + n); return d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()); }
 function calData() {
   var sh = {}, ev = {};
-  itemsOf("shift").forEach(function(it) { var s = HubCal.parseShift(it.text); if (s && s.v) sh[s.date] = s.v; });
+  var sh2 = {};
+  itemsOf("shift").forEach(function(it) { var s = HubCal.parseShift(it.text); if (s && s.v) { if (HubCal.whoOfShift(it.id) === "p2") sh2[s.date] = s.v; else sh[s.date] = s.v; } });
   itemsOf("event").forEach(function(it) { var e = HubCal.parseEvent(it.text); if (e) { e.id = it.id; e.raw = it.text; (ev[e.date] = ev[e.date] || []).push(e); } });
   if (window.repeatEvents) repeatEvents(ev);
   Object.keys(ev).forEach(function(k) { ev[k].sort(function(a, b) { return (a.time || "") < (b.time || "") ? -1 : 1; }); });
-  return { sh: sh, ev: ev };
+  return { sh: sh, sh2: sh2, ev: ev };
 }
 var DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function dayLabel(k) { var p = k.split("-"), d = new Date(+p[0], +p[1] - 1, +p[2]); return DOW[d.getDay()] + " " + MON[d.getMonth()] + " " + d.getDate(); }
+function money(x) { return "$" + (Math.round(x * 100) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+function renderPay(D) {
+  var h = "";
+  ["p1", "p2"].forEach(function(w) {
+    var c = PAYCFG[w]; if (!c || !(c.rate > 0) || (w === "p2" && !hasP2())) return;
+    var r = HubCal.payPeriod(w === "p2" ? D.sh2 : D.sh, todayK(), c);
+    h += '<div class="pay-card"><span class="k" style="font:800 11px Arial;letter-spacing:.16em">' + (hasP2() ? pName(w).replace(/</g, "").toUpperCase() + " · " : "") + "PAY PERIOD " + dayLabel(r.from) + " – " + dayLabel(r.to) + '</span><b class="big">' + money(r.gross) + '</b>' +
+      r.hours + " h" + (r.ot15 + r.ot2 > 0 ? " · " + Math.round((r.ot15 + r.ot2) * 100) / 100 + " h overtime" : "") + " · gross · payday <b>" + dayLabel(r.payday) + "</b></div>";
+  });
+  $("c-pay").innerHTML = h;
+}
 function renderCal() {
+  loadPeople();
   var D = calData(), ul = $("c-list"), t = todayK(), k = t;
+  renderPay(D);
   ul.innerHTML = "";
   for (var i = 0; i < 60; i++, k = addD(k, 1)) {
-    var hol = HubCal.holiday(k), sh = D.sh[k], ev = D.ev[k] || [];
-    if (!hol && !sh && !ev.length && i > 0) continue;
+    var hol = HubCal.holiday(k), sh = D.sh[k], sh2 = hasP2() ? D.sh2[k] : "", ev = D.ev[k] || [];
+    if (!hol && !sh && !sh2 && !ev.length && i > 0) continue;
     var li = document.createElement("li"); li.className = "day" + (k === t ? " today" : "");
-    li.innerHTML = '<span class="dh"></span>' + (hol ? '<span class="hol"></span>' : "") + (sh ? ' <span class="pill"></span>' : "");
+    li.innerHTML = '<span class="dh"></span>' + (hol ? '<span class="hol"></span>' : "") + (sh ? ' <span class="pill p1"></span>' : "") + (sh2 ? ' <span class="pill p2"></span>' : "");
     li.querySelector(".dh").textContent = k === t ? "Today · " + dayLabel(k) : dayLabel(k);
     if (hol) li.querySelector(".hol").textContent = hol;
-    if (sh) li.querySelector(".pill").textContent = /^\s*off\s*$/i.test(sh) ? "OFF" : sh;
+    [["p1", sh], ["p2", sh2]].forEach(function(x) {
+      var pl = li.querySelector(".pill." + x[0]); if (!pl) return;
+      pl.textContent = (hasP2() ? pInit(x[0]) + " " : "") + (/^\s*off\s*$/i.test(x[1]) ? "OFF" : x[1]);
+      if (hasP2()) pl.className += " who-" + ((PEOPLE[x[0]] || {}).style || "solid");
+    });
     ev.forEach(function(e) {
       var row = document.createElement("div"); row.className = "ce";
       row.innerHTML = '<span class="t"></span><span class="w"></span><button class="x" aria-label="Delete">&times;</button>';
       row.querySelector(".t").textContent = e.time ? HubCal.fmtTime(e.time) : "ALL DAY";
       row.querySelector(".w").textContent = e.title + (e.note ? " — " + e.note : "");
+      if (e.who && hasP2()) row.querySelector(".t").insertAdjacentHTML("afterbegin", badge(e.who) + " ");
       if (e.rep) { row.querySelector(".x").hidden = true; row.querySelector(".w").textContent = "\u21bb " + e.title; }
       row.querySelector(".x").addEventListener("click", function() {
         if (!confirm("Delete " + e.title + "?")) return;
@@ -316,7 +378,8 @@ function renderSoon() {
   for (var i = 0; i < 30 && rows.length < 5; i++, k = addD(k, 1)) {
     var lab = i === 0 ? "Today" : (i === 1 ? "Tomorrow" : dayLabel(k));
     if (HubCal.holiday(k)) rows.push([lab, HubCal.holiday(k)]);
-    if (D.sh[k] && !/^\s*off\s*$/i.test(D.sh[k])) rows.push([lab, "Shift " + D.sh[k]]);
+    if (D.sh[k] && !/^\s*off\s*$/i.test(D.sh[k])) rows.push([lab, (hasP2() ? pName("p1") + ": shift " : "Shift ") + D.sh[k]]);
+    if (hasP2() && D.sh2[k] && !/^\s*off\s*$/i.test(D.sh2[k])) rows.push([lab, pName("p2") + ": shift " + D.sh2[k]]);
     (D.ev[k] || []).forEach(function(e) { rows.push([lab, (e.time ? HubCal.fmtTime(e.time) + " " : "") + e.title]); });
   }
   ul.innerHTML = "";
@@ -328,6 +391,10 @@ function openCalForm(mode) {
   C_MODE = mode; $("c-form").hidden = false;
   $("c-fh").textContent = mode === "ev" ? "New event" : "Shift";
   $("c-evf").hidden = mode !== "ev"; $("c-shf").hidden = mode === "ev";
+  loadPeople();
+  $("c-whol").hidden = !hasP2();
+  $("c-who").innerHTML = (mode === "ev" ? '<option value="">Both of us</option>' : "") + '<option value="p1">' + pName("p1").replace(/</g, "") + '</option><option value="p2">' + pName("p2").replace(/</g, "") + '</option>';
+  $("c-who").value = mode === "ev" ? "" : me();
   $("c-date").value = todayK(); $("c-time").value = ""; $("c-title").value = ""; $("c-note").value = ""; $("c-shift").value = ""; $("c-rep").value = "1";
   (mode === "ev" ? $("c-title") : $("c-shift")).focus();
 }
@@ -340,10 +407,11 @@ $("c-save").addEventListener("click", function() {
   if (C_MODE === "ev") {
     var t = $("c-title").value.trim();
     if (!t) { $("c-title").focus(); return; }
-    store = lockEdit(store, HubData.newId("p"), "event", "open", HubCal.eventText(d, $("c-time").value, t, $("c-note").value.trim()));
+    store = lockEdit(store, HubData.newId("p"), "event", "open", HubCal.eventText(d, $("c-time").value, t, $("c-note").value.trim(), hasP2() ? $("c-who").value : ""));
   } else {
     var v = $("c-shift").value.trim(), n = +$("c-rep").value;
-    for (var i = 0; i < n; i++) { var k = addD(d, i); store = lockEdit(store, HubCal.shiftId(k), "shift", v ? "open" : "del", k + "|" + v); }
+    var wh = hasP2() ? $("c-who").value : "p1";
+    for (var i = 0; i < n; i++) { var k = addD(d, i); store = lockEdit(store, HubCal.shiftIdFor(k, wh), "shift", v ? "open" : "del", k + "|" + v); }
   }
   ls.set(K.store, store); $("c-form").hidden = true; render(); syncSoon(400);
 });
@@ -470,7 +538,8 @@ Array.prototype.forEach.call(document.querySelectorAll("#tabs span"), function(t
 $("add").addEventListener("submit", function(e) {
   e.preventDefault();
   var t = $("add-t").value.replace(/^\s+|\s+$/g, "");
-  if (t) edit(HubData.newId("p"), "open", t);
+  loadPeople();
+  if (t) t.split(/\s*,\s*/).forEach(function(x) { if (x) edit(HubData.newId("p"), "open", hasP2() ? HubCal.shopText(x, me(), 1, "") : x); });
   $("add-t").value = "";
 });
 $("clear").addEventListener("click", function() {
@@ -487,6 +556,14 @@ $("copy").addEventListener("click", function() {
   var link = pairLink(), done = function(t) { $("copied").textContent = t; setTimeout(function() { $("copied").textContent = ""; }, 4000); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(function() { done("Copied"); }, function() { prompt("Copy this link", link); });
   else prompt("Copy this link", link);
+});
+var WAKE = null;
+$("storemode").addEventListener("click", function() {
+  var on = !document.body.classList.contains("store");
+  document.body.classList.toggle("store", on);
+  $("storemode").textContent = on ? "Store mode: ON" : "Store mode";
+  if (on && navigator.wakeLock) navigator.wakeLock.request("screen").then(function(w) { WAKE = w; }, function() {});
+  if (!on && WAKE) { WAKE.release(); WAKE = null; }
 });
 window.addEventListener("online", function() { syncSoon(100); });
 document.addEventListener("visibilitychange", function() { if (!document.hidden) syncSoon(100); });

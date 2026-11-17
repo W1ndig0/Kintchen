@@ -145,8 +145,9 @@ switch ($Cmd) {
   "list" {
     $g = Gh GET ("/gists/" + $C.gist); $its = Items (FileText $g "hub.tsv") "shop"
     $open = @($its | Where-Object { $_.state -eq "open" }); Write-Host ("SHOPPING LIST - " + $open.Count)
-    $open | ForEach-Object { Write-Host ("  [ ] " + $(if ($_.text -ne $null) { $_.text } else { "(locked)" })) }
-    $its | Where-Object { $_.state -eq "done" } | ForEach-Object { Write-Host ("  [x] " + $_.text) -ForegroundColor DarkGray }
+    function Nice($t) { if ($t -eq $null) { return "(locked)" }; $f = $t -split '\|'; $o = $f[0]; if ($f.Count -gt 2 -and [int]("0" + $f[2]) -gt 1) { $o += " x" + $f[2] }; if ($f.Count -gt 3 -and $f[3]) { $o += " (" + $f[3] + ")" }; return $o }
+    $open | Sort-Object { $_.text } | ForEach-Object { Write-Host ("  [ ] " + (Nice $_.text)) }
+    $its | Where-Object { $_.state -eq "done" } | ForEach-Object { Write-Host ("  [x] " + (Nice $_.text)) -ForegroundColor DarkGray }
   }
   "done" {
     $g = Gh GET ("/gists/" + $C.gist); $its = Items (FileText $g "hub.tsv") "shop"

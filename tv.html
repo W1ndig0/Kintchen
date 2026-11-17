@@ -30,6 +30,14 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); 
 .li { font-size: 2vw; line-height: 1.3; margin: .4vh 0; }
 .li b { font-family: Helvetica, Arial, sans-serif; font-size: .7em; letter-spacing: .12em; text-transform: uppercase; margin-right: .6vw; }
 .pill { display: inline-block; background: var(--ink); color: var(--bg); font: 800 1.6vw/1 Helvetica, Arial, sans-serif; padding: .5vh .8vw; letter-spacing: .04em; }
+.who-solid { background: var(--ink) !important; color: var(--bg) !important; }
+.who-outline { background: transparent !important; color: var(--ink) !important; outline: .25vw solid var(--ink); }
+.who-striped { background: repeating-linear-gradient(45deg, var(--ink) 0 .2vw, var(--bg) .2vw .7vw) !important; color: var(--ink) !important; outline: .25vw solid var(--ink); text-shadow: 0 0 .3vw var(--bg), 0 0 .3vw var(--bg); }
+.who-dotted { background: transparent !important; color: var(--ink) !important; outline: .25vw dotted var(--ink); }
+.who-double { background: transparent !important; color: var(--ink) !important; outline: .5vw double var(--ink); }
+.who-underline { background: transparent !important; color: var(--ink) !important; border-bottom: .3vw solid var(--ink); }
+.wb { display: inline-block; min-width: 1.4em; text-align: center; font: 800 .7em/1.4 Helvetica, Arial, sans-serif; }
+.pill { margin-right: .5vw; }
 .note { border: .4vh double var(--ink); padding: 1.2vh 1.2vw; font-size: 2.3vw; font-style: italic; margin: 1vh 0; }
 .wxnow { display: flex; align-items: center; gap: 1.5vw; }
 .wxnow .t { font-size: 7vw; font-weight: 900; line-height: 1; }
@@ -134,10 +142,14 @@ function build() {
   $("f-r").textContent = "Updated " + Math.max(0, Math.round((Date.now() / 1000 - D.ts) / 60)) + " min ago";
 }
 function clockHtml() { var n = now(), h = n.getUTCHours(); return '<div class="clock">' + (h % 12 || 12) + ":" + p2(n.getUTCMinutes()) + "<small>" + (h >= 12 ? "PM" : "AM") + "</small></div>"; }
+function two() { return !!(D.people && D.people.p2 && D.people.p2.name); }
+function ini(w) { var p = D.people && D.people[w]; return esc(((p && (p.init || p.name)) || "?").toUpperCase().slice(0, 2)); }
+function sty(w) { var p = D.people && D.people[w]; return "who-" + ((p && p.style) || (w === "p2" ? "outline" : "solid")); }
 function dayItems(k) {
-  var o = [], s = D.shifts[k];
-  if (s && !off(s)) o.push('<span class="pill">' + esc(s) + "</span>");
-  (D.events[k] || []).forEach(function(e) { o.push((e.time ? "<b>" + fmt(e.time) + "</b> " : "") + (e.rep ? "↻ " : "") + esc(e.title)); });
+  var o = [], s = D.shifts[k], s2 = D.shifts2 && D.shifts2[k];
+  if (s && !off(s)) o.push('<span class="pill ' + (two() ? sty("p1") : "") + '">' + (two() ? ini("p1") + " " : "") + esc(s) + "</span>");
+  if (two() && s2 && !off(s2)) o.push('<span class="pill ' + sty("p2") + '">' + ini("p2") + " " + esc(s2) + "</span>");
+  (D.events[k] || []).forEach(function(e) { o.push((e.who && two() ? '<span class="wb ' + sty(e.who) + '">' + ini(e.who) + "</span> " : "") + (e.time ? "<b>" + fmt(e.time) + "</b> " : "") + (e.rep ? "↻ " : "") + esc(e.title)); });
   return o;
 }
 var R = {
@@ -190,6 +202,7 @@ var R = {
       '<div class="li">' + (kd.left7 > 0 && !kd.charging ? "About " + (kd.left7 >= 48 ? Math.round(kd.left7 / 24) + " days" : kd.left7 + " hours") + " of battery left" : "") + "</div>" +
       '<div class="li dim">Last check-in ' + Math.round((Date.now() / 1000 - kd.ts) / 60) + " min ago · v" + esc(kd.v) + "</div>";
     else h += '<div class="li dim">No check-in yet.</div>';
+    (D.pay || []).forEach(function(p) { var nm = two() && D.people[p.who] ? esc(D.people[p.who].name) + " \u00b7 " : ""; h += '<div class="k">' + nm + 'Pay period</div><div class="big">$' + p.gross.toFixed(2) + '</div><div class="li dim">' + p.hours + " h \u00b7 gross \u00b7 payday " + DAYS[dow(p.payday)].slice(0, 3) + " " + MON[+p.payday.slice(5, 7) - 1].slice(0, 3) + " " + (+p.payday.slice(8)) + "</div>"; });
     if (D.otd) h += '<div class="k">On this day · ' + esc(D.otd.year) + '</div><div class="li">' + esc(D.otd.text) + "</div>";
     h += '</div><div class="col">';
     if (D.stocks && D.stocks.length) { h += '<div class="k">Markets</div>'; D.stocks.forEach(function(s) { var ch = s.prev ? (s.price - s.prev) / s.prev * 100 : 0; h += '<div class="li"><b>' + esc(s.sym) + "</b>" + (+s.price).toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' <span class="dim">' + (ch >= 0 ? "▲ " : "▼ ") + Math.abs(ch).toFixed(2) + "%</span></div>"; }); }

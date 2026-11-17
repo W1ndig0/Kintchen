@@ -137,14 +137,19 @@ function isOff(v) { return !v || /^\s*(off|x|-|vac|vacation|sick|stat)\s*$/i.tes
 function fmtT(h, m) { const ap = h >= 12 ? "pm" : "am"; return (h % 12 || 12) + (m ? ":" + p2(m) : "") + ap; }
 
 function calendar() {
-    const sh = {}, ev = {};
-    items("shift").forEach(it => { if (it.state === "del" || it.text === null) return; const s = HubCal.parseShift(it.text); if (s && s.v) sh[s.date] = s.v; });
+    const sh = {}, sh2 = {}, ev = {};
+    items("shift").forEach(it => { if (it.state === "del" || it.text === null) return; const s = HubCal.parseShift(it.text); if (s && s.v) (HubCal.whoOfShift(it.id) === "p2" ? sh2 : sh)[s.date] = s.v; });
     items("event").forEach(it => { if (it.state === "del" || it.text === null) return; const e = HubCal.parseEvent(it.text); if (e) { e.id = it.id; (ev[e.date] = ev[e.date] || []).push(e); } });
     const reps = items("repeat").filter(it => it.state !== "del" && it.text !== null);
     const rx = HubCal.expandRepeats(reps, addK(TODAY, -1), 45);
     Object.keys(rx).forEach(k => { (ev[k] = ev[k] || []).push(...rx[k]); });
     Object.keys(ev).forEach(k => ev[k].sort((a, b) => (a.time || "") < (b.time || "") ? -1 : 1));
-    return { sh, ev, reps };
+    return { sh, sh2, ev, reps };
+}
+// 9.9: people + pay settings (set on the fridge, Settings > People / Pay)
+function peopleCfg() {
+    const c = items("cfg").find(it => it.id === "people" && it.text);
+    try { return c ? JSON.parse(c.text) : null; } catch (e) { return null; }
 }
 
 // ---------- ntfy ----------
@@ -179,25 +184,29 @@ function wxLine(w, i) {
 function icsEsc(s) { return String(s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n"); }
 function fold(line) { const o = []; let s = line; while (Buffer.byteLength(s) > 74) { let n = 74; while (Buffer.byteLength(s.slice(0, n)) > 74) n--; o.push(s.slice(0, n)); s = " " + s.slice(n); } o.push(s); return o.join("\r\n"); }
 function dt(k, h, m) { return k.replace(/-/g, "") + "T" + p2(h) + p2(m) + "00"; }
-function buildIcs(cal) {
-    const L2 = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Kitchen Hub//EN", "CALSCALE:GREGORIAN", "X-WR-CALNAME:Kitchen Hub", "X-PUBLISHED-TTL:PT30M", "REFRESH-INTERVAL;VALUE=DURATION:PT30M"];
+// who: "p1" = the owner's calendar (his shifts + his and shared events), "p2" = the roommate's
+function buildIcs(cal, who, name) {
+    who = who || "p1";
+    const mine = (w) => !w || w === who;
+    const L2 = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Kitchen Hub//EN", "CALSCALE:GREGORIAN", "X-WR-CALNAME:" + (name ? "Kitchen Hub - " + name : "Kitchen Hub"), "X-PUBLISHED-TTL:PT30M", "REFRESH-INTERVAL;VALUE=DURATION:PT30M"];
     const stamp = TODAY.replace(/-/g, "") + "T000000Z";       // stable within a day: the file only changes when the calendar does
     function ev(uid, start, end, title, extra) { L2.push("BEGIN:VEVENT", "UID:" + uid + "@kitchenhub", "DTSTAMP:" + stamp, start, end, fold("SUMMARY:" + icsEsc(title))); (extra || []).forEach(x => L2.push(fold(x))); L2.push("END:VEVENT"); }
-    Object.keys(cal.sh).forEach(k => {
-        const v = cal.sh[k]; if (isOff(v)) return;
+    const SH = who === "p2" ? cal.sh2 : cal.sh;
+    Object.keys(SH).forEach(k => {
+        const v = SH[k]; if (isOff(v)) return;
         const t = shiftTimes(v);
         if (t) { const ek = t.e[0] >= 24 ? addK(k, 1) : k; ev("shift-" + k, "DTSTART:" + dt(k, t.s[0], t.s[1]), "DTEND:" + dt(ek, t.e[0] % 24, t.e[1]), "Shift " + v, ["CATEGORIES:Shift"]); }
         else ev("shift-" + k, "DTSTART;VALUE=DATE:" + k.replace(/-/g, ""), "DTEND;VALUE=DATE:" + addK(k, 1).replace(/-/g, ""), "Shift " + v);
     });
     items("event").forEach(it => {
         if (it.state === "del" || it.text === null) return;
-        const e = HubCal.parseEvent(it.text); if (!e) return;
+        const e = HubCal.parseEvent(it.text); if (!e || !mine(e.who)) return;
         if (e.time) { const h = +e.time.slice(0, 2), m = +e.time.slice(3); ev(it.id, "DTSTART:" + dt(e.date, h, m), "DTEND:" + dt(e.date, Math.min(23, h + 1), m), e.title, e.note ? ["DESCRIPTION:" + icsEsc(e.note), "BEGIN:VALARM", "TRIGGER:-PT30M", "ACTION:DISPLAY", "DESCRIPTION:" + icsEsc(e.title), "END:VALARM"] : ["BEGIN:VALARM", "TRIGGER:-PT30M", "ACTION:DISPLAY", "DESCRIPTION:" + icsEsc(e.title), "END:VALARM"]); }
         else ev(it.id, "DTSTART;VALUE=DATE:" + e.date.replace(/-/g, ""), "DTEND;VALUE=DATE:" + addK(e.date, 1).replace(/-/g, ""), e.title, e.note ? ["DESCRIPTION:" + icsEsc(e.note)] : []);
     });
     const BYDAY = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
     cal.reps.forEach(it => {
-        const r = HubCal.parseRepeat(it.text); if (!r) return;
+        const r = HubCal.parseRepeat(it.text); if (!r || !mine(r.who)) return;
         const p = r.rule.split(":"); let rr = "", first = TODAY;
         if (p[0] === "daily") rr = "FREQ=DAILY";
         else if (p[0] === "weekly") rr = "FREQ=WEEKLY;BYDAY=" + p[1].split(",").map(x => BYDAY[+x]).join(",");
@@ -372,6 +381,8 @@ async function main() {
             (cal.ev[TODAY] || []).forEach(e => lines.push((e.time ? HubCal.fmtTime(e.time) + " " : "") + e.title));
             if (plan[TODAY]) lines.push("Dinner: " + plan[TODAY]);
             if (openList.length) lines.push(openList.length + " on the shopping list");
+            const pc = peopleCfg(), c1 = pc && pc.pay && pc.pay.p1;
+            if (c1 && c1.rate > 0) { const r = HubCal.payPeriod(cal.sh, TODAY, c1); if (r.payday === TODAY) lines.push("Payday today"); }
             await push("Good morning - " + DAYS[DOW], lines.join("\n") || "Nothing on today.", "sunrise", 2);
         }
         // shift tomorrow (evening) and shift soon
@@ -394,6 +405,17 @@ async function main() {
         if (HOUR >= 9 && !quiet) for (const ahead of [7, 1]) {
             const k = addK(TODAY, ahead);
             for (const e of (cal.ev[k] || [])) if (/birthday|bday|b-day|anniversary/i.test(e.title) && !sent("bd" + ahead + e.id + k)) { mark("bd" + ahead + e.id + k); await push((ahead === 1 ? "Tomorrow: " : "In a week: ") + e.title, "Card? Gift? Cake? It's on " + dayName(k) + ".", "birthday"); }
+        }
+        // payday: the evening before, with this period's gross (from the shifts on the hub)
+        const pcf = peopleCfg(), cp1 = pcf && pcf.pay && pcf.pay.p1;
+        if (cp1 && cp1.rate > 0 && HOUR >= 19 && HOUR < 22) {
+            // the period that pays tomorrow is the one that ended (payLag) days before tomorrow
+            const lag = cp1.payLag === undefined ? 6 : +cp1.payLag, endK = addK(TOMORROW, -lag), per = HubCal.periodOf(endK, cp1);
+            if (per.to === endK && !sent("pay" + TOMORROW)) {
+                mark("pay" + TOMORROW);
+                const r = HubCal.payFor(cal.sh, per.from, per.to, cp1);
+                await push("Payday tomorrow", "About $" + r.gross.toFixed(2) + " gross for " + r.hours + " h (" + per.from.slice(5) + " to " + per.to.slice(5) + ")" + (r.ot15 + r.ot2 > 0 ? ", incl. " + (r.ot15 + r.ot2) + " h overtime" : "") + ". Before deductions.", "moneybag", 3);
+            }
         }
         // holiday tomorrow
         if (HOUR >= 19 && HOUR < 22 && HubCal.holiday(TOMORROW) && !sent("hol" + TOMORROW)) { mark("hol" + TOMORROW); await push("Tomorrow is " + HubCal.holiday(TOMORROW), "B.C. statutory holiday - check store hours.", "flag-ca", 2); }
@@ -430,8 +452,10 @@ async function main() {
     }
 
     // 7. calendar.ics + tv.json
-    const ics = buildIcs(cal);
-    if (!cg || !cg.files || !cg.files["calendar.ics"] || (await fileText(cg.files["calendar.ics"])) !== ics) cloudFiles["calendar.ics"] = { content: ics };
+    const PC = peopleCfg(), p2name = PC && PC.people && PC.people.p2 && PC.people.p2.name;
+    const icsFiles = { "calendar.ics": buildIcs(cal, "p1", p2name ? PC.people.p1.name : "") };
+    if (p2name) icsFiles["calendar-p2.ics"] = buildIcs(cal, "p2", p2name);
+    for (const f of Object.keys(icsFiles)) if (!cg || !cg.files || !cg.files[f] || (await fileText(cg.files[f])) !== icsFiles[f]) cloudFiles[f] = { content: icsFiles[f] };
     const w = await weather();
     const tv = {
         ts: Math.floor(NOW / 1000), today: TODAY, tz: TZH,
@@ -447,9 +471,11 @@ async function main() {
         otd: parts && parts.data ? parts.data.onThisDay : null,
         stocks: parts && parts.data ? parts.data.stocks : [],
         feed: ((parts && parts.rfeed && parts.rfeed.items) || []).slice(0, 8).map(x => ({ t: decodeEnts(x.t), s: x.s })),
-        kindle: kindle
+        kindle: kindle,
+        people: PC ? PC.people : null, shifts2: {},
+        pay: PC && PC.pay ? ["p1", "p2"].map(w => { const c = PC.pay[w]; if (!c || !(c.rate > 0) || (w === "p2" && !p2name)) return null; const r = HubCal.payPeriod(w === "p2" ? cal.sh2 : cal.sh, TODAY, c); return { who: w, gross: r.gross, hours: r.hours, from: r.from, to: r.to, payday: r.payday }; }).filter(Boolean) : []
     };
-    for (let i = -1; i < 21; i++) { const k = addK(TODAY, i); if (cal.sh[k]) tv.shifts[k] = cal.sh[k]; if (cal.ev[k]) tv.events[k] = cal.ev[k].map(e => ({ time: e.time, title: e.title, rep: !!e.rep })); }
+    for (let i = -1; i < 21; i++) { const k = addK(TODAY, i); if (cal.sh[k]) tv.shifts[k] = cal.sh[k]; if (cal.sh2[k]) tv.shifts2[k] = cal.sh2[k]; if (cal.ev[k]) tv.events[k] = cal.ev[k].map(e => ({ time: e.time, title: e.title, rep: !!e.rep, who: e.who || "" })); }
     items("plan").forEach(p => { if (p.state === "open" && p.text && p.text.slice(0, 10) >= addK(TODAY, -1)) tv.plan[p.text.slice(0, 10)] = p.text.split("|")[1]; });
     const tvHash = require("crypto").createHash("sha1").update(JSON.stringify({ ...tv, ts: 0 })).digest("hex");
     if (tvHash !== brain.tvHash || !brain.tvAt || NOW - brain.tvAt > 30 * 60000) {        // unchanged data: refresh every 30 min only
@@ -459,9 +485,10 @@ async function main() {
 
     // 8. write: cloud gist first, then the main gist (merged with a fresh copy: someone may have edited meanwhile)
     if (Object.keys(cloudFiles).length) await gh("PATCH", "/gists/" + cloud, { files: cloudFiles });
-    const links = "# written by the cloud brain - the Kindle reads this\nBUNDLE_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/bundle.txt\nCLOUD_GIST=" + cloud + "\nICS_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar.ics\nTV_REF=" + owner + "/" + cloud + "\n";
+    const links = "# written by the cloud brain - the Kindle reads this\nBUNDLE_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/bundle.txt\nCLOUD_GIST=" + cloud + "\nICS_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar.ics\n" + (p2name ? "ICS2_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar-p2.ics\n" : "") + "TV_REF=" + owner + "/" + cloud + "\n";
     const before = JSON.stringify({ ...brainIn, lastRun: 0, pushes: 0 });
-    brain.v = "9.8.5"; brain.owner = owner; brain.pushes = pushes;
+    brain.v = "9.9";
+    brain.ics2 = p2name ? "https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar-p2.ics" : ""; brain.owner = owner; brain.pushes = pushes;
     brain.ics = "https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar.ics";
     brain.tv = owner + "/" + cloud;
     if (brain.wantLog && kindle && kindle.ts * 1000 > brain.wantLog) delete brain.wantLog;

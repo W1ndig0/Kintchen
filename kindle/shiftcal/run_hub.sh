@@ -1,5 +1,5 @@
 #!/bin/sh
-# Kitchen Hub v9.8.5 launcher.  Usage: run_hub.sh [eco|always]
+# Kitchen Hub v9.9 launcher.  Usage: run_hub.sh [eco|always]
 DIR="/mnt/us/extensions/shiftcal"
 CONF="$DIR/eco.conf"
 MODE="${1:-eco}"
@@ -14,7 +14,7 @@ PILLOW_DISABLE=2
 
 [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 50000 ] && tail -n 100 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 exec >> "$LOG" 2>&1
-echo "=== Launching Kitchen Hub v9.8.5 ($MODE) at $(date) ==="
+echo "=== Launching Kitchen Hub v9.9 ($MODE) at $(date) ==="
 
 chmod +x "$DIR"/*.sh 2>/dev/null
 /bin/sh "$DIR/register_mesquite.sh"

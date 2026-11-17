@@ -283,7 +283,7 @@ elif [ -f "$DIR/.whatson_cache" ]; then
 fi
 ALERTS=""
 # Environment Canada: the Prince George forecast feed carries any active warning as its own entry
-EC=$($CURL -sk --connect-timeout 5 --max-time 12 -A "KitchenHub/9.8.5" "https://weather.gc.ca/rss/weather/53.912_-122.776_e.xml" | tr '\r\n\t' '   ')
+EC=$($CURL -sk --connect-timeout 5 --max-time 12 -A "KitchenHub/9.9" "https://weather.gc.ca/rss/weather/53.912_-122.776_e.xml" | tr '\r\n\t' '   ')
 for T in $(printf '%s' "$EC" | sed 's#</entry>#\
 #g' | grep -i 'term="Warnings and Watches"' | sed -n 's#.*<title>\([^<]*\)</title>.*#\1#p' | sed 's/ /_SP_/g'); do
     T=$(printf '%s' "$T" | sed 's/_SP_/ /g' | jesc)
@@ -291,7 +291,7 @@ for T in $(printf '%s' "$EC" | sed 's#</entry>#\
     [ -n "$ALERTS" ] && ALERTS="$ALERTS,"; ALERTS="$ALERTS{\"s\":\"WEATHER\",\"t\":\"$T\"}"
 done
 # DriveBC (Open511): active major/moderate events on the roads around Prince George
-RD=$($CURL -sk --connect-timeout 5 --max-time 12 -A "KitchenHub/9.8.5" "https://api.open511.gov.bc.ca/events?format=json&status=ACTIVE&bbox=-124.0,53.4,-121.6,54.4&limit=40" | tr '\r\n\t' '   ')
+RD=$($CURL -sk --connect-timeout 5 --max-time 12 -A "KitchenHub/9.9" "https://api.open511.gov.bc.ca/events?format=json&status=ACTIVE&bbox=-124.0,53.4,-121.6,54.4&limit=40" | tr '\r\n\t' '   ')
 NR=0
 for EV in $(printf '%s' "$RD" | sed 's/"jurisdiction_url"/\
 @EV@/g' | grep '^@EV@' | sed 's/ /_SP_/g'); do

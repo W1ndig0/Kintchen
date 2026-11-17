@@ -1,5 +1,5 @@
 // Keeps the app itself available with no signal (the list lives in localStorage). GitHub API calls are never cached.
-var C = "kh-v5", FILES = ["./", "index.html", "hubdata.js", "extra.js", "manifest.json"];
+var C = "kh-v6", FILES = ["./", "index.html", "hubdata.js", "extra.js", "manifest.json"];
 self.addEventListener("install", function(e) { e.waitUntil(caches.open(C).then(function(c) { return c.addAll(FILES); })); self.skipWaiting(); });
 self.addEventListener("activate", function(e) {
   e.waitUntil(caches.keys().then(function(ks) { return Promise.all(ks.filter(function(k) { return k !== C; }).map(function(k) { return caches.delete(k); })); })
