@@ -491,6 +491,10 @@ poll_settings_http() {
     fi
     if [ "$(qv kbrowser)" = "1" ]; then log "opening the Kindle's own browser (the hub comes back at the next wake)"; lipc-set-prop com.lab126.appmgrd start app://com.lab126.browser 2>/dev/null; fi
     HV=$(qv health | tr -cd 'A-Za-z0-9.-')
+    # 10.4.1: ANY message from the page proves the new page started. The listener takes one message at a
+    # time, and on the Kindle the page's health= message was always lost in the start-up rush, so a page
+    # that worked was rolled back as "silent". The version comes from .update/pending, so it always matches.
+    if [ -z "$HV" ] && [ -f "$DIR/.update/pending" ]; then HV=$(cut -d' ' -f1 "$DIR/.update/pending" | tr -cd 'A-Za-z0-9.-'); fi
     [ -n "$HV" ] && [ -f "$DIR/.update/pending" ] && sh "$DIR/hub_update.sh" health "$HV" && [ ! -f "$DIR/.update/pending" ] && log "update $HV confirmed by the page"
     V=$(num_or_empty "$(qv autoupd)")
     if [ -n "$V" ]; then case "$V" in 0|1|2) AUTO_UPDATE=$V ;; esac; save_conf; write_ui_state 0; log "auto update: $AUTO_UPDATE"; fi

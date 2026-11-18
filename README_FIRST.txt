@@ -15,3 +15,12 @@ NOTES
 
 BEFORE YOU UPLOAD: GitHub secret HUB_PASS must equal PASSPHRASE in cloud.conf (see UPDATE_10.4.txt).
 Never put your real passphrase in cloud.conf.example - the repo is public.
+
+10.4 HANG FIX (added 2026-11-18)
+  kindle/manifest.txt               upload to kindle/ on your site (replaces the old one; still version 10.4)
+  kindle/shiftcal/power_loop.sh     fixed: the page listener can no longer block the hub forever, and any
+                                    message from a new page confirms the update (no false rollbacks)
+  kindle/shiftcal/hub_reset.sh      new: saves diag.txt, then stops every part of the hub
+  kindle/Kitchen Hub Reset (copy to documents).sh
+                                    library button for the reset - copy to the Kindle's documents folder
+                                    as "Kitchen Hub Reset.sh" (not part of the website)
