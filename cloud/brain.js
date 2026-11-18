@@ -5,7 +5,6 @@
  *   - turns Siri/Shortcut/PC "inbox" notes into locked list items, re-locks anything left plain
  *   - handles requests from the phone (import a recipe from a link, re-roll the meal plan, test push)
  *   - fills an empty week of dinners (meal plan), keeps repeating chores in the calendar
- *   - 10.4: the pantry (food ticked off the list goes into the pantry, staples that run low go on the list)
  *   - phone pushes (ntfy): shift tomorrow / in an hour, events, chores, birthdays, holidays,
  *     a morning briefing, a Sunday week-ahead, weather warnings, "the Kindle went quiet", low battery
  *   - publishes to a second private gist: calendar.ics (subscribe on iPhone/PC), tv.json (locked, for
@@ -17,7 +16,7 @@
  */
 "use strict";
 const fs = require("fs"), path = require("path"), os = require("os"), cp = require("child_process");
-const HubData = require("./hubdata.js"), HubCrypt = HubData.HubCrypt, HubCal = HubData.HubCal, HubPantry = HubData.HubPantry;
+const HubData = require("./hubdata.js"), HubCrypt = HubData.HubCrypt, HubCal = HubData.HubCal;
 
 const API = process.env.GH_API || "https://api.github.com";
 const GIST = process.env.GIST_ID, TOKEN = process.env.GIST_TOKEN, PASS = process.env.HUB_PASS || "";
@@ -68,17 +67,6 @@ function items(kind) {
 }
 function edit(id, kind, state, text) { store = HubData.edit(store, id, kind, state, PASS ? HubCrypt.lock(text, PASS) : text, NOW); storeChanged = true; }
 function newId() { return HubData.newId("c"); }
-function allItems(kind) {      // 10.3: including deleted ones (the book cloud tidies their files)
-    const best = {};
-    store.split("\n").forEach(l => { const it = HubData.parseLine(l); if (it && it.kind === kind && (!best[it.id] || best[it.id].ts <= it.ts)) best[it.id] = it; });
-    return Object.values(best);
-}
-async function fetchBin(url, ms) {
-    if (OFFLINE) return null;
-    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms || 30000);
-    try { const r = await fetch(url, { signal: ctl.signal, redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 KitchenHub" } }); return r.ok ? Buffer.from(await r.arrayBuffer()) : null; }
-    catch (e) { return null; } finally { clearTimeout(t); }
-}
 function hasId(id) { return store.split("\n").some(l => { const it = HubData.parseLine(l); return it && it.id === id; }); }
 
 // ---------- inbox: Shortcuts / PC drop plain lines into gist files named inbox-*.txt ----------
@@ -361,20 +349,8 @@ async function main() {
             const ok = await push("Kitchen Hub", "Test from the cloud brain - phone alerts work.", "white_check_mark");
             edit(r.id, "req", "done", "pushtest|" + (ok ? "ok" : "fail|no NTFY_TOPIC secret or ntfy unreachable"));
         } else if (f[0] === "cloudlog") { brain.wantLog = NOW; edit(r.id, "req", "done", "cloudlog|ok"); }
-        else if (f[0] === "book") continue;            // 10.3: the book cloud handles these (step 3b)
         else edit(r.id, "req", "done", r.text + "|fail|unknown request");
     }
-
-    // 3b. 10.3: the book cloud (Gutenberg requests, EPUB conversion, tidying)
-    try {
-        const bb = process.env.BOOKS_BASE, bget = bb ? (u, ms, o) => get(bb + "/ext/" + encodeURIComponent(u), ms, o) : get, bbin = bb ? (u, ms) => fetchBin(bb + "/ext/" + encodeURIComponent(u), ms) : fetchBin;   // tests
-        await require("./books.js")({ gh, items, allItems, edit, newId, log, brain, NOW, TODAY, HubCal, fileText, get: bget, fetchBin: bbin, txt, decodeEnts });
-    } catch (e) { log("books failed: " + String(e.message || e).slice(0, 80)); }
-
-    // 3c. 10.4: the pantry (ticked-off food -> pantry, staples that run low -> list); its settings go to the extras
-    let pantryCfg = HubPantry.cfg(null);
-    try { pantryCfg = require("./pantry.js")({ items, edit, newId, log, brain, TODAY, HubCal, HubPantry }).cfg; }
-    catch (e) { log("pantry failed: " + String(e.message || e).slice(0, 80)); }
 
     // 4. bundle + data for the TV and the meal plan
     let cloud = brain.cloudGist || process.env.CLOUD_GIST_ID || "";
@@ -435,7 +411,7 @@ async function main() {
         let exState = {}; try { exState = cg && cg.files && cg.files["extras_state.json"] ? JSON.parse(await fileText(cg.files["extras_state.json"])) : {}; } catch (e) {} if (!exState || typeof exState !== "object") exState = {};
         const xget = process.env.EXTRAS_BASE ? (u, ms, o) => get(process.env.EXTRAS_BASE + "/ext/" + encodeURIComponent(u), ms, o) : get;   // tests
         const before = JSON.stringify(exState);
-        EX = await require("./extras.js")({ items, push, sent, mark, NOW, TODAY, TOMORROW, HOUR, DOW, addK, get: xget, HubCal, decodeEnts, log, state: exState, pantryCfg });
+        EX = await require("./extras.js")({ items, push, sent, mark, NOW, TODAY, TOMORROW, HOUR, DOW, addK, get: xget, HubCal, decodeEnts, log, state: exState });
         if (JSON.stringify(exState) !== before) cloudFiles["extras_state.json"] = { content: JSON.stringify(exState) };
         const exHash = require("crypto").createHash("sha1").update(JSON.stringify({ ...EX, ts: 0 })).digest("hex");
         if (exHash !== brain.exHash || !(cg && cg.files && cg.files["extra.js"])) {
@@ -546,19 +522,6 @@ async function main() {
             if (kindle.charging) delete brain.battWarned;
             else if (kindle.left7 > 0 && kindle.left7 <= 18 && !kindle.reminded && !brain.battWarned && !quiet) { brain.battWarned = NOW; await push("Fridge hub battery " + kindle.pct + "%", "About " + kindle.left7 + " h left at the current rate.", "battery", 4); }
         }
-        // 10.2: the fridge's updater: a new version is running, an update was undone, or one is waiting
-        if (kindle && kindle.upd && kindle.upd !== brain.updSeen) {
-            const f = String(kindle.upd).split(" ");
-            if (brain.updSeen !== undefined) {
-                if (f[1] === "healthy") await push("Fridge hub updated to " + f[2], "It started fine. What's new: Settings > Phone > WHAT'S NEW on the fridge.", "sparkles", 2);
-                if (f[1] === "rolledback") await push("Fridge update undone", (f[2] || "The new version") + " didn't start properly, so the fridge went back to " + (f[3] || "the last version") + ". Nothing is lost; that version won't be installed again by itself.", "rewind", 4);
-            }
-            brain.updSeen = kindle.upd;
-        }
-        if (kindle && kindle.avail && +kindle.auto === 1 && brain.availSeen !== kindle.avail && !quiet) {
-            brain.availSeen = kindle.avail;
-            await push("Update " + kindle.avail + " is ready for the fridge", "Install it from the phone app (Fridge tab) or Settings > Phone on the fridge.", "arrow_up", 2);
-        }
         // new weather warnings
         const ec = process.env.OFFLINE_WX ? null : await get("https://weather.gc.ca/rss/weather/53.912_-122.776_e.xml", 12000);
         if (ec) {
@@ -589,14 +552,6 @@ async function main() {
         stocks: parts && parts.data ? parts.data.stocks : [],
         feed: ((parts && parts.rfeed && parts.rfeed.items) || []).slice(0, 8).map(x => ({ t: decodeEnts(x.t), s: x.s })),
         kindle: kindle,
-        // 10.2: the TV's HOME slide - bills this week, food to use, today's chores (ticked or not), flyer deals, a joke
-        home: EX ? {
-            bills: ((EX.money && EX.money.bills) || []).filter(b => !b.paid && b.date <= addK(TODAY, 7)).slice(0, 6).map(b => ({ name: b.name, amount: b.amount, date: b.date, autopay: b.autopay })),
-            use: (EX.pantry || []).filter(p => p.expires && p.expires <= addK(TODAY, 1)).slice(0, 8).map(p => ({ name: p.name, expires: p.expires })),
-            chores: (cal.ev[TODAY] || []).filter(e => e.rep).map(e => ({ title: e.title, who: e.who || "", done: items("chdone").some(c => c.state === "open" && c.id === "cd" + e.id + TODAY.replace(/-/g, "")) })),
-            flyers: (EX.flyers || []).slice(0, 4).map(f => ({ name: f.name, price: f.best.price, store: f.best.store })),
-            joke: EX.joke || ""
-        } : null,
         people: PC ? PC.people : null, shifts2: {},
         pay: PC && PC.pay ? ["p1", "p2"].map(w => { const c = PC.pay[w]; if (!c || !(c.rate > 0) || (w === "p2" && !p2name)) return null; const r = HubCal.payPeriod(w === "p2" ? cal.sh2 : cal.sh, TODAY, c); return { who: w, gross: r.gross, hours: r.hours, from: r.from, to: r.to, payday: r.payday }; }).filter(Boolean) : []
     };
@@ -610,9 +565,9 @@ async function main() {
 
     // 8. write: cloud gist first, then the main gist (merged with a fresh copy: someone may have edited meanwhile)
     if (Object.keys(cloudFiles).length) await gh("PATCH", "/gists/" + cloud, { files: cloudFiles });
-    const links = "# written by the cloud brain - the Kindle reads this\nBUNDLE_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/bundle.txt\nCLOUD_GIST=" + cloud + "\nICS_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar.ics\n" + (p2name ? "ICS2_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar-p2.ics\n" : "") + "TV_REF=" + owner + "/" + cloud + "\nEXTRA_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/extra.js\n" + (brain.booksGist ? "BOOKS_URL=https://gist.githubusercontent.com/" + owner + "/" + brain.booksGist + "/raw/\n" : "");
+    const links = "# written by the cloud brain - the Kindle reads this\nBUNDLE_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/bundle.txt\nCLOUD_GIST=" + cloud + "\nICS_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar.ics\n" + (p2name ? "ICS2_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar-p2.ics\n" : "") + "TV_REF=" + owner + "/" + cloud + "\nEXTRA_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/extra.js\n";
     const before = JSON.stringify({ ...brainIn, lastRun: 0, pushes: 0 });
-    brain.v = "10.4";
+    brain.v = "10.1.2";
     brain.ics2 = p2name ? "https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar-p2.ics" : ""; brain.owner = owner; brain.pushes = pushes;
     brain.ics = "https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar.ics";
     brain.tv = owner + "/" + cloud;

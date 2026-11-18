@@ -7,11 +7,9 @@
 #    Account permissions -> Gists: Read and write. Longest expiry it offers.
 # 3. Make a public repo (e.g. kitchen-hub), upload the 4 files from the phone/ folder,
 #    Settings -> Pages -> deploy from branch. That address is PAGES_URL.
-# Locks the list text AND your books in the gists so only your phone, the Kindle and your cloud brain can read them.
-# The phone learns it from the pairing QR; the cloud brain needs the same value as the HUB_PASS secret.
-# Use a long one (four or five unrelated words). Change it on ALL sides if you ever change it.
-# Never put your real passphrase in this example file - the repo is public.
-PASSPHRASE=change-me-to-four-random-words
+# Locks the list text in the gist so only your phone and the Kindle can read it.
+# The phone learns it from the pairing QR. Change it on BOTH sides if you ever change it.
+PASSPHRASE=Holy
 GIST_ID=paste_gist_id_here
 GH_TOKEN=paste_token_here
 PAGES_URL=https://yourname.github.io/kitchen-hub/

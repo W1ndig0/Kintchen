@@ -1,6 +1,5 @@
 // Keeps the app itself available with no signal (the list lives in localStorage). GitHub API calls are never cached.
-// 10.4: new cache name, so phones drop the 10.3 copies of extra*.js and pick up the book lock and the phone fixes
-var C = "kh-v14", FILES = ["./", "index.html", "hubdata.js", "extra.js", "extra2.js", "extra3.js", "manifest.json", "tv.html"];
+var C = "kh-v10", FILES = ["./", "index.html", "hubdata.js", "extra.js", "extra2.js", "manifest.json", "tv.html"];
 self.addEventListener("install", function(e) { e.waitUntil(caches.open(C).then(function(c) { return c.addAll(FILES); })); self.skipWaiting(); });
 self.addEventListener("activate", function(e) {
   e.waitUntil(caches.keys().then(function(ks) { return Promise.all(ks.filter(function(k) { return k !== C; }).map(function(k) { return caches.delete(k); })); })

@@ -2,7 +2,7 @@
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:kindle="http://kindle.amazon.com/ns/widget-extensions"
         id="http://custom.local/kitchenhub"
-        version="10.3"
+        version="10.1.2"
         viewmodes="maximized">
     <name>Kitchen Hub</name>
     <content src="index.html"/>

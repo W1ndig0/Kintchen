@@ -1,27 +1,22 @@
 /* Kitchen Hub 10.0 cloud extras: deals (Best Buy wishlist, Flipp flyers for V2N, RedFlagDeals hot deals),
  * money / pantry / package / Canucks reminders, and the daily fun (trivia, word of the day).
  * Writes ONE locked file to the cloud gist, extra.js, that the fridge and the phone both read.
- * Prints counts only (public logs).
- * 10.4: the pantry settings (ctx.pantryCfg, from pantry.js) switch the evening "use it up" push and the
- *       recipe ideas on/off, and out.cook lists your saved recipes that use food about to expire.          */
+ * Prints counts only (public logs).                                                                  */
 "use strict";
 function bigSale(now) {     // Black Friday week + Boxing week: check hot deals every 20 min
     const n = new Date(now + (+(process.env.TZ_HOURS || -7)) * 3600000), m = n.getUTCMonth(), d = n.getUTCDate();      // 10.1.2: same clock as the brain (was UTC-8)
     if (m === 10) { const f = new Date(Date.UTC(n.getUTCFullYear(), 10, 1)).getUTCDay(), thu = 1 + (4 - f + 7) % 7 + 21; if (d >= thu && d <= thu + 4) return true; }
     return (m === 11 && d >= 26) || (m === 0 && d <= 1);
 }
-// a pantry name as it would appear in a recipe's ingredient line ("Leftovers: chili" -> "chili", "Eggs" -> "egg")
-function ingWord(name) { return String(name || "").toLowerCase().replace(/^leftovers?:\s*/, "").replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim().replace(/(es|s)$/, ""); }
 module.exports = async function runExtras(ctx) {
     const { items, push, sent, mark, NOW, TODAY, TOMORROW, HOUR, DOW, addK, get, HubCal, decodeEnts, log } = ctx;
-    const PC = ctx.pantryCfg || { on: { remind: true, cook: true } };
     const st = ctx.state;                       // persisted in the cloud gist as extras_state.json
     st.wish = st.wish || {}; st.flyer = st.flyer || {}; st.hot = st.hot || {}; st.fun = st.fun || {}; st.nhl = st.nhl || {};
     const POSTAL = process.env.POSTAL || "V2N4Z9";
     const due = (key, mins) => !st[key + "At"] || NOW - st[key + "At"] > mins * 60000 || NOW < st[key + "At"];
     const J = async (u, ms) => { const t = await get(u, ms || 15000, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KitchenHub", Accept: "application/json" } }); try { return t ? JSON.parse(t) : null; } catch (e) { return null; } };
     const quiet = HOUR < 7 || HOUR >= 22;
-    const out = { ts: Math.floor(NOW / 1000), wish: [], flyers: [], hot: [], trivia: null, wotd: null, nhl: [], money: null, pantry: [], pkgs: [], cook: [] };
+    const out = { ts: Math.floor(NOW / 1000), wish: [], flyers: [], hot: [], trivia: null, wotd: null, nhl: [], money: null, pantry: [], pkgs: [] };
 
     // ---------------- wishlist: Best Buy Canada prices ----------------
     const wishes = items("wish").filter(w => w.state === "open" && w.text).map(w => ({ id: w.id, ...HubCal.parseRec("wish", w.text) }));
@@ -131,7 +126,7 @@ module.exports = async function runExtras(ctx) {
     for (const u of upcoming) {
         if (u.paid || u.autopay) continue;
         const left = Math.round((Date.parse(u.date) - Date.parse(TODAY)) / 86400000);
-        if (left === 2 && HOUR >= 9 && !quiet && !sent("bill" + u.id + u.date)) { mark("bill" + u.id + u.date); await push("Bill due in 2 days: " + u.name, "$" + u.amount.toFixed(2) + " on " + u.date, "receipt", 3); }
+        if (left === 2 && HOUR >= 9 && !quiet && !sent("bill" + u.id + u.date)) { mark("bill" + u.id + u.date); await push("Bill due " + (left === 2 ? "in 2 days" : "") + ": " + u.name, "$" + u.amount.toFixed(2) + " on " + u.date, "receipt", 3); }
         if (left === -1 && HOUR >= 9 && !quiet && !sent("billod" + u.id + u.date)) { mark("billod" + u.id + u.date); await push("Unpaid bill: " + u.name, "$" + u.amount.toFixed(2) + " was due yesterday - tick it off on the fridge or phone once paid.", "warning", 4); }
     }
     const month = TODAY.slice(0, 7), spends = items("spend").filter(s => s.state === "open" && s.text).map(s => ({ id: s.id, ...HubCal.parseRec("spend", s.text) }));
@@ -154,16 +149,8 @@ module.exports = async function runExtras(ctx) {
     pantry.sort((a, b) => a.expires < b.expires ? -1 : 1);
     out.pantry = pantry.slice(0, 20);
     const soon = pantry.filter(p => p.expires <= TOMORROW && p.expires >= addK(TODAY, -2));     // 10.1.2: stop nagging every evening about food that expired days ago
-    if (PC.on.remind && soon.length && HOUR >= 17 && HOUR < 21 && !sent("pantry" + TODAY)) { mark("pantry" + TODAY); await push("Use it up", soon.map(p => p.name + (p.expires < TODAY ? " (expired " + p.expires.slice(5) + ")" : p.expires === TODAY ? " (today)" : " (tomorrow)")).join("\n"), "cheese", 2); }
+    if (soon.length && HOUR >= 17 && HOUR < 21 && !sent("pantry" + TODAY)) { mark("pantry" + TODAY); await push("Use it up", soon.map(p => p.name + (p.expires < TODAY ? " (expired " + p.expires.slice(5) + ")" : p.expires === TODAY ? " (today)" : " (tomorrow)")).join("\n"), "cheese", 2); }
     out.pkgs = items("pkg").filter(p => p.state === "open" && p.text).map(p => ({ id: p.id, ...HubCal.parseRec("pkg", p.text) }));
-    // 10.4: cook from the pantry - your saved recipes that use food expiring in the next 3 days, most matches first
-    if (PC.on.cook) {
-        const using = pantry.filter(p => p.expires <= addK(TODAY, 3)).map(p => ({ name: p.name, w: ingWord(p.name) })).filter(x => x.w.length > 2);
-        if (using.length) out.cook = items("recipe").filter(r => r.state === "open" && r.text).map(r => {
-            const ls = r.text.split("\n"), ing = ls.slice(1).filter(l => l.indexOf("* ") === 0).map(l => l.slice(2).toLowerCase());
-            return { id: r.id, title: ls[0], uses: using.filter(x => ing.some(l => l.indexOf(x.w) >= 0)).map(x => x.name) };
-        }).filter(r => r.uses.length).sort((a, b) => b.uses.length - a.uses.length).slice(0, 6);
-    }
 
     // ---------------- fun: trivia, word of the day, Canucks ----------------
     if (!st.fun.day || st.fun.day !== TODAY || ((!st.fun.tday || !st.fun.wday) && due("funretry", 60))) {        // 10.1.1: a failed half is retried hourly
@@ -218,8 +205,8 @@ module.exports = async function runExtras(ctx) {
     for (const f of out.flyers) { byStore[f.best.store] = (byStore[f.best.store] || 0) + 1; if (f.best.was > f.best.price) save += f.best.was - f.best.price; }
     const topStore = Object.keys(byStore).sort((a, b) => byStore[b] - byStore[a])[0];
     out.flyerSum = { save: Math.round(save * 100) / 100, store: topStore || "", n: topStore ? byStore[topStore] : 0 };
-    // recipe ideas for food that's about to expire (TheMealDB) - 10.4: only when "cook from the pantry" is on
-    const soonIng = PC.on.cook ? pantry.filter(p => p.expires <= addK(TODAY, 3) && !/^leftover/i.test(p.name)).map(p => p.name) : [];
+    // recipe ideas for food that's about to expire (TheMealDB)
+    const soonIng = pantry.filter(p => p.expires <= addK(TODAY, 3) && !/^leftover/i.test(p.name)).map(p => p.name);
     const ideaSig = soonIng.slice(0, 4).join(",");
     st.ideas = st.ideas || {};
     if (ideaSig && (st.ideas.sig !== ideaSig || due("ideas", 720))) {

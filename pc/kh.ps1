@@ -17,14 +17,6 @@
      kh tv                                open the TV dashboard full screen in your browser
      kh cal                               subscribe to the calendar (opens Outlook / your calendar app)
      kh sync | kh update | kh remotelog   remote control: sync, install update, upload a log (next wake)
-     kh rollback                          undo the fridge's last update (next wake)
-     kh web https://text.npr.org          open a page in the fridge's web reader (or: kh web some search words)
-     kh spend 42.50 groceries             log a purchase (categories: groceries, eating out, gas, household, bills, fun, other)
-     kh food chicken 2                    something in the fridge, best before in 2 days
-     kh version                           the fridge's version and update setting
-     kh books                             your book cloud: what's in it and what's on the Kindle
-     kh book https://site/article         send an article to the Kindle library (the cloud makes it a book)
-     kh book 1342                         add a free classic from Project Gutenberg by its number
   Tip: make it a command:  Set-Alias kh "$HOME\KitchenHub\kh.ps1"  in your PowerShell profile.
   Your settings live in %APPDATA%\KitchenHub\kh.json (the token is only stored there).
 #>
@@ -178,44 +170,6 @@ switch ($Cmd) {
   "timer" { $m = 0; if (-not [int]::TryParse([string]$Rest[0], [ref]$m) -or $m -lt 1 -or $m -gt 240) { throw "kh timer 10   (1 to 240 minutes)" }; AddLines @(, @("cmd", "open", "timer|" + $m, $null)); Write-Host "Timer queued." }
   "sync" { AddLines @(, @("cmd", "open", "sync", $null)); Write-Host "The fridge syncs at its next wake." }
   "update" { AddLines @(, @("cmd", "open", "update|install", $null)); Write-Host "The fridge installs the update from your GitHub site at its next wake." }
-  "rollback" { AddLines @(, @("cmd", "open", "update|rollback", $null)); Write-Host "The fridge goes back to its previous version at its next wake." }
-  "web" {
-    if (-not $arg) { throw "kh web https://text.npr.org   (or some search words)" }
-    $u = if ($arg -match '^https?://') { $arg } elseif ($arg -notmatch '\s' -and $arg -match '\.[a-z]{2,}') { "https://" + $arg } else { "q:" + $arg }
-    AddLines @(, @("cmd", "open", "web|" + $u, $null)); Write-Host "Sent - it opens in the fridge's WEB app at its next wake."
-  }
-  "spend" {
-    $amt = 0.0; if (-not [double]::TryParse([string]$Rest[0], [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$amt) -or $amt -le 0) { throw "kh spend 42.50 groceries" }
-    $cats = @("Groceries", "Eating out", "Gas", "Household", "Bills", "Fun", "Other"); $want = (($Rest | Select-Object -Skip 1) -join " ").Trim(); $cat = "Other"
-    foreach ($c in $cats) { if ($want -and $c.ToLower().StartsWith($want.ToLower())) { $cat = $c; break } }
-    $d = (Get-Date).ToString("yyyy-MM-dd")
-    AddLines @(, @("spend", "open", ("{0}|{1}|{2}|p1||" -f $d, $amt.ToString("0.00", [System.Globalization.CultureInfo]::InvariantCulture), $cat), $null)); Write-Host ("Logged {0:0.00} for {1}." -f $amt, $cat)
-  }
-  "food" {
-    if (-not $Rest) { throw "kh food chicken 2   (name, then days until best before)" }
-    $days = 3; $last = [string]$Rest[-1]; $nameParts = $Rest
-    if ($Rest.Count -gt 1 -and $last -match '^\d{1,3}$') { $days = [int]$last; $nameParts = $Rest[0..($Rest.Count - 2)] }
-    $name = ($nameParts -join " ").Replace("|", "/"); $exp = (Get-Date).AddDays($days).ToString("yyyy-MM-dd")
-    AddLines @(, @("pantry", "open", "$name|$exp|1|fridge", $null)); Write-Host "Added $name (best before $exp)."
-  }
-  "books" {
-    $g = Gh GET ("/gists/" + $C.gist); $store = FileText $g "hub.tsv"
-    $bs = @(Items $store "book" | Where-Object { $_.state -eq "open" -and $_.text })
-    if (-not $bs) { Write-Host "Your book cloud is empty. Add books from the phone app's BOOKS tab."; exit 0 }
-    foreach ($b in $bs) { $f = $b.text -split "\|"; Write-Host ("{0,-40} {1,-22} {2,-5} {3,7} KB  {4}" -f $f[0], $f[1], $f[2], [int]([double]("0" + $f[3]) / 1024), $(if ($f[4] -eq "kindle") { "on the Kindle" } else { "cloud only" })) }
-  }
-  "book" {
-    if (-not $arg) { throw "kh book https://site/article   or   kh book 1342 (a Project Gutenberg number)" }
-    if ($arg -match '^\d+$') { AddLines @(, @("req", "open", "book|gut|$arg", $null)); Write-Host "Asked the cloud for Project Gutenberg book $arg - on the Kindle after the next sync or two." }
-    elseif ($arg -match '^https?://\S+$') { AddLines @(, @("req", "open", "book|url|$arg", $null)); Write-Host "Sent - the cloud turns it into a book for the Kindle library." }
-    else { throw "kh book needs a web address or a Gutenberg number" }
-  }
-  "version" {
-    $x = Extras; $k = $x.kindle
-    if (-not $k) { Write-Host "No check-in from the fridge yet."; exit 0 }
-    $au = @("only when you tap", "tells you", "installs at night")[$(if ($null -eq $k.auto) { 2 } else { [int]$k.auto })]
-    Write-Host ("Fridge v{0} - updates: {1}{2}{3}" -f $k.v, $au, $(if ($k.avail) { " - $($k.avail) is ready" } else { "" }), $(if ($k.upd) { " - last: " + (($k.upd -split " ")[1..3] -join " ") } else { "" }))
-  }
   "remotelog" { AddLines @(, @("cmd", "open", "log", $null)); Write-Host "The fridge uploads its log at the next wake; then: kh log" }
   "event" {
     if ($Rest[0] -notmatch '^\d{4}-\d\d-\d\d$') { throw "kh event 2026-11-20 15:30 Dentist" }
@@ -256,5 +210,5 @@ switch ($Cmd) {
   }
   "cal" { $x = Extras; if (-not $x.brain -or -not $x.brain.ics) { throw "The cloud brain hasn't run yet" }; Start-Process ($x.brain.ics -replace '^https:', 'webcal:'); Write-Host $x.brain.ics }
   "selftest" { SelfTest; Write-Host "Crypto matches the fridge and phone." }
-  default { Get-Help $PSCommandPath; Write-Host "Commands: add list done note timer event chore recipe plan spend food web book books status version log tv cal sync update rollback remotelog selftest pair" }
+  default { Get-Help $PSCommandPath; Write-Host "Commands: add list done note timer event chore recipe plan status log tv cal sync update remotelog selftest pair" }
 }

@@ -20,7 +20,6 @@ TAB=$(printf '\t')
 GIST_ID=""; GH_TOKEN=""; API="https://api.github.com"
 [ -f "$CONF" ] && . "$CONF"
 CURL=/usr/bin/curl; [ -x "$CURL" ] || CURL=curl
-[ -f "$DIR/kcurl.sh" ] && . "$DIR/kcurl.sh"; command -v kcurl >/dev/null 2>&1 || kcurl() { "$CURL" -k "$@"; }     # 10.4: checked TLS when possible
 mkdir -p "$T" "$DIR/mesquite"
 [ -f "$LOCAL" ] || echo "#hub v1" > "$LOCAL"
 
@@ -54,7 +53,7 @@ write_js() {
 # api METHOD URL [curl args] -> prints the http code; body in $T/b.$$, headers in $T/h.$$
 api() {
     M=$1; U=$2; shift 2
-    kcurl -s --connect-timeout 8 --max-time 25 -X "$M" \
+    $CURL -s -k --connect-timeout 8 --max-time 25 -X "$M" \
         -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
         -H "X-GitHub-Api-Version: 2022-11-28" -H "User-Agent: KitchenHub" \
         -D "$T/h.$$" -o "$T/b.$$" -w '%{http_code}' "$@" "$U" 2>/dev/null
@@ -62,7 +61,7 @@ api() {
 raw_url() { grep -o '"raw_url" *: *"[^"]*/hub\.tsv"' "$T/b.$$" | head -1 | sed 's/.*"\(http[^"]*\)"$/\1/'; }
 fetch_raw() {   # $1 raw url -> canonical copy in $T/r.$$
     [ -n "$1" ] || return 1
-    C=$(kcurl -s --connect-timeout 8 --max-time 25 -H "User-Agent: KitchenHub" -o "$T/raw.$$" -w '%{http_code}' "$1" 2>/dev/null)
+    C=$($CURL -s -k --connect-timeout 8 --max-time 25 -H "User-Agent: KitchenHub" -o "$T/raw.$$" -w '%{http_code}' "$1" 2>/dev/null)
     [ "$C" = "200" ] || return 1
     merge "$T/r.$$" "$T/raw.$$"      # canonical form: GitHub may store the text with other line endings
 }
@@ -114,7 +113,7 @@ push() {
 # ---------- 9.8.5 ----------
 # kindle.conf in the list gist (written by the cloud brain): where the bundle / cloud gist live
 save_links() {
-    { tr -d '\r' < "$T/b.$$" | grep -o '\(BUNDLE_URL\|CLOUD_GIST\|ICS_URL\|ICS2_URL\|TV_REF\|EXTRA_URL\|BOOKS_URL\)=[^\\" ]*'
+    { tr -d '\r' < "$T/b.$$" | grep -o '\(BUNDLE_URL\|CLOUD_GIST\|ICS_URL\|ICS2_URL\|TV_REF\|EXTRA_URL\)=[^\\" ]*'
       tr -d '\r' < "$T/b.$$" | grep -o 'lastRun\\*"*: *[0-9]\{13\}' | head -1 | sed 's/.*\([0-9]\{10\}\)[0-9]\{3\}$/BRAIN_AT=\1/'; } | sort -u > "$T/links.$$"
     if [ -s "$T/links.$$" ]; then cmp -s "$T/links.$$" "$DIR/.cloud_links" || { mv "$T/links.$$" "$DIR/.cloud_links"; say "cloud brain links saved"; }
     else rm -f "$T/links.$$"; fi
@@ -126,7 +125,7 @@ take_inbox() {
     : > "$T/inbox_new.$$"
     for U in $(tr -d '\r' < "$T/b.$$" | grep -o '"raw_url" *: *"[^"]*/inbox[-_][A-Za-z0-9._-]*\.txt"' | sed 's/.*"\(http[^"]*\)"$/\1/'); do
         NAME=${U##*/}
-        C=$(kcurl -s --connect-timeout 8 --max-time 20 -H "User-Agent: KitchenHub" -o "$T/in.$$" -w '%{http_code}' "$U" 2>/dev/null)
+        C=$($CURL -s -k --connect-timeout 8 --max-time 20 -H "User-Agent: KitchenHub" -o "$T/in.$$" -w '%{http_code}' "$U" 2>/dev/null)
         [ "$C" = "200" ] || continue
         TSMS="$(date +%s)000"
         awk -v name="$NAME" -v ts="$TSMS" '
@@ -161,13 +160,8 @@ do_status() {
     # the cloud brain fetches the news and markets for the fridge: it needs your choices from Settings
     NEWS=$(grep '^http' "$DIR/news.conf" 2>/dev/null | tr -d '"\\\r' | tr '\n' ';')
     STK=$(grep -v '^[[:space:]]*#' "$DIR/stocks.conf" 2>/dev/null | tr -d '"\\\r' | tr '\n' ' ')
-    # 10.2: what the updater did last (installed / healthy / rolledback), the auto-update setting, a waiting version
-    UEV=$(cat "$DIR/.update/event" 2>/dev/null | head -1 | tr -cd 'A-Za-z0-9 .-' | cut -c1-80)
-    AUP=$(sed -n 's/^AUTO_UPDATE=\([0-2]\)$/\1/p' "$DIR/eco.conf" 2>/dev/null | head -1)
-    BKS=$(cut -f1 "$DIR/.books_have" 2>/dev/null | tr -cd 'A-Za-z0-9\n' | awk 'NF { printf "%s\"%s\"", (n++ ? "," : ""), $0 }')      # 10.3: books on this Kindle
-    UAV=$(grep -o 'state:"available",cur:"[^"]*",nv:"[^"]*"' "$DIR/mesquite/update.js" 2>/dev/null | sed 's/.*nv:"\([^"]*\)"/\1/' | tr -cd 'A-Za-z0-9.-')
-    printf '{"ts":%s,"v":"%s","pct":%s,"charging":%s,"rate7":%s,"left7":%s,"interval":%s,"lastSync":%s,"cloudData":%s,"reminded":%s,"wake":"%s","items":%s,"news":"%s","stocks":"%s","upd":"%s","auto":%s,"avail":"%s","books":[%s]}' \
-        "$(date +%s)" "$V" "${PCT:-0}" "${CH:-0}" "${R7:-0}" "${L7:-0}" "${INT:-60}" "${LS:-0}" "${CD:-0}" "$REM" "$WR" "$(grep -c -v '^#' "$LOCAL")" "$NEWS" "$STK" "$UEV" "${AUP:-2}" "$UAV" "$BKS" > "$T/st.$$"
+    printf '{"ts":%s,"v":"%s","pct":%s,"charging":%s,"rate7":%s,"left7":%s,"interval":%s,"lastSync":%s,"cloudData":%s,"reminded":%s,"wake":"%s","items":%s,"news":"%s","stocks":"%s"}' \
+        "$(date +%s)" "$V" "${PCT:-0}" "${CH:-0}" "${R7:-0}" "${L7:-0}" "${INT:-60}" "${LS:-0}" "${CD:-0}" "$REM" "$WR" "$(grep -c -v '^#' "$LOCAL")" "$NEWS" "$STK" > "$T/st.$$"
     { printf '{"files":{"kindle.json":{"content":"'; jstr < "$T/st.$$" | sed 's/\\n$//'; printf '"}}}'; } > "$T/p.$$"
     CODE=$(api PATCH "$API/gists/$GIST_ID" -H "Content-Type: application/json" --data-binary "@$T/p.$$")
     [ "$CODE" = "200" ] && { date +%s > "$DIR/.status_at"; rm -f "$ETAGF"; } || say "status upload refused ($CODE)"

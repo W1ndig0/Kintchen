@@ -1,0 +1,87 @@
+KITCHEN HUB 10.1.1 - 55 NEW THINGS + 11 FIXES
+Install: upload the kit to GitHub like before (drag everything, including the .github folder), then on
+the fridge Settings > Phone > CHECK FOR UPDATE (tap twice). The phone app updates itself next time you open
+it (pull down to refresh if it looks old). New cloud bits (standings, jokes, recipe ideas) show up after
+the next cloud brain run.
+
+DEALS
+ 1  Black Friday / Boxing Day countdown on the Deals page and tile ("9 days to Black Friday").
+ 2  The same countdown on the phone's DEALS tab.
+ 3  LOWEST tag when a watched item is at the lowest price seen so far.
+ 4  Percent-off tag ("-25%") on watched items.
+ 5  CLEARANCE tag when Best Buy marks it clearance.
+ 6  Wishlist sorted best deal first (target hits, then lowest-ever, then biggest markdown) - fridge and phone.
+ 7  NEW tag on hot deals that showed up in the last 6 hours.
+ 8  Flyers: "buy the sale prices and save about $X".
+ 9  Flyers: which store has the most of your list cheapest.
+10  Deals tile shows the newest hot deal and the flyer savings.
+11  Morning briefing: items at your price, the newest hot deal, flyer savings.
+
+MONEY
+12  Logging a purchase starts with $5 / $10 / $20 / $50 / $100 buttons (or type any amount).
+13  This month: how much each of you paid.
+14  This month vs last month, compared to the same date.
+15  "On pace for $X this month" (page and tile).
+16  Total left in your budgets.
+17  Bills still to pay before the month ends.
+18  Savings goals can have a date; shows the $/week you need to make it (fridge and phone).
+19  New PAYCHEQUE tab: rough take-home after CPP, EI and income tax (2026 B.C. + federal rates).
+20  Hours worked this week and how many until weekly overtime (40 h).
+21  Your next shift: hours and what it pays.
+22  Next pay period so far (hours already scheduled and its take-home).
+23  Money tile: "Payday Fri - ~$X take-home" in the week before payday.
+24  Front page: one money line (spent this month, who owes who).
+25  Phone: flip back through previous months of spending.
+26  Phone: export all spending as a CSV file (opens in Excel / Sheets).
+27  Phone: who-paid and last month on the money card.
+28  Sunday "Your week" push now starts with the last 7 days: spending and chores done by each of you.
+
+FOOD
+29  Pantry quick buttons: Milk, Chicken, Ground beef, Bread, Eggs, Yogurt, Deli meat, Salad greens, Freezer
+    meat - one tap adds it with a sensible best-before date (fridge and phone).
+30  Pantry grouped into FRIDGE / FREEZER / PANTRY.
+31  New IDEAS tab: dinners that use up what expires in the next 3 days (from TheMealDB).
+32  Chart of food thrown out over the last 6 months.
+33  Food tile: how many things expire this week, plus a dinner idea.
+34  Phone: TOSSED button (counts toward the waste numbers) and the waste line.
+35  Phone: dinner ideas with links to the recipes.
+
+HOME
+36  Chores due today get a DONE button; pick who did it. UNDO if you tapped by mistake.
+37  Chore scoreboard for the month (who's ahead).
+38  A chore ticked off before its time doesn't send its reminder push.
+39  Chores listed by when they're next due, with a TODAY tag.
+40  Phone: "Chores today" with a tick button for each of you, plus the scoreboard.
+41  Phone: packages take a carrier and tracking number, with a TRACK button.
+42  Phone: LATE tag on packages past their date.
+43  Late packages in the morning briefing.
+44  Guest Wi-Fi: BIG CODE button fills the page so guests can scan from further away.
+45  Block heater push the evening before a night of -15 degrees or colder.
+46  Snow push the evening before 5 cm or more.
+47  Six more upkeep reminders: winter tires on (Oct 15), summer tires on (Apr 15), gutters, GFCI outlets,
+    bathroom fan, fire extinguisher.
+
+FUN
+48  Trivia keeps your score, streak and best streak.
+49  Word of the day is now a game: unscramble it from the meaning, then REVEAL.
+50  Canucks standings: place in the division, points, record.
+51  Scores refresh every 15 min around game time; the Fun tile shows LIVE scores.
+52  Game reminders (off by default): a push an hour before puck drop. Turn on in Fun > CANUCKS.
+53  New JOKES tab: a clean joke and a fact of the day.
+54  The Fun tile shows something different every half hour.
+
+EVERYWHERE
+55  New QUICK ADD app: purchase, food, leftovers, bill, package, chore or price watch from one page.
+
+FIXED
+ 1  "Every N months" reminders started on the 29th-31st skipped short months (now the last day instead).
+ 2  Yearly reminders on Feb 29 now land on Feb 28 in non-leap years.
+ 3  Flyers could "match" a list item to something unrelated when nothing really matched.
+ 4  New list items waited up to 6 h for a flyer check; now about 30 min.
+ 5  Hot-deal pushes for deals without a link could only ever fire once.
+ 6  If the trivia or word of the day failed to load, it wasn't retried until tomorrow (now hourly).
+ 7  A wishlist item you removed stayed on the Deals tile until the next cloud run.
+ 8  "+ WATCH" on a hot deal kept junk like " -" and "(YMMV)" in the name.
+ 9  Phone: a budget typed in lowercase ("groceries") never matched its category.
+10  Phone: "My price" could error if the item was removed on the fridge at the same moment.
+11  A few emoji (fire, hockey stick, pin) were swapped for symbols the Kindle's fonts are sure to have.

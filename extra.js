@@ -71,14 +71,12 @@
   $("c-addch").addEventListener("click", choreForm);
 
   // ---------- meal plan + import ----------
-  // 10.4: the header note is its own line (it used to float inside the <h2>, and the list's top border ran through it),
-  // and the dinner text gets a real flex width with wrapping (word-break:break-word made it one letter wide on iPhone).
   window.renderPlanImport = function() {
-    var plan = {}, box = $("r-plan"), t = todayK(), h = '<h2>This week’s dinners</h2><p class="sub" style="margin:0 0 6px;font-size:13px;color:var(--mute)">The cloud brain fills empty days.</p><ul>';
+    var plan = {}, box = $("r-plan"), t = todayK(), h = '<h2>This week’s dinners <span style="float:right;font-weight:400">(the cloud brain fills empty days)</span></h2><ul>';
     itemsOf("plan").forEach(function(it) { if (it.state === "open" && !it.locked) plan[it.text.slice(0, 10)] = it; });
     for (var i = 0; i < 7; i++) {
       var k = addD(t, i), it = plan[k];
-      h += '<li data-k="' + k + '"><span class="k" style="width:92px;flex:none;font:800 12px/1.2 Arial;letter-spacing:.1em;text-transform:uppercase">' + (i === 0 ? "Tonight" : dayLabel(k)) + '</span><span class="txt" style="flex:1 1 auto;min-width:0;word-break:normal;overflow-wrap:anywhere">' + (it ? esc(it.text.split("|")[1]) : '<i style="color:var(--mute)">open</i>') + '</span>' + (it ? '<button class="del">&times;</button>' : "") + '</li>';
+      h += '<li data-k="' + k + '"><span class="k" style="width:92px;flex:none;font:800 12px/1.2 Arial;letter-spacing:.1em;text-transform:uppercase">' + (i === 0 ? "Tonight" : dayLabel(k)) + '</span><span class="txt">' + (it ? esc(it.text.split("|")[1]) : '<i style="color:var(--mute)">open</i>') + '</span>' + (it ? '<button class="del">&times;</button>' : "") + '</li>';
     }
     h += '</ul><p class="row"><button class="btn ghost" id="pl-roll">Re-roll the week</button><span class="wait">needs the GitHub kit</span></p>';
     box.innerHTML = h;
@@ -118,23 +116,16 @@
         (k.left7 > 0 && !k.charging ? 'About <b>' + (k.left7 >= 48 ? Math.round(k.left7 / 24) + " days" : k.left7 + " h") + '</b> left (' + k.rate7 + '%/h)<br>' : "") +
         'Checked in <b>' + ago(k.ts) + '</b>' + (quiet ? ' — <b>quiet longer than usual</b>' : "") + '<br>' +
         'Wakes every ' + (k.interval || "?") + ' min · version ' + esc(k.v) + ' · ' + (k.cloudData && Date.now() / 1000 - k.cloudData < 7200 ? "data from the cloud" : "fetches its own data") + '</div>';
-      // 10.2: updates on the fridge
-      var ev = String(k.upd || "").split(" "), au = ["only when you tap", "tells you", "installs at night"][k.auto === undefined ? 2 : +k.auto] || "";
-      h += '<div style="font-size:14px;margin-top:6px">Updates: <b>' + au + '</b>' + (k.avail ? ' · <b>' + esc(k.avail) + ' is ready</b>' : "") +
-        (ev[1] === "rolledback" ? ' · last update (' + esc(ev[2] || "") + ') was undone, back on ' + esc(ev[3] || "") : ev[1] === "healthy" ? " · " + esc(ev[2] || "") + " running fine" : "") + '</div>';
     } else h += '<p class="empty">No check-in yet. The fridge reports in after its next sync (9.8.5 or newer).</p>';
-    // 10.2: open a page in the fridge's web reader
-    h += '<h2>Send a web page to the fridge</h2><div class="row"><input id="fw-u" inputmode="url" placeholder="https://… or search words" style="flex:1;font-size:17px;padding:10px;border:2px solid var(--ink)"><button class="btn" id="fw-go">Send</button></div>' +
-      '<p style="font-size:13px;color:var(--mute);margin:4px 0 0">Opens as clean text in the fridge\'s WEB app at its next wake. Handy for a recipe or an article.</p>';
     h += '<p style="font-size:14px;color:var(--mute)">Cloud brain: ' + (b && b.lastRun ? "ran " + ago(b.lastRun / 1000) + (b.pushes ? " · sent " + b.pushes + " push" + (b.pushes > 1 ? "es" : "") : "") : 'not running — see GITHUB_SETUP.txt') + '</p>';
     // note
     var notes = itemsOf("msg").filter(function(m) { return !m.locked; }).sort(function(a, c) { return c.ts - a.ts; }).slice(0, 3);
     h += '<h2>Leave a note on the fridge</h2><div class="row"><input id="fn-t" maxlength="280" placeholder="Back at 6. Love you." style="flex:1;font-size:17px;padding:10px;border:2px solid var(--ink)"><button class="btn" id="fn-go">Pin</button></div>';
     notes.forEach(function(n) { h += '<div style="font-size:14px;margin-top:6px">' + (n.state === "open" ? "📌 " : "✓ read: ") + esc(n.text) + '</div>'; });
-    // remote  (10.4: every timer button says its length in minutes)
+    // remote
     h += '<h2>Remote control</h2><p style="font-size:13px;color:var(--mute);margin:0 0 8px">Runs on the fridge at its next wake (or right away if it is awake).</p><div class="rc">' +
-      '<button class="btn ghost" data-c="sync">Sync now</button><button class="btn ghost" data-c="timer|5">5 min</button><button class="btn ghost" data-c="timer|10">10 min</button><button class="btn ghost" data-c="timer|20">20 min</button><button class="btn ghost" data-c="timer|45">45 min</button>' +
-      '<button class="btn ghost" data-c="update|check">Check update</button><button class="btn ghost" data-c="update|install">Install update</button><button class="btn ghost" data-c="update|rollback">Undo last update</button><button class="btn ghost" data-c="log">Send log</button>' +
+      '<button class="btn ghost" data-c="sync">Sync now</button><button class="btn ghost" data-c="timer|5">Timer 5</button><button class="btn ghost" data-c="timer|10">10</button><button class="btn ghost" data-c="timer|20">20</button><button class="btn ghost" data-c="timer|45">45 min</button>' +
+      '<button class="btn ghost" data-c="update|check">Check update</button><button class="btn ghost" data-c="update|install">Install update</button><button class="btn ghost" data-c="log">Send log</button>' +
       '<button class="btn ghost" data-c="screen|front">Front page</button><button class="btn ghost" data-c="screen|tiles">Tiles</button><button class="btn ghost" data-c="contrast|max">Max contrast</button><button class="btn ghost" data-c="contrast|normal">Normal</button><button class="btn ghost" data-c="reload">Reload page</button></div>';
     var cmds = itemsOf("cmd").filter(function(c) { return !c.locked; }).sort(function(a, c) { return c.ts - a.ts; }).slice(0, 3);
     cmds.forEach(function(c) { h += '<div style="font-size:13px;color:var(--mute)">' + (c.state === "open" ? "waiting: " : "done: ") + esc(c.text.split("|").slice(0, 2).join(" ")) + '</div>'; });
@@ -148,14 +139,9 @@
     h += '<h2>Fridge log</h2><p class="row"><button class="btn ghost" id="lg-show">Show the last log</button><button class="btn ghost" id="pt-go">Test phone push</button></p><pre id="lg-box" style="white-space:pre-wrap;font-size:11px;max-height:340px;overflow:auto;border:1px solid var(--rule);padding:6px" hidden></pre>';
     box.innerHTML = h;
     $("fn-go").addEventListener("click", function() { var t = $("fn-t").value.trim(); if (t) { put("msg", t); } });
-    $("fw-go").addEventListener("click", function() {
-      var t = $("fw-u").value.trim(); if (!t) return;
-      var u = /^https?:\/\//i.test(t) ? t : (!/\s/.test(t) && /\.[a-z]{2,}/i.test(t) ? "https://" + t : "q:" + t);
-      put("cmd", "web|" + u.replace(/[\r\n]/g, "")); $("fw-u").value = ""; $("fw-go").textContent = "Sent";
-    });
     [].forEach.call(box.querySelectorAll(".rc .btn"), function(bt) {
       bt.style.margin = "0 6px 6px 0";
-      bt.addEventListener("click", function() { var c = bt.getAttribute("data-c"); if (c === "update|install" && !confirm("Install the update from your GitHub site at the next wake? The hub restarts by itself.")) return; if (c === "update|rollback" && !confirm("Go back to the version the fridge had before its last update?")) return; put("cmd", c); });
+      bt.addEventListener("click", function() { var c = bt.getAttribute("data-c"); if (c === "update|install" && !confirm("Install the update from your GitHub site at the next wake? The hub restarts by itself.")) return; put("cmd", c); });
     });
     if ($("tv-copy")) $("tv-copy").addEventListener("click", function() { copy(tv, $("tv-copy")); });
     if ($("ics-copy")) $("ics-copy").addEventListener("click", function() { copy(ics, $("ics-copy")); });
