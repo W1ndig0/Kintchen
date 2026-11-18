@@ -24,3 +24,13 @@ Never put your real passphrase in cloud.conf.example - the repo is public.
   kindle/Kitchen Hub Reset (copy to documents).sh
                                     library button for the reset - copy to the Kindle's documents folder
                                     as "Kitchen Hub Reset.sh" (not part of the website)
+
+SAFE LAUNCH (added 2026-11-18)
+  kindle/shiftcal/run_hub.sh        new launcher: stops anything left over, then 11 launch checks with a
+                                    loading bar on the Kindle screen (battery, storage, memory, files,
+                                    scripts, page version, app registration, settings port). If any check
+                                    fails, nothing starts: the screen says why and goes back to Home.
+  kindle/shiftcal/power_loop.sh     core first: no Wi-Fi, syncs, cloud or update jobs until the page has
+                                    talked to the loop; a page silent for 90 s stops everything cleanly
+                                    (a fresh update is undone first) instead of locking up the Kindle.
+  kindle/manifest.txt               upload again (power_loop.sh and run_hub.sh changed; still version 10.4)

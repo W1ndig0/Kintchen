@@ -285,6 +285,7 @@ wifi_off() { lipc-set-prop com.lab126.cmd wirelessEnable 0 2>/dev/null; }
 SYNC_PID=""
 LAST_SYNC_TRY=0
 start_sync() {   # $1 = "lists": only exchange the lists with the gist (quick)
+    if [ "$BOOT" = "1" ]; then BOOT_SYNC=1; [ "$1" = "lists" ] || BOOT_FULL=1; return; fi   # 10.4.1: after the page is up
     [ "$1" = "lists" ] || LAST_SYNC_TRY=$(date +%s)
     (
         # $$ in a subshell is the parent's pid: without this the EXIT trap would run cleanup() here
@@ -333,6 +334,7 @@ start_web() {     # 10.2: the hub's web reader (same one-at-a-time network job)
     SYNC_PID=$!
 }
 start_job() {     # 9.8.5: update-check | update-install | logup | status  (same one-at-a-time network job)
+    if [ "$BOOT" = "1" ]; then echo "$1" > "$DIR/.job_next"; return; fi     # 10.4.1: after the page is up
     (
         trap - EXIT INT TERM
         if wifi_on; then
@@ -390,6 +392,7 @@ poll_settings_http() {
     fi
     REQ=$(head -1 "$NC_OUT" 2>/dev/null)
     case "$REQ" in *"/save?"*) ;; *) return ;; esac
+    [ "$BOOT" = "1" ] && boot_done
     QS=$(echo "$REQ" | sed -n 's#.* /save?\([^ ]*\) HTTP.*#\1#p')
     NOWQ=$(date +%s)
     CHANGED=0
@@ -767,6 +770,30 @@ while [ "$T" -lt 30 ]; do
 done
 [ "$SEEN" = "0" ] && { log "startup: mesquite never appeared, exiting"; exit 0; }
 
+# 10.4.1: CORE FIRST. Until the page has talked to the loop, no Wi-Fi, syncs, cloud or update jobs run
+# (they are remembered and started right after). A page that stays silent for BOOT_WAIT seconds stops
+# everything cleanly - a fresh update is undone first - instead of leaving the Kindle locked up.
+BOOT=1; BOOT_T0=$(date +%s); BOOT_WAIT=${HUB_BOOT_WAIT:-90}; BOOT_SYNC=0; BOOT_FULL=0
+boot_done() {
+    BOOT=0; rm -f "$DIR/.boot"
+    log "page is up after $(( $(date +%s) - BOOT_T0 ))s - starting syncs and extras"
+    if [ "$BOOT_SYNC" = "1" ]; then if [ "$BOOT_FULL" = "1" ]; then start_sync; else start_sync lists; fi; fi
+}
+boot_failed() {
+    log "page never talked to the loop in ${BOOT_WAIT}s - stopping everything"
+    echo "the page did not start ($(date '+%m-%d %H:%M'))" > "$DIR/.boot_fail"
+    rm -f "$DIR/.boot"
+    if [ -f "$DIR/.update/pending" ] && [ -z "$HUB_ROLLED" ]; then
+        read -r PNV PPV PAT PW < "$DIR/.update/pending"
+        log "update $PNV is fresh - undoing it and launching $PPV"
+        if sh "$DIR/hub_update.sh" rollback; then HUB_ROLLED=1 setsid /bin/sh "$DIR/run_hub.sh" "$MODE" >/dev/null 2>&1 < /dev/null & exit 0; fi
+    fi
+    lipc-set-prop com.lab126.appmgrd stop app://com.custom.kitchenhub 2>/dev/null
+    [ -f "$MESQ_PIDF" ] && kill "$(cat "$MESQ_PIDF" 2>/dev/null)" 2>/dev/null
+    killall mesquite 2>/dev/null
+    lipc-set-prop com.lab126.appmgrd start app://com.lab126.booklet.home 2>/dev/null
+    exit 0      # cleanup(): powerd, status bar, Wi-Fi, alarms back to normal
+}
 FIRST=1
 while true; do
     still_owner || { log "another loop owns $PIDF - exiting"; exit 0; }
@@ -822,7 +849,8 @@ while true; do
             [ $((NOWW - AWAKE_UNTIL)) -gt $((WIFI_TIMEOUT + 90)) ] && { log "sync overran; continuing to standby"; kill "$SYNC_PID" 2>/dev/null; break; }
         fi
         poll_settings_http
-        if [ -s "$DIR/.job_next" ] && ! sync_running; then J2=$(cat "$DIR/.job_next"); rm -f "$DIR/.job_next"; log "job: $J2"; start_job "$J2"; fi
+        [ "$BOOT" = "1" ] && [ $(( $(date +%s) - BOOT_T0 )) -ge "$BOOT_WAIT" ] && boot_failed
+        if [ "$BOOT" != "1" ] && [ -s "$DIR/.job_next" ] && ! sync_running; then J2=$(cat "$DIR/.job_next"); rm -f "$DIR/.job_next"; log "job: $J2"; start_job "$J2"; fi
         if [ -s "$DIR/.web_next" ] && ! sync_running; then W1=$(sed -n 1p "$DIR/.web_next"); W2=$(sed -n 2p "$DIR/.web_next"); rm -f "$DIR/.web_next"; start_web "$W1" "$W2"; fi
         if [ -s "$DIR/.rsearch_next" ] && ! sync_running; then Q2=$(cat "$DIR/.rsearch_next"); rm -f "$DIR/.rsearch_next"; log "recipe search: $Q2"; start_search "$Q2"; fi
         if [ "${CLOUD_DUE:-0}" -gt 0 ] && [ "$(date +%s)" -ge "$CLOUD_DUE" ]; then
