@@ -214,11 +214,10 @@ svg { overflow: visible; }
 .ed-b.x { border-style: dotted; }
 
 /* ---------- overlays ---------- */
-#weather-view, #article-view, #hub-view, #shift-modal { display: none; position: absolute; left: 0; top: 0; right: 0; background: #fff; overflow: hidden; }
+#weather-view, #article-view, #hub-view { display: none; position: absolute; left: 0; top: 0; right: 0; background: #fff; overflow: hidden; }
 #weather-view { z-index: 150; }
 #hub-view { z-index: 180; }
 #article-view { z-index: 200; }
-#shift-modal { z-index: 220; background: rgba(255,255,255,.96); padding: 1.5em 1em; }
 .ov-mast { display: table; width: 100%; table-layout: fixed; border-bottom: 5px double #000; padding: .35em .7em; }
 .ov-mast > div { display: table-cell; vertical-align: middle; white-space: nowrap; }
 .ov-back { font-family: Helvetica, Arial, sans-serif; font-weight: 900; letter-spacing: .15em; font-size: .8em; width: 22%; }
@@ -330,6 +329,7 @@ svg { overflow: visible; }
 .kb-row { text-align: center; white-space: nowrap; }
 .kb-k { display: inline-block; border: 3px solid #000; background: #fff; font-family: Helvetica, Arial, sans-serif; font-weight: 900; text-align: center; vertical-align: top; }
 .kb-k.wide2 { }
+.kb-k.sel { background: #000; color: #fff; }
 #standby-sketch { display: none; position: absolute; background: #fff; border: 5px solid #000; z-index: 450; overflow: hidden; -webkit-transform: rotate(-2deg); transform: rotate(-2deg); }
 #ss-cap { position: absolute; left: 0; bottom: 0; width: 100%; text-align: center; font-family: Helvetica, Arial, sans-serif; font-weight: 900; font-size: .6em; letter-spacing: .25em; background: #000; color: #fff; padding: .25em 0; }
 .sz-track { margin-top: .35em; white-space: nowrap; }
@@ -578,6 +578,8 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
 .w-words { font-style: italic; }
 .clk-huge #dig-date, .clk-huge #next-shift { display: none !important; }
 .tile.bigview { border: 5px solid #000 !important; background: #fff; }
+.tile.bigview > div:not(.peek-rib):not(.tile-more) { bottom: 3.4em !important; }
+.tile.bigview .tile-more { display: none; }
 .peek-rib.big { left: 0; right: 0; bottom: 0; top: auto; height: auto; padding: .35em .4em; background: #fff; color: #000; border-top: 3px solid #000; text-align: center; white-space: nowrap; font-size: 1em; letter-spacing: .06em; }
 .pk-b { display: inline-block; border: 3px solid #000; padding: .25em .9em; margin: 0 .3em; font: 800 1.05em Helvetica, Arial, sans-serif; letter-spacing: .08em; color: #000; background: #fff; }
 .pk-b.open { background: #000; color: #fff; }
@@ -596,6 +598,42 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
 .tr-b { font-size: 1.15em; line-height: 1.4; }
 .tr-btns { position: absolute; right: 1.2em; bottom: 1em; }
 .pp-row .opt-btn { margin-bottom: .25em; }
+
+/* 10.0 */
+#xv { display: none; position: absolute; left: 0; top: 0; right: 0; background: #fff; overflow: hidden; z-index: 166; }
+#xv-tabs, #xv-body, #xv-more { position: absolute; }
+#xv-tabs { white-space: nowrap; overflow: hidden; padding: .3em .6em; box-sizing: border-box; }
+#xv-body { overflow: hidden; font-size: 1.1em; }
+#xv-pick { display: none; position: absolute; z-index: 300; background: #fff; border: 6px double #000; padding: 1em; box-sizing: border-box; overflow: hidden; }
+#xv-pick .opt-btn { margin: .25em .3em .25em 0; }
+.xv-bar { margin-bottom: .5em; }
+.xr { border-bottom: 1px solid #000; padding: .45em 0; }
+.xr.done { color: #666; }
+.xr-t { font-size: 1.2em; font-weight: 700; }
+.xr-s { font-size: .95em; margin-top: .15em; }
+.xr-b { margin-top: .25em; }
+.xr .opt-btn { margin: .15em .3em .15em 0; }
+.tag { display: inline-block; background: #000; color: #fff; font: 800 .7em/1.4 Helvetica, Arial, sans-serif; letter-spacing: .06em; padding: 0 .35em; vertical-align: .1em; }
+.tag.o { background: #fff; color: #000; border: 2px solid #000; }
+.bar { height: .6em; border: 2px solid #000; margin-top: .25em; }
+.bar i { display: block; height: 100%; background: #000; }
+.xv-owe { font-size: 1.2em; margin: .3em 0 .5em; border: 3px solid #000; padding: .3em .6em; display: inline-block; }
+.fun-q { font-size: 2em; font-weight: 900; line-height: 1.15; margin: .3em 0 .5em; word-wrap: break-word; }
+.xr-t, .xr-s, .xv-owe, .hv-hint, .tl-r, .fp-li, .ap-s { word-wrap: break-word; }
+.fun-d { font-size: 1.3em; font-style: italic; line-height: 1.4; }
+.fun-a { font-size: 1.5em; font-weight: 900; margin: .4em 0; }
+.wf-card { border: 6px double #000; padding: 1em; display: table; }
+.xr.qa .opt-btn { display: inline-block; min-width: 40%; margin: .3em; text-align: left; }
+.wf-big svg { display: block; }
+.web-b { font-size: 1.25em; line-height: 1.4; padding: .25em 0; }
+.web-b.web-h1, .web-b.web-h2 { font-size: 1.6em; font-weight: 900; }
+.web-b.web-h3, .web-b.web-h4 { font-size: 1.35em; font-weight: 900; }
+.wl { text-decoration: underline; font-weight: bold; }
+.wl sup { font-size: .6em; padding: 0 .15em; }
+.wf-qr { display: table-cell; width: 12em; height: 12em; vertical-align: middle; }
+.wf-t { display: table-cell; vertical-align: middle; padding-left: 1.2em; font-size: 1.4em; }
+.tl-r { margin-top: .3em; line-height: 1.25; }
+.tl-s { font-size: .85em; font-style: italic; }
 </style>
 </head>
 <body>
@@ -668,6 +706,10 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
 
 <div class="tile" id="t-timer"><div class="fitw" id="tm-in"></div></div>
 
+<div class="tile" id="t-deals"><div class="fitw" id="deals-in"></div></div>
+<div class="tile" id="t-money"><div class="fitw" id="money-in"></div></div>
+<div class="tile" id="t-food"><div class="fitw" id="food-in"></div></div>
+<div class="tile" id="t-fun"><div class="fitw" id="fun-in"></div></div>
 <div class="tile" id="t-pay"><div class="fitw" id="pay-in"></div><div class="tile-more">Pay &rsaquo;</div></div>
 <div class="tile" id="t-shop"><div class="fitw" id="shop-in"></div><div class="tile-more" id="shop-more">Open &rsaquo;</div></div>
 
@@ -695,32 +737,6 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
     </div>
 </div>
 
-<div id="shift-modal">
-    <div class="modal-box">
-        <div class="modal-hdr" id="modal-title">Edit Work Shift</div>
-        <div class="lbl">Apply to:</div>
-        <div id="rep-row">
-            <span class="rep-btn sel" data-n="1">This day</span>
-            <span class="rep-btn" data-n="7">Next 7 days</span>
-            <span class="rep-btn" data-n="14">Next 14 days</span>
-            <span class="rep-btn" data-n="28">Next 28 days</span>
-        </div>
-        <div class="lbl">Tap a preset to save:</div>
-        <div>
-            <span class="preset-btn" data-val="Day">Day</span>
-            <span class="preset-btn" data-val="Night">Night</span>
-            <span class="preset-btn" data-val="07-15">07-15</span>
-            <span class="preset-btn" data-val="15-23">15-23</span>
-            <span class="preset-btn" data-val="OFF">OFF</span>
-            <span class="preset-btn" data-val="">Clear</span>
-        </div>
-        <input type="text" class="modal-input" id="shift-input" placeholder="Or type hours (e.g. 08:00-16:00)">
-        <div class="modal-actions">
-            <span class="m-btn" id="btn-cancel">Cancel</span>
-            <span class="m-btn m-btn-save" id="btn-save">Save Shift</span>
-        </div>
-    </div>
-</div>
 
 <div id="hub-view">
     <div class="ov-mast" id="hv-mast"><div class="ov-back" id="hv-close">&lsaquo; BACK</div><div class="ov-ttl">SETTINGS</div><div style="width:22%;text-align:right" class="mast-sm" id="hv-ver"></div></div>
@@ -899,6 +915,9 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
 <div id="front"></div>
 <div id="auto-view"></div>
 <div id="tour-view"></div>
+<div id="xv"><div class="ov-mast"><div class="ov-back" id="xv-back">&lsaquo; BACK</div><div class="ov-ttl" id="xv-ttl">DEALS</div><div style="width:22%"></div></div>
+    <div id="xv-tabs" class="rt-tabs"></div><div id="xv-body"></div><span class="opt-btn big" id="xv-more" style="display:none"></span></div>
+<div id="xv-pick"></div>
 <div id="undo-bar"></div>
 <div id="warn-bar"></div>
 
@@ -1018,7 +1037,7 @@ function parseShift(v) {
     return { start: a % 1440, dur: (b - a) / 60 };
 }
 function shiftHours(v) { var p = parseShift(v); return p ? p.dur : null; }
-function isOff(v) { return /^\s*off\s*$/i.test(v); }
+function isOff(v) { return /^\s*(off|x|-|vac|vacation|sick|stat|holiday)\s*$/i.test(v); }      // 10.1.2: same days-off words as the phone, TV and cloud
 function shortShift(v) { return String(v).replace(/:00/g, ""); }
 
 // ===================== CALENDAR =====================
@@ -1039,6 +1058,7 @@ var lastShellTs = 0;
 var lastUpdated = "";
 
 function decodeEnts(s) {
+    s = s === null || s === undefined ? "" : String(s);      // 10.1.2: numbers/null no longer crash
     var map = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", nbsp: " ",
         rsquo: "\u2019", lsquo: "\u2018", rdquo: "\u201D", ldquo: "\u201C",
         ndash: "\u2013", mdash: "\u2014", hellip: "\u2026" };
@@ -1417,7 +1437,7 @@ function syncNow() {
             if (xhr.readyState === 4 && xhr.status === 200) {
                 try {
                     var r = JSON.parse(xhr.responseText);
-                    if (r && r.current && r.hourly) {
+                    if (wxValid(r)) {
                         WX = r;
                         try { window.localStorage.setItem("pg_wx_v6", JSON.stringify(WX)); } catch (e) {}
                         lastXhrOk = new Date().getTime();
@@ -1510,7 +1530,7 @@ function exitHub() {
 // =====================================================================
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "9.9";
+var VERSION = "10.3";
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
 var EDIT = false;
@@ -1873,7 +1893,7 @@ function layout() {
 
     placeWakeTag(rot);
     placeTiles();
-    var ovs = ["weather-view", "article-view", "hub-view", "shift-modal"];
+    var ovs = ["weather-view", "article-view", "hub-view"];
     for (var i = 0; i < ovs.length; i++) $(ovs[i]).style.bottom = SYSBAR_H + "px";
     layoutWeatherView();
     layoutHub();
@@ -1882,6 +1902,7 @@ function layout() {
     layoutV97();
     layoutV98();
     layoutV99();
+    layoutV100();
     renderFront();
 }
 function relayout() {
@@ -2396,7 +2417,7 @@ function applyShellData() {
     renderTileById("mkt");
     renderTileById("alm");
     if (d.ts * 1000 <= lastXhrOk) { renderNews(); return; }
-    if (d.wx && d.wx.current && d.wx.hourly) {
+    if (wxValid(d.wx)) {
         WX = d.wx;
         try { window.localStorage.setItem("pg_wx_v6", JSON.stringify(WX)); } catch (e) {}
     }
@@ -2404,7 +2425,8 @@ function applyShellData() {
         var groups = {};
         for (var i = 0; i < d.articles.length; i++) {
             var a = d.articles[i];
-            var o = { s: a.s, t: decodeEnts(a.t || ""), p: a.p || "", ts: Date.parse(a.p || "") || 0,
+            if (!a || !a.t || !a.s) continue;                       // 10.1.2: a story with no title/source showed as "2undefined"
+            var o = { s: String(a.s), t: decodeEnts(a.t || ""), p: a.p || "", ts: Date.parse(a.p || "") || 0,
                       l: a.l || "", b: decodeEnts((a.b || "")).replace(/&#?\w+;/g, ""), img: a.img || "" };
             if (!groups[a.s]) groups[a.s] = [];
             groups[a.s].push(o);
@@ -2599,7 +2621,7 @@ function goHome() {
     if ($("article-view").style.display === "block") $("article-view").style.display = "none";
     if (WV_OPEN) { WV_OPEN = false; $("weather-view").style.display = "none"; }
     if (HUB_OPEN) { HUB_OPEN = false; $("hub-view").style.display = "none"; }
-    if ($("shift-modal").style.display === "block") { $("shift-modal").style.display = "none"; activeDateKey = ""; }
+    
     if ($("shop-view").style.display === "block") $("shop-view").style.display = "none";
     if ($("board-view").style.display === "block") $("board-view").style.display = "none";
     if ($("cook-view").style.display === "block") { $("cook-view").style.display = "none"; CV.open = null; }
@@ -2885,7 +2907,6 @@ function openHub() {
     if (EDIT) exitEdit();
     if ($("article-view").style.display === "block") $("article-view").style.display = "none";
     if (WV_OPEN) { WV_OPEN = false; $("weather-view").style.display = "none"; }
-    if ($("shift-modal").style.display === "block") $("shift-modal").style.display = "none";
     editCfg = { int: HUB.int, win: Math.max(120, HUB.win), ss: HUB.ss };
     HUB_OPEN = true;
     $("hv-msg").innerHTML = ""; $("hv-msg2").innerHTML = "";
@@ -3454,9 +3475,14 @@ var HubCal = (function() {
         if (sh > 23 || eh > 24 || sm > 59 || em > 59) return null;
         if (sa === "p" && sh < 12) sh += 12; if (sa === "a" && sh === 12) sh = 0;
         if (ea === "p" && eh < 12) eh += 12; if (ea === "a" && eh === 12) eh = 0;
-        if (!sa && m[1].charAt(0) !== "0" && sh < 7) sh += 12;          // "1-7:15p" starts in the afternoon
+        // 10.1.2: "1-7" / "1-7:15p" start in the afternoon, but "6-2" / "6-2p" / "5-1" are morning shifts (was 6pm-2am / 20 h)
+        if (!sa && m[1].charAt(0) !== "0" && sh < 7) {
+            if (ea === "p") { if ((sh + 12) * 60 + sm < eh * 60 + em) sh += 12; }
+            else if (!ea && (eh > sh || (eh === sh && em > sm))) sh += 12;
+        }
         var s = sh * 60 + sm, e = eh * 60 + em;
         if (!ea && e <= s && eh < 12 && eh + 12 > sh) e += 720;          // "9-5"
+        if (!ea && eh === 12 && e <= s) e = 1440 + em;                   // 10.1.2: "4-12" ends at midnight (was noon the next day)
         if (e <= s) e += 1440;                                            // overnight "22-6"
         return { s: s, e: e };
     }
@@ -3481,6 +3507,11 @@ var HubCal = (function() {
     function payFor(shifts, fromK, toK, cfg) {
         var rate = +cfg.rate || 0, out = { from: fromK, to: toK, reg: 0, ot15: 0, ot2: 0, hours: 0, gross: 0, days: [] };
         var weekReg = {}, n0 = dayNum(fromK), n1 = dayNum(toK);
+        if (cfg.ot !== 0) for (var pn = n0 - new Date(n0 * 86400000).getUTCDay(); pn < n0; pn++) {   // 10.1.2: a period that starts mid-week still knows the week's earlier hours
+            var pv = shifts[keyN(pn)], psp = pv ? shiftSpan(pv) : null; if (!psp) continue;
+            var ph = (psp.e - psp.s) / 60; if (cfg.brk !== 0 && ph > 5) ph -= 0.5;
+            var pw = pn - new Date(pn * 86400000).getUTCDay(); weekReg[pw] = Math.min(40, (weekReg[pw] || 0) + Math.min(ph, 8));
+        }
         for (var n = n0; n <= n1; n++) {
             var k = keyN(n), v = shifts[k], sp = v ? shiftSpan(v) : null;
             if (!sp) continue;
@@ -3490,7 +3521,7 @@ var HubCal = (function() {
             if (cfg.ot !== 0) { if (h > 12) { o2 = h - 12; o15 = 4; r = 8; } else if (h > 8) { o15 = h - 8; r = 8; } }
             var wk = n - new Date(n * 86400000).getUTCDay();                  // the Sunday of that week
             if (cfg.ot !== 0) { var before = weekReg[wk] || 0; if (before + r > 40) { var over = before + r - Math.max(40, before); o15 += over; r -= over; } weekReg[wk] = before + r; }
-            var mult = cfg.stat !== 0 && holiday(k) ? 1.5 : 1, pay;
+            var mult = cfg.stat !== 0 && holiday(k) && !/Easter Monday|Boxing Day/.test(holiday(k)) ? 1.5 : 1, pay;      // 10.1.2: those two aren't B.C. stats
             if (mult > 1) pay = rate * (Math.min(h, 12) * 1.5 + Math.max(0, h - 12) * 2);
             else pay = rate * (r + o15 * 1.5 + o2 * 2);
             out.reg += r; out.ot15 += o15; out.ot2 += o2; out.hours += h; out.gross += pay;
@@ -3500,6 +3531,30 @@ var HubCal = (function() {
         out.gross = Math.round(out.gross * 100) / 100;
         return out;
     }
+    /* 10.0 records, all "|"-separated (no pipes inside fields):
+     *   wish    name|target|query                      bill   name|amount|rule|who|autopay
+     *   spend   date|amount|category|who|split|note     goal   name|target|saved|by (10.1.1)
+     *   pantry  name|expires|qty|where                  pkg    name|carrier|tracking|expected      */
+    var REC = { wish: ["name", "target", "query"], bill: ["name", "amount", "rule", "who", "autopay"], spend: ["date", "amount", "cat", "who", "split", "note"],
+                goal: ["name", "target", "saved", "by"], pantry: ["name", "expires", "qty", "where"], pkg: ["name", "carrier", "tracking", "expected"],
+                book: ["title", "author", "ext", "size", "want", "src", "added", "conv"] };      // 10.3: the book cloud (want = kindle | cloud)
+    function parseRec(kind, text) {
+        var f = String(text || "").split("|"), o = {}, ks = REC[kind] || [];
+        for (var i = 0; i < ks.length; i++) o[ks[i]] = f[i] === undefined ? "" : f[i];
+        ["target", "amount", "saved", "qty", "size"].forEach(function(n) { if (o[n] !== undefined) o[n] = o[n] === "" ? 0 : +o[n] || 0; });
+        ["date", "expires", "expected", "by", "added"].forEach(function(n) {          // 10.1.2: a broken date reads as "no date" (was "undefined NaN" on screen)
+            if (o[n] && !(/^\d{4}-\d\d-\d\d$/.test(o[n]) && +o[n].substring(5, 7) >= 1 && +o[n].substring(5, 7) <= 12 && +o[n].substring(8, 10) >= 1 && +o[n].substring(8, 10) <= 31)) o[n] = "";
+        });
+        if (o.split !== undefined) o.split = o.split === "1";
+        if (o.autopay !== undefined) o.autopay = o.autopay === "1";
+        return o;
+    }
+    function recText(kind, o) {
+        var ks = REC[kind] || [], out = [];
+        for (var i = 0; i < ks.length; i++) { var v = o[ks[i]]; if (v === true) v = "1"; if (v === false || v === undefined || v === null) v = ""; out.push(String(v).replace(/[|\t\n]/g, " ")); }
+        return out.join("|");
+    }
+    function money2(x) { var s = (Math.round((+x || 0) * 100) / 100).toFixed(2), p = s.split("."); return (s.charAt(0) === "-" ? "-$" + p[0].substring(1) : "$" + p[0]).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + p[1]; }
     function payPeriod(shifts, k, cfg) { var p = periodOf(k, cfg), r = payFor(shifts, p.from, p.to, cfg); r.payday = p.payday; return r; }
     function fmtTime(t) {
         if (!t) return "";
@@ -3545,8 +3600,8 @@ var HubCal = (function() {
      *   monthly:15 | monthly:last | yearly:11-17                                                 */
     function parseRepeat(text) {
         var f = String(text).split("|");
-        if (f.length < 3 || !/^(daily|weekly:[0-6](,[0-6])*|every2w:[0-6]:\d{4}-\d\d-\d\d|monthly:(\d{1,2}|last)|yearly:\d\d-\d\d)$/.test(f[0])) return null;
-        var who = f.length >= 5 && /^(p1|p2|all)?$/.test(f[f.length - 1]) ? f.pop() : "";
+        if (f.length < 3 || !/^(daily|weekly:[0-6](,[0-6])*|every2w:[0-6]:\d{4}-\d\d-\d\d|monthly:(\d{1,2}|last)|yearly:\d\d-\d\d|months:\d{1,2}:\d{4}-\d\d-\d\d)$/.test(f[0])) return null;
+        var who = f.length >= 5 && /^(p1|p2|all|rot)?$/.test(f[f.length - 1]) ? f.pop() : "";
         return { rule: f[0], time: /^\d\d:\d\d$/.test(f[1]) ? f[1] : "", title: f[2], note: f.slice(3).join("|"), who: who === "all" ? "" : who };
     }
     function repeatText(rule, time, title, note, who) { return rule + "|" + (time || "") + "|" + String(title).replace(/\|/g, "/") + "|" + String(note || "").replace(/\|/g, "/") + (who ? "|" + who : ""); }
@@ -3561,16 +3616,25 @@ var HubCal = (function() {
             var last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
             return dom === Math.min(+p[1], last);          // the 31st becomes the last day in short months
         }
-        if (p[0] === "yearly") return k.substring(5) === p[1];
+        var mlast = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+        if (p[0] === "yearly") return k.substring(5) === p[1] || (p[1] === "02-29" && mlast === 28 && k.substring(5) === "02-28");   // 10.1.1: Feb 29 -> Feb 28
+        if (p[0] === "months") {          // 10.0: every N months from a start date (furnace filter, smoke alarms...)
+            if (k < p[2] || dom !== Math.min(+p[2].substring(8, 10), mlast)) return false;      // 10.1.1: started on the 31st -> last day of short months
+            var mm = (+k.substring(0, 4) - +p[2].substring(0, 4)) * 12 + (+k.substring(5, 7) - +p[2].substring(5, 7));
+            return mm % (+p[1] || 1) === 0;
+        }
         return false;
     }
+    // 10.0: "rot" = a chore that alternates weekly between the two of you (week of the year decides)
+    function rotWho(k) { var wk = Math.floor((dayNum(k) + 4) / 7); return wk % 2 === 0 ? "p1" : "p2"; }
     function ruleLabel(rule) {
         var D = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], p = rule.split(":");
         if (p[0] === "daily") return "every day";
         if (p[0] === "weekly") return "every " + p[1].split(",").map(function(x) { return D[+x]; }).join(", ");
         if (p[0] === "every2w") return "every 2nd " + D[+p[1]];
         if (p[0] === "monthly") return p[1] === "last" ? "last day of the month" : "monthly on the " + p[1];
-        if (p[0] === "yearly") return "every year";
+        if (p[0] === "yearly") { var MO = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]; return "every year on " + (MO[+String(p[1]).substring(0, 2) - 1] || "") + " " + (+String(p[1]).substring(3, 5) || ""); }
+        if (p[0] === "months") return "every " + p[1] + " months";
         return rule;
     }
     // items: [{id, text}] of kind "repeat" (already unlocked) -> {date: [{id, time, title, note, rep}]}
@@ -3581,14 +3645,15 @@ var HubCal = (function() {
         var n0 = dayNum(fromKey);
         for (j = 0; j < days; j++) {
             var d = new Date((n0 + j) * 86400000), k = key(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-            for (i = 0; i < rs.length; i++) if (repeatOn(rs[i], k)) (out[k] = out[k] || []).push({ id: rs[i].id, date: k, time: rs[i].time, title: rs[i].title, note: rs[i].note, rep: rs[i].rule, who: rs[i].who });
+            for (i = 0; i < rs.length; i++) if (repeatOn(rs[i], k)) (out[k] = out[k] || []).push({ id: rs[i].id, date: k, time: rs[i].time, title: rs[i].title, note: rs[i].note, rep: rs[i].rule, who: rs[i].who === "rot" ? rotWho(k) : rs[i].who, rot: rs[i].who === "rot" });
         }
         return out;
     }
     return { key: key, shiftId: shiftId, parseShift: parseShift, parseEvent: parseEvent, eventText: eventText, fmtTime: fmtTime, holidays: holidays, holiday: holiday,
              parseRepeat: parseRepeat, repeatText: repeatText, repeatOn: repeatOn, ruleLabel: ruleLabel, expandRepeats: expandRepeats,
              shiftIdFor: shiftIdFor, whoOfShift: whoOfShift, parseShop: parseShop, shopText: shopText, shiftSpan: shiftSpan,
-             periodOf: periodOf, payFor: payFor, payPeriod: payPeriod };
+             periodOf: periodOf, payFor: payFor, payPeriod: payPeriod, rotWho: rotWho, dayNum: dayNum, keyN: keyN,
+             parseRec: parseRec, recText: recText, money: money2 };
 })();
 if (typeof module !== "undefined") { module.exports.HubCrypt = HubCrypt; module.exports.HubCal = HubCal; }
 
@@ -4844,7 +4909,7 @@ function appList() {
     for (i = 0; i < its.length; i++) if (its[i].state === "open") shopN++;
     var ev = nextEvents(1), up = upcomingShifts(1);
     return [
-        ["cal2", "Calendar", ev.length ? (ev[0].i === 0 ? "Today: " : "Next: ") + ev[0].e.title : (up.length ? "Next shift " + relDay(up[0].i, up[0].d) : "Shifts, events, holidays"), function() { openDay(todayKey()); }],
+        ["cal2", "Calendar", ev.length ? (ev[0].i === 0 ? "Today: " : "Next: ") + esc(ev[0].e.title) : (up.length ? "Next shift " + relDay(up[0].i, up[0].d) : "Shifts, events, holidays"), function() { openDay(todayKey()); }],
         ["cart", "Shopping", shopN + " to buy", openShop],
         ["pen", "The Board", boardStrokes().length ? boardStrokes().length + " strokes on it" : "Leave a note", openBoard],
         ["book", "Recipes", itemsOf("recipe").length + " saved &middot; cook mode", function() { openCook(null); }],
@@ -5457,7 +5522,7 @@ rankArticles = function() {
 // ---------- recipes: the feed or the last search, same reader ----------
 RT.src = "feed";
 function srcFeed() { return RT.src === "search" ? window.HUB_RSEARCH : window.HUB_RFEED; }
-function feedRecipes() { var f = srcFeed(); return (f && f.items) || []; }
+function feedRecipes() { var f = srcFeed(); return ((f && f.items instanceof Array && f.items) || []).filter(function(x) { return x && typeof x === "object" && typeof x.t === "string" && x.t; }); }   // 10.1.2: skip broken entries
 var __feedCard97 = feedCard;
 feedCard = function(it) {
     var keep = window.HUB_RFEED, s = srcFeed();
@@ -5500,7 +5565,7 @@ function recipeRows(F, src) {
     for (var i = 0; i < F.length; i++) {
         var keep = RT.src; RT.src = src; var c = feedCard(F[i]); RT.src = keep;
         h += "<div class='rf-row' data-i='" + i + "' data-src='" + src + "'>" + (F[i].img ? "<span class='rf-pic' style=\"background-image:url('" + esc(F[i].img) + "')\"></span>" : "") +
-             "<span class='rf-tx'><span class='chip'>" + esc(F[i].s) + "</span><span class='rf-t'>" + esc(decodeEnts(F[i].t)) + "</span><span class='rf-s'>" +
+             "<span class='rf-tx'>" + (F[i].s ? "<span class='chip'>" + esc(F[i].s) + "</span>" : "") + "<span class='rf-t'>" + esc(decodeEnts(F[i].t)) + "</span><span class='rf-s'>" +
              (c ? c.ing.length + " ingredients &middot; " + c.steps.length + " steps" + (c.time ? " &middot; " + c.time : "") : "tap to read") + "</span></span></div>";
     }
     return h;
@@ -5519,7 +5584,7 @@ renderCookList = function() {
     for (i = 0; i < tabs.length; i++) h += "<span class='rt-t" + (RT.tab === tabs[i][0] ? " sel" : "") + "' data-t='" + tabs[i][0] + "'>" + tabs[i][1] + "</span>";
     h += "</div>";
     if (RT.tab === "new") {
-        var F = window.HUB_RFEED && window.HUB_RFEED.items || [];
+        var F = ((window.HUB_RFEED && window.HUB_RFEED.items instanceof Array && window.HUB_RFEED.items) || []).filter(function(x) { return x && typeof x === "object" && typeof x.t === "string" && x.t; });
         if (!F.length) h += "<div class='sv-empty' style='font-size:1.2em;padding:1.2em 0'>New recipes arrive with the next sync (RecipeTin Eats, Budget Bytes, Cookie + Kate).</div>";
         h += recipeRows(F, "feed");
     } else if (RT.tab === "find") {
@@ -5689,7 +5754,7 @@ function renderAuto() {
         for (i = 0; i < ne.length; i++) if (ne[i].i === 0) h += "<div class='au-li'>&#9642; " + (ne[i].e.time ? HubCal.fmtTime(ne[i].e.time) + " " : "") + esc(ne[i].e.title) + "</div>";
     } else if (AUTO.mode === "dinner") {
         h += "<div class='au-kick'>DINNER TIME</div>" + clock;
-        var rs = itemsOf("recipe"), F = (window.HUB_RFEED && window.HUB_RFEED.items) || [], pick = "", day = Math.floor(new Date().getTime() / 86400000);
+        var rs = itemsOf("recipe"), F = ((window.HUB_RFEED && window.HUB_RFEED.items instanceof Array && window.HUB_RFEED.items) || []).filter(function(x) { return x && x.t; }), pick = "", day = Math.floor(new Date().getTime() / 86400000);
         if (rs.length) pick = parseRecipe(rs[day % rs.length].text).title;
         else if (F.length) pick = decodeEnts(F[day % F.length].t);
         if (pick) h += "<div class='au-sub'>Tonight, maybe:</div><div class='au-big'>" + esc(pick) + "</div>";
@@ -5787,9 +5852,9 @@ function runCommands() {
         CMD_DONE[c.id] = 1;
         var f = c.text.split("|"), ok = "ok";
         if (now - c.ts > 36 * 3600000 && c.ts > 1e12) ok = "stale";             // asleep for days: don't fire old timers
-        else if (f[0] === "timer" && +f[1] > 0) timerStart(Math.min(240, +f[1]));
+        else if (f[0] === "timer" && +f[1] > 0) { var left = Math.min(240, +f[1]) - (c.ts > 1e12 ? (now - c.ts) / 60000 : 0); if (left >= 1) timerStart(Math.round(left)); else ok = "stale"; }   // 10.1.2: a timer sent while the hub slept runs only what's left of it
         else if (f[0] === "sync") sendPower("sync=1");
-        else if (f[0] === "update") sendPower("job=update-" + (f[1] === "install" ? "install" : "check"));
+        else if (f[0] === "update") sendPower("job=update-" + (f[1] === "install" ? "install" : f[1] === "rollback" ? "rollback" : "check"));
         else if (f[0] === "log") sendPower("job=logup");
         else if (f[0] === "screen") { FEEL.front = f[1] === "tiles" ? 0 : 1; saveFeel(); }
         else if (f[0] === "contrast" && /^(normal|strong|max)$/.test(f[1])) { FEEL8.contrast = f[1]; saveFeel8(); applyLook(); }
@@ -5807,7 +5872,7 @@ calItemsChanged = function() {
     __calChanged();
     var rs = itemsOf("repeat"), open = [], i, k;
     for (i = 0; i < rs.length; i++) if (rs[i].state === "open" && rs[i].text) open.push(rs[i]);
-    var x = open.length ? HubCal.expandRepeats(open, addDays(todayKey(), -21), 90) : {}, sig = JSON.stringify(x);
+    var x = open.length ? HubCal.expandRepeats(open, addDays(todayKey(), -42), 150) : {}, sig = JSON.stringify(x);
     if (EVENTS === REP_OBJ && sig === REP_SIG) return;          // nothing new (and the core didn't rebuild EVENTS)
     var hadReps = REP_SIG !== "{}";
     for (k in EVENTS) if (EVENTS.hasOwnProperty(k)) { var keep = []; for (var j = 0; j < EVENTS[k].length; j++) if (!EVENTS[k][j].rep) keep.push(EVENTS[k][j]); EVENTS[k] = keep; }
@@ -5843,20 +5908,19 @@ function cfgRestore() {
     for (var i = 0; i < cs.length; i++) if (cs[i].id === "cfgkindle" && cs[i].text) c = cs[i];
     if (!c) return false;
     var o; try { o = JSON.parse(c.text); } catch (e) { return false; }
-    for (var k in o) if (o.hasOwnProperty(k) && CFG_KEYS.join(",").indexOf(k) >= 0) { try { window.localStorage.setItem(k, o[k]); } catch (e) {} }
+    for (var k in o) if (o.hasOwnProperty(k) && CFG_KEYS.indexOf(k) >= 0)      /* 10.1.2: exact names only (a substring like "pg_" used to pass) */ { try { window.localStorage.setItem(k, o[k]); } catch (e) {} }
     try { window.localStorage.setItem("pg_cfg_bk", c.text); } catch (e) {}
     setTimeout(function() { location.reload(); }, 600);
     return true;
 }
-setInterval(function() { try { if (window.HUB_CLOUD && window.HUB_CLOUD.gist) cfgBackup(false); } catch (e) {} }, 6 * 3600000);
+// 10.1.2: timers freeze while the Kindle sleeps, so a 6-hour setInterval almost never fired. Check the wall clock each awake minute instead.
+setInterval(function() { try { var t = new Date().getTime(), last = +(window.localStorage.getItem("pg_cfg_bkat") || 0); if (window.HUB_CLOUD && window.HUB_CLOUD.gist && (t - last > 6 * 3600000 || t < last)) { cfgBackup(false); window.localStorage.setItem("pg_cfg_bkat", String(t)); } } catch (e) {} }, 60000);
 
 // hook: every items refresh runs the commands and refreshes chores
 var __itemsUI = renderItemsUI;
 renderItemsUI = function() {
     __itemsUI();
-    try { runCommands(); } catch (e) {}
-    calItemsChanged();
-    checkBulletin();
+    try { runCommands(); } catch (e) {}      // (the core already ran calItemsChanged + checkBulletin)
 };
 
 // front page + night screen: the newest note and tonight's dinner
@@ -5866,7 +5930,7 @@ renderFront = function() {
     var el = $("front");
     if (!el || el.style.display !== "block") return;
     var n = openNote(), din = planFor(todayKey()), add = "";
-    if (n) add += "<div class='fp-pin'>&#128204; " + esc(n.text) + "</div>";
+    if (n) add += "<div class='fp-pin'>&#9670; " + esc(n.text) + "</div>";
     if (din) add += "<div class='fp-li'><b>Dinner</b> " + esc(din) + "</div>";
     if (!add) return;
     var side = $("fp-side") || el.getElementsByClassName("nt")[0];
@@ -5984,7 +6048,7 @@ function personPill(v, w) {
     return shiftPill(v, " " + pCls(w)).replace("<span class='sp'>", "<span class='sp'>" + (hasP2() ? "<b class='pi'>" + esc(pInit(w)) + "</b>" : ""));
 }
 var CALWHO = "all";      // calendar filter: all | p1 | p2
-function showWho(w) { return CALWHO === "all" || !w || CALWHO === w; }
+function showWho(w) { return !hasP2() || CALWHO === "all" || !w || CALWHO === w; }      // 10.1.2: a "just him" filter left on after removing the roommate hid all your shifts
 
 // ---------- shift on/off helpers ----------
 function worksOn(w, k) { var v = shiftMap(w)[k]; return !!(v && !isOff(v)); }
@@ -6042,11 +6106,12 @@ TILE_RENDER.shifts = function(T) {
         add += "<div class='sh-p2'>" + whoBadge("p2") + " " + esc(pName("p2")) + ": " + (lines.length ? lines[0] : "no shifts in 2 weeks") + "</div>";
     }
     var r = payNow("p1", 0);
-    if (r) add += "<div class='sh-pay'>Pay period " + r.hours + " h &middot; <b>" + money(r.gross) + "</b> &middot; payday " + shortDay(r.payday) + "</div>";
-    var fk = inner.__fk + "|" + add;
-    if (inner.__fk2 === fk) return;
-    inner.__fk2 = fk;
-    inner.innerHTML += add;
+    if (r && r.hours > 0) add += "<div class='sh-pay'>Pay period " + r.hours + " h &middot; <b>" + money(r.gross) + "</b> &middot; payday " + shortDay(r.payday) + "</div>";
+    // one extra block, replaced each time (it used to be appended again on every refresh)
+    var ex = $("sh-extra");
+    if (!ex || ex.parentNode !== inner) { ex = document.createElement("div"); ex.id = "sh-extra"; inner.appendChild(ex); }
+    if (ex.__h === add && inner.__fk2 === inner.__fk) return;
+    ex.__h = add; ex.innerHTML = add; inner.__fk2 = inner.__fk;
     fitText(inner, Math.max(9, FS * 0.7), Math.min(T.h * 0.2, FS * (T.tall ? 3.4 : 2.4)));
     centerV(inner);
 };
@@ -6220,7 +6285,12 @@ bindShopRows = function(box, outer) {
     })(rows[i]);
 };
 // most-bought items, from every line ever (ticked and removed ones too)
+var FREQ_MEMO = { st: null, n: 0, out: null };
 function frequentItems(n) {
+    if (FREQ_MEMO.st === STORE && FREQ_MEMO.n === n) return FREQ_MEMO.out;
+    var r = frequentItems2(n); FREQ_MEMO = { st: STORE, n: n, out: r }; return r;
+}
+function frequentItems2(n) {
     var cnt = {}, name = {}, lines = STORE.split("\n"), open = {}, i;
     var its = itemsOf("shop"); for (i = 0; i < its.length; i++) if (its[i].state === "open") open[HubCal.parseShop(its[i].text).name.toLowerCase()] = 1;
     var seenId = {};
@@ -6412,6 +6482,7 @@ peek = function(id) {
     for (var i = 0; i < bs.length; i++) (function(b) {
         bindTap(b, function() {
             consume(el);
+            if (new Date().getTime() - BIG_AT < 300) return;
             var a = b.getAttribute("data-a"), k = BIG_ORDER.indexOf(PEEKED);
             if (a === "close") unpeek();
             else if (a === "open") { var cur = PEEKED; unpeek(); var tt = $("t-" + cur); if (tt && tt.__open) tt.__open(); else simulateTap(cur); }
@@ -6690,7 +6761,1334 @@ setTimeout(function() { if (!HUB.sleeping) startTour(false); }, 4000);
 
 // ---------- min text size: nothing on a tile shrinks below ~70% of the base size ----------
 var __fitText = fitText;
-fitText = function(el, lo, hi) { return __fitText(el, Math.max(lo, FS * 0.62), Math.max(hi, FS * 0.62)); };
+fitText = function(el, lo, hi) {
+    var t = el; while (t && t !== document.body && !(t.className && /\bbigview\b/.test(t.className))) t = t.parentNode;
+    if (t && t !== document.body) hi = Math.max(hi, Math.min(el.clientHeight * 0.16, FS * 5));     // big view: let the text grow
+    return __fitText(el, Math.max(lo, FS * 0.62), Math.max(hi, FS * 0.62));
+};
+
+
+// =====================  9.9.1: FIXES  =====================
+// itemsOf() parsed the whole store and unlocked every line on each call (dozens per screen refresh).
+// Same store text = same answer, so remember it until the store changes.
+var IOF = { st: null, pk: null, m: {} };
+var __itemsOf = itemsOf;
+itemsOf = function(kind) {
+    var k = passKey();
+    if (IOF.st !== STORE || IOF.pk !== k) IOF = { st: STORE, pk: k, m: {} };
+    var key = kind || "*";
+    if (!IOF.m[key]) IOF.m[key] = __itemsOf(kind);
+    return IOF.m[key].slice();
+};
+
+// The big view: anything that re-packs the tiles (a sync, the day part changing, a data reload) used to
+// shrink the tile back while it still counted as open - so the next tap "opened" it instead. Now the big
+// view survives a re-pack, renders with the big tile's layout, and very large tiles just open on one tap.
+var BIG_AT = 0, BIG_CLS = "";
+function applyBig(id) {
+    var el = $("t-" + id), p = PLACED[id];
+    if (!el || !p) return;
+    var m = Math.round(FS * 0.6);
+    place(el, m, GRID_Y + m, W - 2 * m, GRID_H - 2 * m);
+    addCls(el, "peeked"); addCls(el, "bigview");
+    el.style.borderRightWidth = el.style.borderBottomWidth = "";
+    if (!BIG_CLS) BIG_CLS = p.cls;
+    p.cls = "xl";
+    var sh = $("peek-shadow"); place(sh, 0, GRID_Y, W, GRID_H); sh.style.display = "block";
+}
+var __peek99 = peek;
+peek = function(id) {
+    var p = PLACED[id];
+    if (p && p.pw && p.ph && p.pw * p.ph >= 0.5 * W * GRID_H) { unpeek(); simulateTap(id); return; }   // already big: just open it
+    unpeek(true);
+    BIG_AT = new Date().getTime();
+    if (p) { BIG_CLS = p.cls; p.cls = "xl"; }          // the renderers pick their layout by size class
+    __peek99(id);
+};
+var __unpeek99 = unpeek;
+unpeek = function(force) {
+    if (force !== true && PEEKED && new Date().getTime() - BIG_AT < 300) return;   // the opening tap's late events
+    var id = PEEKED;
+    if (id && PLACED[id] && BIG_CLS) PLACED[id].cls = BIG_CLS;
+    BIG_CLS = "";
+    __unpeek99();
+};
+var __placeTiles = placeTiles;
+placeTiles = function() {
+    __placeTiles();
+    if (PEEKED && PLACED[PEEKED]) { BIG_CLS = ""; applyBig(PEEKED); }
+};
+// the tap that opened the big view must not also hit its buttons (they land where the finger was)
+var __tileTap = tileTap;
+tileTap = function(id, open) {
+    if (PEEKED === id && new Date().getTime() - BIG_AT < 300) return;
+    __tileTap(id, open);
+};
+
+// =====================  10.0: DEALS, MONEY, FOOD, HOME, FUN  =====================
+// cloud data (extra.js, locked): wishlist prices, flyer matches, hot deals, fun of the day
+var EX = null;
+function loadExtra(cb) {
+    loadScript("extra.js", function(ok) {
+        var L = window.HUB_EXTRA_LOCKED;
+        if (ok && L) { var t = HubCrypt.unlock(L, passKey()); try { EX = cleanEX(JSON.parse(t === null ? L : t)); } catch (e) {} }
+        renderTileById("deals"); renderTileById("fun"); renderTileById("money");
+        if (currentView === "xv") renderXV();
+        if (cb) cb();
+    });
+}
+loadExtra();
+var __applyShell100 = applyShellData;
+applyShellData = function() { var r = __applyShell100.apply(this, arguments); loadExtra(); return r; };
+
+function recs(kind) {
+    var its = itemsOf(kind), out = [];
+    for (var i = 0; i < its.length; i++) if (its[i].state === "open" && !its[i].locked) { var o = HubCal.parseRec(kind, its[i].text); o.id = its[i].id; o.ts = its[i].ts; out.push(o); }
+    return out;
+}
+function cfgJSON(id) { var cs = itemsOf("cfg"); for (var i = 0; i < cs.length; i++) if (cs[i].id === id && !cs[i].locked) { try { var o = JSON.parse(cs[i].text); if (o && typeof o === "object" && !(o instanceof Array)) return o; } catch (e) {} } return {}; }   // 10.1.2: only a real {...} counts
+function cfgSave(id, o) { itemEdit(id, "cfg", "open", JSON.stringify(o)); }
+function $m(x) { return HubCal.money(x); }
+function dPlus(n) { return addDays(todayKey(), n); }
+function shortK(k) { return k ? shortDay(k) : ""; }
+function daysTo(k) { return daysUntil(k); }
+function askNumber(title, init, cb) { kbOpen(title, init || "", function(t) { if (t === null) return cb(null); var v = parseFloat(String(t).replace(/[^0-9.\-]/g, "")); cb(isNaN(v) ? null : v); }); }
+
+// ---------- money: computed here from the store, so it's right the moment you add something ----------
+var SPEND_CATS = ["Groceries", "Eating out", "Gas", "Household", "Bills", "Fun", "Other"];
+function moneyNow() {
+    var month = todayKey().substring(0, 7), sp = recs("spend"), byCat = {}, total = 0, owe = 0, i;
+    for (i = 0; i < sp.length; i++) {
+        var s = sp[i];
+        if (s.split) owe += (s.who === "p2" ? -1 : 1) * s.amount / 2;
+        if (s.cat === "Settle-up") continue;
+        if (s.date.substring(0, 7) === month) { byCat[s.cat || "Other"] = (byCat[s.cat || "Other"] || 0) + s.amount; total += s.amount; }
+    }
+    var bills = recs("bill"), paid = {}, up = [], pd = itemsOf("billpd");
+    for (i = 0; i < pd.length; i++) if (pd[i].state === "open") paid[pd[i].id] = 1;
+    for (i = 0; i < bills.length; i++) {
+        var r = HubCal.parseRepeat(bills[i].rule + "||" + bills[i].name + "|");
+        if (!r) continue;
+        for (var d = -5; d <= 35; d++) { var k = dPlus(d); if (HubCal.repeatOn(r, k)) up.push({ id: bills[i].id, name: bills[i].name, amount: bills[i].amount, date: k, autopay: bills[i].autopay, paid: !!paid["bp" + bills[i].id + k.replace(/-/g, "")] }); }
+    }
+    up.sort(function(a, b) { return a.date < b.date ? -1 : 1; });
+    var due = up.filter(function(u) { return !u.paid && !u.autopay && u.date <= dPlus(7); });
+    return { month: month, total: Math.round(total * 100) / 100, byCat: byCat, owe: Math.round(owe * 100) / 100, bills: up, due: due, budgets: cfgJSON("money").budgets || {}, goals: recs("goal") };
+}
+
+// ---------- the one overlay that holds every 10.0 page ----------
+var XV = { mode: "deals", tab: 0, page: 0 };
+function openXV(mode, tab) {
+    if (EDIT) return;
+    unpeek(); goHome();
+    XV.mode = mode; XV.tab = tab || 0; XV.page = 0;
+    $("xv").style.display = "block";
+    setView("xv");
+    layoutV100();
+    renderXV();
+}
+function closeXV() { $("xv").style.display = "none"; setView("main"); goHome(); }
+var XV_TABS = { deals: ["WISHLIST", "FLYERS", "HOT DEALS"], money: ["THIS MONTH", "BILLS", "GOALS"], food: ["PANTRY", "LEFTOVERS"], home: ["CHORES", "PACKAGES", "GUEST WI-FI"], fun: ["TRIVIA", "WORD", "CANUCKS"] };
+var XV_TITLE = { deals: "DEALS", money: "MONEY", food: "PANTRY", home: "HOME", fun: "FUN" };
+function renderXV() {
+    var body = $("xv-body"), tabs = XV_TABS[XV.mode], h = "", i;
+    $("xv-ttl").innerHTML = XV_TITLE[XV.mode];
+    var tb = "";
+    for (i = 0; i < tabs.length; i++) tb += "<span class='rt-t" + (i === XV.tab ? " sel" : "") + "' data-t='" + i + "'>" + tabs[i] + "</span>";
+    $("xv-tabs").innerHTML = tb;
+    var tt = $("xv-tabs").getElementsByTagName("span");
+    for (i = 0; i < tt.length; i++) (function(el) { bindTap(el, function() { XV.tab = +el.getAttribute("data-t"); XV.page = 0; renderXV(); }); })(tt[i]);
+    try { h = XVR[XV.mode](XV.tab); } catch (e) { h = "<div class='sv-empty'>Something went wrong here: " + esc(String(e.message || e)) + "</div>"; }
+    body.innerHTML = h;
+    bindXV(body);
+    // page long lists: hide what doesn't fit, offer MORE
+    var rows = body.getElementsByClassName("xr"), cut = 0, room = body.clientHeight - FS * 3.4, shown = 0;
+    for (i = 0; i < rows.length; i++) {
+        if (i < XV.page) { rows[i].style.display = "none"; continue; }
+        if (shown > 0 && rows[i].offsetTop + rows[i].offsetHeight > room) { rows[i].style.display = "none"; cut++; } else shown++;      // 10.2: a row taller than the page is shown (clipped), not skipped forever
+    }
+    var mb = $("xv-more");
+    if (cut || XV.page) { mb.style.display = "inline-block"; mb.innerHTML = cut ? "MORE &middot; " + cut + " &#9662;" : "BACK TO THE TOP &#9652;"; mb.__next = cut ? XV.page + Math.max(1, shown) : 0; }
+    else mb.style.display = "none";
+}
+bindTap($("xv-more"), function() { XV.page = $("xv-more").__next || 0; renderXV(); });
+bindTap($("xv-back"), closeXV);
+// every button in a page says what it does with data-a; one dispatcher
+function bindXV(box) {
+    var els = box.querySelectorAll ? box.querySelectorAll("[data-a]") : [];
+    for (var i = 0; i < els.length; i++) (function(el) { bindTap(el, function() { consume(el.parentNode); XVA[el.getAttribute("data-a")](el.getAttribute("data-v") || "", el); }); })(els[i]);
+}
+function btn(a, v, label, cls) { return "<span class='opt-btn" + (cls ? " " + cls : "") + "' data-a='" + a + "' data-v='" + esc(v) + "'>" + label + "</span>"; }
+function spark(vals, w, h) {
+    if (!vals || vals.length < 2) return "";
+    var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals), d = "", n = vals.length;
+    for (var i = 0; i < n; i++) d += (i ? "L" : "M") + Math.round(i * (w - 4) / (n - 1) + 2) + " " + Math.round(h - 3 - (mx === mn ? (h - 6) / 2 : (vals[i] - mn) / (mx - mn) * (h - 6)));
+    return "<svg width='" + w + "' height='" + h + "' style='vertical-align:middle'><path d='" + d + "' fill='none' stroke='#000' stroke-width='2.5'/></svg>";
+}
+
+function bigSaleDays() {      // Black Friday week (4th Thu of Nov to Cyber Monday) and Boxing week
+    var n = getBCNow(), m = n.getUTCMonth(), d = n.getUTCDate();
+    if (m === 10) { var f = new Date(Date.UTC(n.getUTCFullYear(), 10, 1)).getUTCDay(), thu = 1 + (4 - f + 7) % 7 + 21; if (d >= thu && d <= thu + 4) return "BLACK FRIDAY"; }
+    if (m === 11 && d >= 26 || m === 0 && d <= 1) return "BOXING WEEK";
+    return "";
+}
+var XVR = {
+    deals: function(tab) {
+        var h = "";
+        if (tab === 0) {
+            var ws = recs("wish"), ex = (EX && EX.wish) || [], m = {};
+            for (var j = 0; j < ex.length; j++) m[ex[j].id] = ex[j];
+            h += "<div class='xv-bar'>" + btn("wishAdd", "", "+ WATCH SOMETHING", "big sel") + " <span class='hv-hint'>Checked at Best Buy every 3 h. Your phone gets a push when it drops to your price.</span></div>";
+            if (!ws.length) h += "<div class='sv-empty'>Nothing watched yet. Try an air fryer, a TV, headphones&hellip;</div>";
+            for (var i = 0; i < ws.length; i++) {
+                var w = ws[i], e = m[w.id] || {};
+                h += "<div class='xr'><div class='xr-t'>" + esc(w.name) + (e.hit ? " <b class='tag'>TARGET HIT</b>" : e.sale ? " <b class='tag o'>ON SALE</b>" : "") + "</div>" +
+                     "<div class='xr-s'>" + (e.price ? "<b>" + $m(e.price) + "</b>" + (e.reg > e.price ? " <s>" + $m(e.reg) + "</s>" : "") + " &middot; low " + $m(e.low) + " " + spark(e.hist, Math.round(FS * 5), Math.round(FS * 1.2)) + " &middot; " + esc(String(e.title || "").substring(0, 50)) : "Price comes with the next cloud run") +
+                     (w.target ? " &middot; your price " + $m(w.target) : "") + (e.ends ? " &middot; sale ends " + esc(String(e.ends).substring(5, 10)) : "") + "</div>" +
+                     "<div class='xr-b'>" + btn("wishTarget", w.id, "SET MY PRICE") + btn("del", "wish:" + w.id, "STOP WATCHING") + "</div></div>";
+            }
+        } else if (tab === 1) {
+            var fl = (EX && EX.flyers) || [];
+            h += "<div class='hv-hint'>This week's flyers near V2N, checked against your shopping list every 6 h.</div>";
+            if (!fl.length) h += "<div class='sv-empty'>Nothing on your list is in this week's flyers (or the cloud hasn't checked yet).</div>";
+            for (var f = 0; f < fl.length; f++) {
+                var b = fl[f].best;
+                h += "<div class='xr'><div class='xr-t'>" + esc(fl[f].name) + " &mdash; <b>" + $m(b.price) + "</b> " + esc(b.unit || "") + (b.store ? " at <b>" + esc(b.store) + "</b>" : "") + "</div>" +
+                     "<div class='xr-s'>" + esc(b.item) + (b.was ? " &middot; was " + $m(b.was) : "") + (b.story ? " &middot; " + esc(b.story) : "") + (b.to ? " &middot; until " + esc(b.to.substring(5)) : "") +
+                     (fl[f].more && fl[f].more.length ? " &middot; also " + fl[f].more.map(function(x) { return $m(x.price) + " " + esc(x.store); }).join(", ") : "") + "</div></div>";
+            }
+        } else {
+            var hot = (EX && EX.hot) || [];
+            var hol = bigSaleDays();
+            if (hol) h += "<div class='xr'><div class='xr-t'><b class='tag'>" + hol + "</b> Deals are checked every 20 minutes this week.</div></div>";
+            h += "<div class='hv-hint'>RedFlagDeals Hot Deals, most-voted first. Tap + WATCH to put one on your wishlist. Open the phone app's DEALS tab to follow a link.</div>";
+            if (!hot.length) h += "<div class='sv-empty'>Hot deals arrive with the next cloud run.</div>";
+            for (var k = 0; k < hot.length; k++) h += "<div class='xr'><div class='xr-t'><b class='tag o'>+" + hot[k].score + "</b> " + esc(hot[k].t) + "</div><div class='xr-s'>" + esc(hot[k].store || "") + (hot[k].price ? " &middot; " + esc(hot[k].price) : "") + " " + btn("hotWish", String(k), "+ WATCH") + "</div></div>";
+        }
+        return h;
+    },
+    money: function(tab) {
+        var M = moneyNow(), h = "", i;
+        if (tab === 0) {
+            h += "<div class='xv-bar'>" + btn("spendAdd", "", "+ LOG A PURCHASE", "big sel") + " " + (hasP2() ? btn("settle", "", "SETTLE UP") : "") + btn("budgets", "", "BUDGETS") + "</div>";
+            h += "<div class='py-big'>" + $m(M.total) + " <span class='py-sub'>spent in " + MONTHS[+M.month.substring(5, 7) - 1] + "</span></div>";
+            if (hasP2() && M.owe) h += "<div class='xv-owe'>" + (M.owe > 0 ? esc(pName("p2")) + " owes " + esc(pName("p1")) : esc(pName("p1")) + " owes " + esc(pName("p2"))) + " <b>" + $m(Math.abs(M.owe)) + "</b> for shared buys</div>";
+            var cats = SPEND_CATS.slice();
+            for (var c in M.byCat) if (M.byCat.hasOwnProperty(c) && cats.indexOf(c) < 0) cats.push(c);
+            for (i = 0; i < cats.length; i++) {
+                var sp = M.byCat[cats[i]] || 0, bud = +M.budgets[cats[i]] || 0;
+                if (!sp && !bud) continue;
+                var pct = bud ? Math.min(100, Math.round(sp / bud * 100)) : 0;
+                h += "<div class='xr'><div class='xr-t'>" + esc(cats[i]) + " <b>" + $m(sp) + "</b>" + (bud ? " of " + $m(bud) + (sp > bud ? " <b class='tag'>OVER</b>" : "") : "") + "</div>" + (bud ? "<div class='bar'><i style='width:" + pct + "%'></i></div>" : "") + "</div>";
+            }
+            var recent = recs("spend").sort(function(a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 8);
+            if (recent.length) h += "<div class='hv-lbl' style='margin-top:.6em'>Recent</div>";
+            for (i = 0; i < recent.length; i++) h += "<div class='xr'><div class='xr-s'>" + shortK(recent[i].date) + " &middot; <b>" + $m(recent[i].amount) + "</b> " + esc(recent[i].cat) + (recent[i].note ? " &middot; " + esc(recent[i].note) : "") + (hasP2() ? " " + whoBadge(recent[i].who) + (recent[i].split ? " split" : "") : "") + " " + btn("del", "spend:" + recent[i].id, "&times;") + "</div></div>";
+        } else if (tab === 1) {
+            h += "<div class='xv-bar'>" + btn("billAdd", "", "+ ADD A BILL", "big sel") + " <span class='hv-hint'>Push 2 days before it's due (not for autopay). Tick it when paid.</span></div>";
+            if (!M.bills.length) h += "<div class='sv-empty'>No bills yet: rent, hydro, phone, internet, insurance&hellip;</div>";
+            var seen = {};
+            for (i = 0; i < M.bills.length; i++) {
+                var b = M.bills[i], d = daysTo(b.date);
+                if (b.date < dPlus(-5) || (b.paid && d < 0) || seen[b.id + (d < 0 ? "p" : "")] >= (d < 0 ? 1 : 2)) continue;
+                seen[b.id + (d < 0 ? "p" : "")] = (seen[b.id + (d < 0 ? "p" : "")] || 0) + 1;
+                h += "<div class='xr" + (b.paid ? " done" : "") + "'><div class='xr-t'>" + esc(b.name) + " <b>" + $m(b.amount) + "</b> " + (b.paid ? "<b class='tag o'>PAID</b>" : b.autopay ? "<b class='tag o'>AUTOPAY</b>" : d < 0 ? "<b class='tag'>OVERDUE</b>" : d <= 2 ? "<b class='tag'>DUE " + (d === 0 ? "TODAY" : d === 1 ? "TOMORROW" : "IN 2 DAYS") + "</b>" : "") + "</div>" +
+                     "<div class='xr-s'>" + shortK(b.date) + (d >= 0 ? " &middot; in " + d + " day" + (d === 1 ? "" : "s") : "") + " " + (b.paid || b.autopay ? "" : btn("billPaid", b.id + "|" + b.date, "&#10003; PAID")) + " " + btn("del", "bill:" + b.id, "REMOVE BILL") + "</div></div>";
+            }
+            var mo = 0, bl = recs("bill"); for (i = 0; i < bl.length; i++) if (/^monthly/.test(bl[i].rule)) mo += bl[i].amount;
+            if (mo) h += "<div class='hv-hint' style='margin-top:.5em'>Monthly bills total " + $m(mo) + ".</div>";
+        } else {
+            h += "<div class='xv-bar'>" + btn("goalAdd", "", "+ NEW GOAL", "big sel") + "</div>";
+            if (!M.goals.length) h += "<div class='sv-empty'>Saving for something? A trip, a new phone, an emergency fund&hellip;</div>";
+            for (i = 0; i < M.goals.length; i++) {
+                var g = M.goals[i], p = g.target ? Math.min(100, Math.round(g.saved / g.target * 100)) : 0;
+                h += "<div class='xr'><div class='xr-t'>" + esc(g.name) + " <b>" + $m(g.saved) + "</b> of " + $m(g.target) + " &middot; " + p + "%</div><div class='bar'><i style='width:" + p + "%'></i></div>" +
+                     "<div class='xr-b'>" + btn("goalPut", g.id + "|25", "+$25") + btn("goalPut", g.id + "|50", "+$50") + btn("goalPut", g.id + "|100", "+$100") + btn("goalPut", g.id + "|x", "OTHER&hellip;") + btn("del", "goal:" + g.id, "REMOVE") + "</div></div>";
+            }
+        }
+        return h;
+    },
+    food: function(tab) {
+        var ps = recs("pantry").sort(function(a, b) { return (a.expires || "9") < (b.expires || "9") ? -1 : 1; }), h = "", i;
+        var left = tab === 1;
+        h += "<div class='xv-bar'>" + (left ? btn("leftAdd", "", "+ LEFTOVERS", "big sel") + " <span class='hv-hint'>Good for 3 days in the fridge.</span>" : btn("pantryAdd", "", "+ ADD FOOD WITH A DATE", "big sel") + " <span class='hv-hint'>Your phone gets a \"use it up\" push the evening before.</span>") + "</div>";
+        var list = ps.filter(function(p) { return left ? /^leftover/i.test(p.name) : !/^leftover/i.test(p.name); });
+        var wst = cfgJSON("waste"), mk = todayKey().substring(0, 7), pm = dPlus(-todayKey().substring(8, 10) * 1).substring(0, 7);
+        if (wst[mk] || wst[pm]) h += "<div class='hv-hint'>Thrown out: " + (wst[mk] || 0) + " this month, " + (wst[pm] || 0) + " last month.</div>";
+        if (!list.length) h += "<div class='sv-empty'>" + (left ? "No leftovers logged." : "Nothing with a best-before date yet: milk, meat, opened sauces&hellip;") + "</div>";
+        for (i = 0; i < list.length; i++) {
+            var p = list[i], d = p.expires ? daysTo(p.expires) : 99;
+            h += "<div class='xr'><div class='xr-t'>" + esc(p.name) + (p.qty > 1 ? " &times;" + p.qty : "") + " " + (d < 0 ? "<b class='tag'>EXPIRED</b>" : d === 0 ? "<b class='tag'>USE TODAY</b>" : d === 1 ? "<b class='tag'>USE TOMORROW</b>" : d <= 3 ? "<b class='tag o'>" + d + " DAYS</b>" : "") + "</div>" +
+                 "<div class='xr-s'>" + (p.expires ? "Best before " + shortK(p.expires) : "") + (p.where ? " &middot; " + esc(p.where) : "") + " " + btn("used", p.id, "&#10003; USED IT") + btn("tossed", p.id, "TOSSED") + btn("toList", p.id, "+ BUY AGAIN") + "</div></div>";
+        }
+        return h;
+    },
+    home: function(tab) {
+        var h = "", i;
+        if (tab === 0) {
+            h += "<div class='xv-bar'>" + btn("choreAdd", "", "+ CHORE", "big sel") + " " + (hasP2() ? "<span class='hv-hint'>Chores can alternate weekly between " + esc(pName("p1")) + " and " + esc(pName("p2")) + ".</span>" : "") + "</div>";
+            var rs = itemsOf("repeat"), k = todayKey();
+            for (i = 0; i < rs.length; i++) {
+                if (rs[i].state !== "open" || rs[i].locked) continue;
+                var r = HubCal.parseRepeat(rs[i].text); if (!r) continue;
+                var next = ""; for (var d = 0; d < 400 && !next; d++) if (HubCal.repeatOn(r, dPlus(d))) next = dPlus(d);
+                var who = r.who === "rot" ? HubCal.rotWho(next || k) : r.who;
+                h += "<div class='xr'><div class='xr-t'>" + esc(r.title) + " " + (who && hasP2() ? whoBadge(who) + (r.who === "rot" ? " <i>(alternates)</i>" : "") : "") + "</div><div class='xr-s'>" + esc(HubCal.ruleLabel(r.rule)) + (r.time ? " " + HubCal.fmtTime(r.time) : "") + (next ? " &middot; next " + (next === k ? "today" : shortK(next)) : "") + " " + btn("del", "repeat:" + rs[i].id, "REMOVE") + "</div></div>";
+            }
+            h += "<div class='hv-lbl' style='margin-top:.7em'>Home upkeep (tap to add a reminder)</div><div class='xr'>";
+            for (i = 0; i < UPKEEP.length; i++) h += btn("upkeep", String(i), "+ " + UPKEEP[i][0]);
+            h += "</div>";
+        } else if (tab === 1) {
+            h += "<div class='xv-bar'>" + btn("pkgAdd", "", "+ EXPECTING A PACKAGE", "big sel") + "</div>";
+            var pk = recs("pkg").sort(function(a, b) { return (a.expected || "9") < (b.expected || "9") ? -1 : 1; });
+            if (!pk.length) h += "<div class='sv-empty'>Nothing on the way.</div>";
+            for (i = 0; i < pk.length; i++) {
+                var d2 = pk[i].expected ? daysTo(pk[i].expected) : null;
+                h += "<div class='xr'><div class='xr-t'>" + esc(pk[i].name) + " " + (d2 === 0 ? "<b class='tag'>TODAY</b>" : d2 !== null && d2 < 0 ? "<b class='tag'>LATE</b>" : "") + "</div><div class='xr-s'>" + (pk[i].carrier ? esc(pk[i].carrier) + " &middot; " : "") + (pk[i].expected ? "expected " + shortK(pk[i].expected) : "") + " " + btn("pkgGot", pk[i].id, "&#10003; GOT IT") + "</div></div>";
+            }
+        } else {
+            var wf = cfgJSON("wifi");
+            h += "<div class='xv-bar'>" + btn("wifiSet", "", wf.ssid ? "CHANGE" : "SET UP GUEST WI-FI", "big sel") + "</div>";
+            if (wf.ssid) h += "<div class='wf-card'><div class='wf-qr'>" + qrSvg("WIFI:T:" + (wf.sec || "WPA") + ";S:" + String(wf.ssid).replace(/([\\;,:"])/g, "\\$1") + ";P:" + String(wf.pass || "").replace(/([\\;,:"])/g, "\\$1") + ";;") + "</div><div class='wf-t'>Guest Wi-Fi<br><b>" + esc(wf.ssid) + "</b><br>" + esc(wf.pass || "") + "<div class='hv-hint'>Point a phone camera at the code to join.</div></div></div>";
+            else h += "<div class='sv-empty'>Show your Wi-Fi as a QR code guests can scan. The password is stored locked in your gist.</div>";
+        }
+        return h;
+    },
+    fun: function(tab) {
+        var h = "", i;
+        if (tab === 0) {
+            var tq = (EX && EX.trivia) || [];
+            if (!tq.length) return "<div class='sv-empty'>Trivia arrives with the next cloud run.</div>";
+            var q = tq[XV.q % tq.length || 0];
+            var opts = [q.a].concat(q.wrong || []), seed = (XV.q || 0) + q.q.length;
+            opts.sort(function(a, b) { return ((a.length * 7 + seed) % 5) - ((b.length * 7 + seed) % 5); });
+            h += "<div class='hv-hint'>" + esc(q.cat) + " &middot; question " + ((XV.q || 0) % tq.length + 1) + " of " + tq.length + "</div><div class='fun-q'>" + esc(q.q) + "</div><div class='xr'>";
+            for (i = 0; i < opts.length; i++) h += btn("triv", opts[i] === q.a ? "1" : "0", esc(opts[i]), XV.ans !== undefined && opts[i] === q.a ? "sel big" : "big");
+            h += "</div>" + (XV.ans !== undefined ? "<div class='fun-a'>" + (XV.ans ? "&#10003; Right!" : "&#10007; It's " + esc(q.a)) + "</div>" + btn("trivNext", "", "NEXT QUESTION &rsaquo;", "big sel") : "");
+        } else if (tab === 1) {
+            var w = EX && EX.wotd;
+            h += w ? "<div class='fun-q'>" + esc(w.w) + "</div><div class='fun-d'>" + esc(w.d) + "</div><div class='hv-hint'>Merriam-Webster word of the day.</div>" : "<div class='sv-empty'>The word of the day arrives with the next cloud run.</div>";
+        } else {
+            var gs = (EX && EX.nhl) || [];
+            if (!gs.length) return "<div class='sv-empty'>No Canucks games this week (or the schedule hasn't loaded).</div>";
+            for (i = 0; i < gs.length; i++) {
+                var g = gs[i], t = g.start ? new Date(Date.parse(g.start) + tzOffsetHours(Date.parse(g.start)) * 3600000) : null, fin = g.state === "OFF" || g.state === "FINAL";
+                h += "<div class='xr'><div class='xr-t'>" + esc(g.away) + " @ " + esc(g.home) + (fin || g.state === "LIVE" || g.state === "CRIT" ? " &mdash; <b>" + (g.as || 0) + "&ndash;" + (g.hs || 0) + "</b> " + (fin ? "final" : "live") : "") + "</div><div class='xr-s'>" + (t ? DAYS3[t.getUTCDay()] + " " + MON3[t.getUTCMonth()] + " " + t.getUTCDate() + " &middot; " + (t.getUTCHours() % 12 || 12) + ":" + pad2(t.getUTCMinutes()) + (t.getUTCHours() >= 12 ? " pm" : " am") : "") + "</div></div>";
+            }
+        }
+        return h;
+    }
+};
+var UPKEEP = [["Furnace filter", "months:3", ""], ["Test smoke alarms", "months:1", ""], ["Fridge water filter", "months:6", ""], ["Clean fridge coils", "months:6", ""], ["Dryer vent", "months:12", ""], ["Flip the mattress", "months:6", ""], ["Clean the oven", "months:3", ""], ["Descale the kettle", "months:2", ""]];
+XV.q = 0;
+
+// ---------- actions ----------
+function pickChips(title, opts, cb) {     // a quick chooser in the keyboard's place: tap one
+    var box = $("xv-pick"), h = "<div class='hv-lbl'>" + title + "</div>";
+    for (var i = 0; i < opts.length; i++) h += "<span class='opt-btn big' data-i='" + i + "'>" + esc(opts[i][1]) + "</span>";
+    h += " <span class='opt-btn' data-i='-1'>CANCEL</span>";
+    box.innerHTML = h; box.style.display = "block";
+    place(box, Math.round(W * 0.08), Math.round(H * 0.22), Math.round(W * 0.84), Math.round(H * 0.4));
+    var bs = box.getElementsByTagName("span");
+    for (i = 0; i < bs.length; i++) (function(el) { bindTap(el, function() { box.style.display = "none"; var k = +el.getAttribute("data-i"); if (k >= 0) cb(opts[k][0]); }); })(bs[i]);
+}
+function newId() { return HubData.newId("k"); }
+var XVA = {
+    del: function(v) { var p = v.split(":"), its = itemsOf(p[0]); for (var i = 0; i < its.length; i++) if (its[i].id === p[1]) itemEdit(p[1], p[0], "del", its[i].text); renderXV(); },
+    wishAdd: function() { kbOpen("What should I watch? (e.g. Ninja air fryer)", "", function(t) { if (!t) return renderXV(); askNumber("Your price for " + t + " (empty = any drop)", "", function(v) { itemEdit(newId(), "wish", "open", HubCal.recText("wish", { name: t, target: v || 0, query: t })); openXV("deals", 0); }); }); },
+    wishTarget: function(id) { var w = recs("wish").filter(function(x) { return x.id === id; })[0]; if (!w) return; askNumber("Your price for " + w.name, w.target || "", function(v) { if (v !== null) { w.target = v; itemEdit(id, "wish", "open", HubCal.recText("wish", w)); } openXV("deals", 0); }); },
+    spendAdd: function() {
+        askNumber("How much? (e.g. 42.50)", "", function(v) {
+            if (!(v > 0)) return openXV("money", 0);
+            pickChips("What for?", SPEND_CATS.map(function(c) { return [c, c]; }), function(cat) {
+                var save = function(who, split) { itemEdit(newId(), "spend", "open", HubCal.recText("spend", { date: todayKey(), amount: v, cat: cat, who: who, split: split, note: "" })); openXV("money", 0); };
+                if (!hasP2()) return save("p1", false);
+                pickChips("Who paid, and is it shared?", [["p1|1", pName("p1") + " paid, split it"], ["p2|1", pName("p2") + " paid, split it"], ["p1|0", pName("p1") + " paid, just mine"], ["p2|0", pName("p2") + " paid, just his"]], function(x) { save(x.split("|")[0], x.split("|")[1] === "1"); });
+            });
+        });
+    },
+    settle: function() { var M = moneyNow(); if (!M.owe) return; itemEdit(newId(), "spend", "open", HubCal.recText("spend", { date: todayKey(), amount: Math.abs(M.owe) * 2, cat: "Settle-up", who: M.owe > 0 ? "p2" : "p1", split: true, note: "settled up" })); openXV("money", 0); },
+    budgets: function() {
+        pickChips("Budget for which category?", SPEND_CATS.map(function(c) { return [c, c]; }), function(cat) {
+            var cfg = cfgJSON("money"); cfg.budgets = cfg.budgets || {};
+            askNumber("Monthly budget for " + cat + " (0 = none)", cfg.budgets[cat] || "", function(v) { if (v !== null) { if (v > 0) cfg.budgets[cat] = v; else delete cfg.budgets[cat]; cfgSave("money", cfg); } openXV("money", 0); });
+        });
+    },
+    billAdd: function() {
+        kbOpen("Bill name (Rent, Hydro, Phone...)", "", function(t) {
+            if (!t) return openXV("money", 1);
+            askNumber("Amount for " + t, "", function(v) {
+                askNumber("Day of the month it's due (1-31)", "1", function(d) {
+                    pickChips("Paid automatically?", [["0", "No - remind me"], ["1", "Yes, autopay"]], function(ap) {
+                        itemEdit(newId(), "bill", "open", HubCal.recText("bill", { name: t, amount: v || 0, rule: "monthly:" + Math.max(1, Math.min(31, Math.round(d || 1))), who: "", autopay: ap === "1" }));
+                        openXV("money", 1);
+                    });
+                });
+            });
+        });
+    },
+    billPaid: function(v) { var p = v.split("|"); itemEdit("bp" + p[0] + p[1].replace(/-/g, ""), "billpd", "open", p[1]); renderXV(); },
+    goalAdd: function() { kbOpen("Saving for...", "", function(t) { if (!t) return openXV("money", 2); askNumber("How much do you need for " + t + "?", "", function(v) { itemEdit(newId(), "goal", "open", HubCal.recText("goal", { name: t, target: v || 0, saved: 0 })); openXV("money", 2); }); }); },
+    goalPut: function(v) {
+        var p = v.split("|"), g = recs("goal").filter(function(x) { return x.id === p[0]; })[0]; if (!g) return;
+        var add = function(n) { if (n) { g.saved = Math.round((g.saved + n) * 100) / 100; itemEdit(g.id, "goal", "open", HubCal.recText("goal", g)); } openXV("money", 2); };
+        if (p[1] === "x") askNumber("Add how much to " + g.name + "? (minus to take out)", "", add); else add(+p[1]);
+    },
+    pantryAdd: function() {
+        kbOpen("What food? (Chicken, milk, opened salsa...)", "", function(t) {
+            if (!t) return openXV("food", 0);
+            pickChips("Best before?", [[1, "Tomorrow"], [2, "2 days"], [3, "3 days"], [5, "5 days"], [7, "1 week"], [14, "2 weeks"], [30, "1 month"], [90, "3 months (freezer)"]], function(n) {
+                pickChips("Where is it?", [["fridge", "Fridge"], ["freezer", "Freezer"], ["pantry", "Pantry"]], function(wh) { itemEdit(newId(), "pantry", "open", HubCal.recText("pantry", { name: t, expires: dPlus(n), qty: 1, where: wh })); openXV("food", 0); });
+            });
+        });
+    },
+    leftAdd: function() { kbOpen("Leftovers of what?", planFor(todayKey()) || "", function(t) { if (t) itemEdit(newId(), "pantry", "open", HubCal.recText("pantry", { name: "Leftovers: " + t, expires: dPlus(3), qty: 1, where: "fridge" })); openXV("food", 1); }); },
+    used: function(id) { foodDone(id, "done"); },
+    tossed: function(id) { foodDone(id, "tossed"); },
+    hotWish: function(v) {
+        var hd = ((EX && EX.hot) || [])[+v]; if (!hd) return;
+        var nm = String(hd.t).replace(/\[[^\]]*\]/g, "").replace(/\$[\d.,]+.*$/, "").replace(/\([^)]*\)/g, "").replace(/\s+/g, " ").replace(/^[\s\-:|,]+|[\s\-:|,@]+$/g, "").substring(0, 40).replace(/[\s\-:|,]+$/, "");
+        if (nm) itemEdit(newId(), "wish", "open", HubCal.recText("wish", { name: nm, target: 0 }));
+        openXV("deals", 0);
+    },
+    toList: function(id) { var p = recs("pantry").filter(function(x) { return x.id === id; })[0]; if (p) { var nm = p.name.replace(/^leftovers:\s*/i, ""); itemEdit(newId(), "shop", "open", nm); } renderXV(); },
+    choreAdd: function() {
+        kbOpen("Chore (Garbage out, Vacuum, Bathroom...)", "", function(t) {
+            if (!t) return openXV("home", 0);
+            pickChips("How often?", [["weekly:" + getBCNow().getUTCDay(), "Every week (today's day)"], ["daily", "Every day"], ["every2w:" + getBCNow().getUTCDay() + ":" + todayKey(), "Every 2 weeks"], ["monthly:1", "1st of the month"]], function(rule) {
+                var save = function(who) { itemEdit(newId(), "repeat", "open", HubCal.repeatText(rule, "", t, "", who)); openXV("home", 0); };
+                if (!hasP2()) return save("");
+                pickChips("Whose job?", [["rot", "Take turns each week"], ["p1", pName("p1")], ["p2", pName("p2")], ["", "Whoever"]], save);
+            });
+        });
+    },
+    upkeep: function(i) { var u = UPKEEP[+i]; itemEdit(newId(), "repeat", "open", HubCal.repeatText(u[1] + ":" + todayKey(), "", u[0], "", "")); openXV("home", 0); },
+    pkgAdd: function() {
+        kbOpen("What's coming? (new boots, Amazon order...)", "", function(t) {
+            if (!t) return openXV("home", 1);
+            pickChips("When?", [[0, "Today"], [1, "Tomorrow"], [2, "In 2 days"], [3, "3 days"], [5, "5 days"], [7, "A week"], [14, "2 weeks"]], function(n) {
+                pickChips("Carrier?", [["Canada Post", "Canada Post"], ["Purolator", "Purolator"], ["UPS", "UPS"], ["FedEx", "FedEx"], ["Amazon", "Amazon"], ["", "Not sure"]], function(c) { itemEdit(newId(), "pkg", "open", HubCal.recText("pkg", { name: t, carrier: c, tracking: "", expected: dPlus(n) })); openXV("home", 1); });
+            });
+        });
+    },
+    pkgGot: function(id) { var its = itemsOf("pkg"); for (var i = 0; i < its.length; i++) if (its[i].id === id) itemEdit(id, "pkg", "done", its[i].text); renderXV(); },
+    wifiSet: function() {
+        var wf = cfgJSON("wifi");
+        kbOpen("Wi-Fi network name", wf.ssid || "", function(s) { if (!s) return openXV("home", 2); kbOpen("Wi-Fi password for " + s, wf.pass || "", function(p) { cfgSave("wifi", { ssid: s, pass: p || "", sec: p ? "WPA" : "nopass" }); openXV("home", 2); }); });
+    },
+    triv: function(v) { if (XV.ans === undefined) { XV.ans = v === "1"; FUNSCORE[XV.ans ? 0 : 1]++; } renderXV(); },
+    trivNext: function() { XV.q = (XV.q || 0) + 1; XV.ans = undefined; renderXV(); }
+};
+var FUNSCORE = [0, 0];
+function foodDone(id, how) {
+    var its = itemsOf("pantry");
+    for (var i = 0; i < its.length; i++) if (its[i].id === id) { itemEdit(id, "pantry", "done", its[i].text); if (how === "tossed") { var w = cfgJSON("waste"); w[todayKey().substring(0, 7)] = (+w[todayKey().substring(0, 7)] || 0) + 1; cfgSave("waste", w); } }
+    renderXV();
+}
+
+// ---------- tiles ----------
+TILE_IDS.push("deals", "money", "food", "fun");
+TILE_NAMES.deals = "Deals"; TILE_NAMES.money = "Money"; TILE_NAMES.food = "Pantry"; TILE_NAMES.fun = "Fun";
+DEFAULT_SZ.deals = "M"; DEFAULT_SZ.money = "M"; DEFAULT_SZ.food = "M"; DEFAULT_SZ.fun = "M";
+function tileFill(id, T, h, hiMul) {
+    var inner = $(id + "-in"), fk = T.w + "x" + T.h + "|" + h;
+    fitPad(inner);
+    if (inner.__fk === fk) return;
+    inner.__fk = fk; setHTML(inner, h);
+    fitText(inner, Math.max(9, FS * 0.7), Math.min(T.h * 0.25, FS * (hiMul || 2.6)));
+    centerV(inner);
+}
+TILE_RENDER.deals = function(T) {
+    var h = "<span class='stamp'>Deals</span>", ws = (EX && EX.wish) || [], fl = (EX && EX.flyers) || [], hot = (EX && EX.hot) || [], n = 0, i;
+    for (i = 0; i < ws.length && n < 3; i++) if (ws[i].price) { h += "<div class='tl-r'>" + (ws[i].hit ? "&#9733; " : "") + esc(ws[i].name) + " <b>" + $m(ws[i].price) + "</b>" + (ws[i].reg > ws[i].price ? " <s>" + $m(ws[i].reg) + "</s>" : "") + "</div>"; n++; }
+    if (fl.length) h += "<div class='tl-r'>" + fl.length + " list item" + (fl.length > 1 ? "s" : "") + " on sale: " + esc(fl[0].name) + " " + $m(fl[0].best.price) + " @ " + esc(fl[0].best.store) + "</div>";
+    if (hot.length && T.cls !== "s") h += "<div class='tl-r tl-s'>HOT: " + esc(hot[0].t) + "</div>";
+    if (!ws.length && !fl.length && !hot.length) h += "<div class='sv-empty'>Watch prices and flyers: tap to start.</div>";
+    tileFill("deals", T, h);
+};
+TILE_RENDER.money = function(T) {
+    var M = moneyNow(), h = "<span class='stamp'>Money &middot; " + MON3[+M.month.substring(5, 7) - 1] + "</span><div class='py-big'>" + $m(M.total) + "</div><div class='py-sub'>spent this month</div>";
+    for (var i = 0; i < Math.min(2, M.due.length); i++) h += "<div class='tl-r'>" + (daysTo(M.due[i].date) < 0 ? "&#9888; " : "") + esc(M.due[i].name) + " " + $m(M.due[i].amount) + " &middot; " + (daysTo(M.due[i].date) === 0 ? "today" : shortK(M.due[i].date)) + "</div>";
+    if (hasP2() && M.owe) h += "<div class='tl-r tl-s'>" + (M.owe > 0 ? esc(pName("p2")) + " owes you " : "You owe " + esc(pName("p2")) + " ") + $m(Math.abs(M.owe)) + "</div>";
+    tileFill("money", T, h, 3.2);
+};
+TILE_RENDER.food = function(T) {
+    var ps = recs("pantry").filter(function(p) { return p.expires; }).sort(function(a, b) { return a.expires < b.expires ? -1 : 1; }), h = "<span class='stamp'>Use it up</span>";
+    if (!ps.length) h += "<div class='sv-empty'>Add food with a best-before date and leftovers.</div>";
+    for (var i = 0; i < Math.min(T.cls === "s" ? 2 : 5, ps.length); i++) { var d = daysTo(ps[i].expires); h += "<div class='tl-r'>" + (d <= 1 ? "<b>" : "") + esc(ps[i].name) + " &middot; " + (d < 0 ? "expired" : d === 0 ? "today" : d === 1 ? "tomorrow" : d + " days") + (d <= 1 ? "</b>" : "") + "</div>"; }
+    tileFill("food", T, h);
+};
+TILE_RENDER.fun = function(T) {
+    var h = "<span class='stamp'>Fun</span>", w = EX && EX.wotd, g = EX && EX.nhl && EX.nhl[0], t = EX && EX.trivia && EX.trivia[0];
+    if (w) h += "<div class='tl-r'><b>" + esc(w.w) + "</b> &mdash; " + esc(String(w.d).substring(0, 90)) + "</div>";
+    if (t && T.cls !== "s") h += "<div class='tl-r tl-s'>Q: " + esc(t.q) + "</div>";
+    if (g) h += "<div class='tl-r tl-s'>NHL " + esc(g.away) + " @ " + esc(g.home) + (g.state === "OFF" || g.state === "FINAL" ? " " + (g.as || 0) + "&ndash;" + (g.hs || 0) : "") + "</div>";
+    if (!w && !g && !t) h += "<div class='sv-empty'>Trivia, word of the day and Canucks arrive with the cloud.</div>";
+    tileFill("fun", T, h);
+};
+bindTap($("t-deals"), function() { if (!consumed($("t-deals"))) tileTap("deals", function() { openXV("deals", 0); }); });
+bindTap($("t-money"), function() { if (!consumed($("t-money"))) tileTap("money", function() { openXV("money", 0); }); });
+bindTap($("t-food"), function() { if (!consumed($("t-food"))) tileTap("food", function() { openXV("food", 0); }); });
+bindTap($("t-fun"), function() { if (!consumed($("t-fun"))) tileTap("fun", function() { openXV("fun", 0); }); });
+OPEN_ACT.deals = function() { openXV("deals", 0); }; OPEN_ACT.money = function() { openXV("money", 0); }; OPEN_ACT.food = function() { openXV("food", 0); }; OPEN_ACT.fun = function() { openXV("fun", 0); };
+
+// ---------- shopping list rows: this week's flyer price ----------
+var __shopRow100 = shopRowHtml;
+shopRowHtml = function(it, big) {
+    var h = __shopRow100(it, big), fl = (EX && EX.flyers) || [], nm = HubCal.parseShop(it.text).name;
+    if (it.state === "done") return h;
+    for (var i = 0; i < fl.length; i++) if (fl[i].name === nm) {
+        var tag = " <b class='tag o'>" + $m(fl[i].best.price) + (big ? " " + esc(fl[i].best.store) : "") + "</b>";
+        return big ? h.replace("</span><span class='sp-act'", tag + "</span><span class='sp-act'") : h.replace(/<\/span><\/div>$/, tag + "</span></div>");
+    }
+    return h;
+};
+
+// ---------- apps, sysbar, home wiring ----------
+var __appList100 = appList;
+appList = function() {
+    var L = __appList100(), M = moneyNow(), ws = (EX && EX.wish) || [], hits = 0, i;
+    for (i = 0; i < ws.length; i++) if (ws[i].hit) hits++;
+    var extra = [["deals", "Deals", hits ? hits + " at your price!" : ((EX && EX.flyers || []).length ? (EX.flyers.length + " list items on sale") : "wishlist, flyers, hot deals"), function() { openXV("deals", 0); }],
+                 ["money", "Money", $m(M.total) + " this month" + (M.due.length ? " &middot; " + M.due.length + " bill" + (M.due.length > 1 ? "s" : "") + " due" : ""), function() { openXV("money", 0); }],
+                 ["food", "Pantry", recs("pantry").length + " with dates &middot; leftovers", function() { openXV("food", 0); }],
+                 ["home", "Home", "chores, packages, guest Wi-Fi", function() { openXV("home", 0); }],
+                 ["fun", "Fun", "trivia, word of the day, Canucks", function() { openXV("fun", 0); }]];
+    return L.slice(0, 6).concat(extra, L.slice(6));
+};
+(function() {
+    var S = "fill='none' stroke='%c' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'";
+    ICONS.deals = "<path d='M10 50 L50 10 H88 V48 L48 88 Z' " + S + "/><circle cx='70' cy='30' r='7' fill='%c'/>";
+    ICONS.money = "<rect x='8' y='24' width='84' height='56' rx='6' " + S + "/><path d='M8 40 H92' " + S + "/><rect x='18' y='56' width='24' height='10' fill='%c'/>";
+    ICONS.food = "<path d='M20 92 V40 Q20 12 50 12 Q80 12 80 40 V92 Z' " + S + "/><path d='M20 46 H80 M42 60 V74' " + S + "/>";
+    ICONS.home = "<path d='M10 50 L50 12 L90 50 M22 40 V88 H78 V40' " + S + "/><rect x='42' y='60' width='16' height='28' fill='%c'/>";
+    ICONS.fun = "<rect x='12' y='12' width='76' height='76' rx='10' " + S + "/><circle cx='32' cy='32' r='6' fill='%c'/><circle cx='68' cy='32' r='6' fill='%c'/><circle cx='50' cy='50' r='6' fill='%c'/><circle cx='32' cy='68' r='6' fill='%c'/><circle cx='68' cy='68' r='6' fill='%c'/>";
+    IC_LABEL.deals = "DEALS"; IC_LABEL.money = "MONEY"; IC_LABEL.food = "PANTRY"; IC_LABEL.home = "HOME"; IC_LABEL.fun = "FUN";
+})();
+var __ctx100 = ctxList;
+ctxList = function() { if (currentView === "xv") return [["back", closeXV], ["cart", function() { closeXV(); openShop(); }]]; return __ctx100(); };
+var __goHome100 = goHome;
+goHome = function() { if ($("xv").style.display === "block") $("xv").style.display = "none"; $("xv-pick").style.display = "none"; __goHome100(); };
+function layoutV100() {
+    var xv = $("xv");
+    xv.style.bottom = SYSBAR_H + "px";
+    if (xv.style.display === "block") {
+        var m = xv.getElementsByClassName("ov-mast")[0].offsetHeight, tb = $("xv-tabs");
+        place(tb, 0, m, W, Math.round(FS * 2.6));
+        place($("xv-body"), Math.round(FS * 0.8), m + Math.round(FS * 2.9), W - Math.round(FS * 1.6), xv.clientHeight - m - Math.round(FS * 3.1));
+        place($("xv-more"), W - Math.round(FS * 12), xv.clientHeight - Math.round(FS * 2.6), Math.round(FS * 11), Math.round(FS * 2.2));
+    }
+}
+// morning/front page + coming up: bills due and food to use
+var __front100 = renderFront;
+renderFront = function() {
+    __front100();
+    var el = $("front"); if (!el || el.style.display !== "block") return;
+    var side = $("fp-side"); if (!side) return;
+    var M = moneyNow(), add = "", i, ps = recs("pantry").filter(function(p) { return p.expires && daysTo(p.expires) <= 1; });
+    for (i = 0; i < Math.min(2, M.due.length); i++) if (daysTo(M.due[i].date) <= 2) add += "<div class='fp-li'><b>Bill</b> " + esc(M.due[i].name) + " " + $m(M.due[i].amount) + " &middot; " + (daysTo(M.due[i].date) <= 0 ? "due" : shortK(M.due[i].date)) + "</div>";
+    if (ps.length) add += "<div class='fp-li'><b>Use up</b> " + esc(ps.map(function(p) { return p.name; }).join(", ")) + "</div>";
+    if (!add) return;
+    var d = document.createElement("div"); d.className = "fp-sec"; d.innerHTML = add; side.appendChild(d);
+    fitText(side, 9, FS * 1.3);
+};
+var __itemsUI100 = renderItemsUI;
+renderItemsUI = function() { __itemsUI100(); renderTileById("money"); renderTileById("food"); renderTileById("deals"); };
+
+// =====================  10.1.1: MORE DEALS, MONEY, FOOD, HOME, FUN  =====================
+XV_TABS.money = ["THIS MONTH", "BILLS", "GOALS", "PAYCHEQUE"];
+XV_TABS.food = ["PANTRY", "LEFTOVERS", "IDEAS"];
+XV_TABS.fun = ["TRIVIA", "WORD", "CANUCKS", "JOKES"];
+XV_TABS.add = ["QUICK ADD"]; XV_TITLE.add = "QUICK ADD";
+var P101 = {};
+try { P101 = JSON.parse(window.localStorage.getItem("pg_101") || "{}") || {}; } catch (e) { P101 = {}; }
+function save101() { try { window.localStorage.setItem("pg_101", JSON.stringify(P101)); } catch (e) {} }
+function plural(n, w) { return n + " " + w + (n === 1 ? "" : "s"); }
+function monthKeyAgo(n) { var y = +todayKey().substring(0, 4), m = +todayKey().substring(5, 7) - 1 - n; while (m < 0) { m += 12; y--; } return y + "-" + pad2(m + 1); }
+
+// ---------- deals ----------
+function saleCountdown() {
+    var hol = bigSaleDays(); if (hol) return hol + " IS ON";
+    var n = getBCNow(), y = n.getUTCFullYear(), m = n.getUTCMonth(), d = n.getUTCDate();
+    if (m === 10) { var f = new Date(Date.UTC(y, 10, 1)).getUTCDay(), bf = 1 + (4 - f + 7) % 7 + 22; if (d < bf) return plural(bf - d, "day") + " to Black Friday"; }
+    if (m === 11 && d < 26) return plural(26 - d, "day") + " to Boxing Day";
+    return "";
+}
+function wishRows() {
+    var ws = recs("wish"), ex = (EX && EX.wish) || [], m = {}, out = [], i;
+    for (i = 0; i < ex.length; i++) m[ex[i].id] = ex[i];
+    for (i = 0; i < ws.length; i++) {
+        var e = m[ws[i].id] || {}, pct = e.reg > e.price && e.price ? Math.round((1 - e.price / e.reg) * 100) : 0;
+        var hist = e.hist || [], lowest = !!(e.price && hist.length > 1 && e.price <= e.low && e.price < Math.max.apply(null, hist));
+        out.push({ w: ws[i], e: e, pct: pct, lowest: lowest, score: (e.hit ? 1000 : 0) + (lowest ? 200 : 0) + pct });
+    }
+    out.sort(function(a, b) { return b.score - a.score; });
+    return out;
+}
+function wishTags(r) {
+    var e = r.e, t = "";
+    if (e.hit) t += " <b class='tag'>TARGET HIT</b>";
+    if (r.lowest) t += " <b class='tag'>LOWEST</b>";
+    if (e.clear) t += " <b class='tag o'>CLEARANCE</b>";
+    if (r.pct >= 5) t += " <b class='tag o'>&minus;" + r.pct + "%</b>";
+    return t;
+}
+var __xvDeals101 = XVR.deals;
+XVR.deals = function(tab) {
+    var h = "", cd = saleCountdown(), i;
+    if (cd) h += "<div class='hv-hint'><b>" + cd + "</b></div>";
+    if (tab === 0) {
+        var rs = wishRows();
+        h += "<div class='xv-bar'>" + btn("wishAdd", "", "+ WATCH SOMETHING", "big sel") + " <span class='hv-hint'>Best Buy every 3 h &middot; push at your price or a 10% drop. Best deals first.</span></div>";
+        if (!rs.length) h += "<div class='sv-empty'>Nothing watched yet. Try an air fryer, a TV, headphones&hellip;</div>";
+        for (i = 0; i < rs.length; i++) {
+            var w = rs[i].w, e = rs[i].e;
+            h += "<div class='xr'><div class='xr-t'>" + esc(w.name) + wishTags(rs[i]) + "</div>" +
+                 "<div class='xr-s'>" + (e.price ? "<b>" + $m(e.price) + "</b>" + (e.reg > e.price ? " <s>" + $m(e.reg) + "</s>" : "") + " &middot; low " + $m(e.low) + " " + spark(e.hist, Math.round(FS * 5), Math.round(FS * 1.2)) + " &middot; " + esc(String(e.title || "").substring(0, 50)) : "Price comes with the next cloud run") +
+                 (w.target ? " &middot; your price " + $m(w.target) : "") + (e.ends ? " &middot; sale ends " + esc(String(e.ends).substring(5, 10)) : "") + "</div>" +
+                 "<div class='xr-b'>" + btn("wishTarget", w.id, "SET MY PRICE") + btn("del", "wish:" + w.id, "STOP WATCHING") + "</div></div>";
+        }
+        return h;
+    }
+    if (tab === 1) {
+        var fs = EX && EX.flyerSum;
+        if (fs && (fs.save > 0 || fs.n > 1)) h += "<div class='xv-owe'>" + (fs.save > 0 ? "Buy the sale prices and save about <b>" + $m(fs.save) + "</b>. " : "") + (fs.n > 1 ? "<b>" + esc(fs.store) + "</b> has " + fs.n + " of your list items cheapest." : "") + "</div>";
+        return h + __xvDeals101(1);
+    }
+    var hot = (EX && EX.hot) || [], hol = bigSaleDays();
+    if (hol) h += "<div class='xr'><div class='xr-t'><b class='tag'>" + hol + "</b> Deals are checked every 20 minutes this week.</div></div>";
+    h += "<div class='hv-hint'>RedFlagDeals Hot Deals, most-voted first. NEW = showed up in the last 6 h. + WATCH puts one on your wishlist.</div>";
+    if (!hot.length) h += "<div class='sv-empty'>Hot deals arrive with the next cloud run.</div>";
+    for (i = 0; i < hot.length; i++) h += "<div class='xr'><div class='xr-t'><b class='tag o'>+" + hot[i].score + "</b>" + (hot[i].fresh ? " <b class='tag'>NEW</b>" : "") + " " + esc(hot[i].t) + "</div><div class='xr-s'>" + esc(hot[i].store || "") + (hot[i].price ? " &middot; " + esc(hot[i].price) : "") + " " + btn("hotWish", String(i), "+ WATCH") + "</div></div>";
+    return h;
+};
+TILE_RENDER.deals = function(T) {
+    var h = "<span class='stamp'>Deals</span>", rs = wishRows(), fl = (EX && EX.flyers) || [], hot = (EX && EX.hot) || [], n = 0, i, cd = saleCountdown();
+    if (cd) h += "<div class='tl-r'><b>" + cd + "</b></div>";
+    for (i = 0; i < rs.length && n < (T.cls === "s" ? 1 : 3); i++) if (rs[i].e.price) { var e = rs[i].e; h += "<div class='tl-r'>" + (e.hit ? "&#9733; " : "") + esc(rs[i].w.name) + " <b>" + $m(e.price) + "</b>" + (rs[i].pct >= 5 ? " &minus;" + rs[i].pct + "%" : "") + (rs[i].lowest ? " LOWEST" : "") + "</div>"; n++; }
+    if (fl.length) h += "<div class='tl-r'>" + plural(fl.length, "list item") + " on sale: " + esc(fl[0].name) + " " + $m(fl[0].best.price) + (fl[0].best.store ? " @ " + esc(fl[0].best.store) : "") + (EX.flyerSum && EX.flyerSum.save > 0 && T.cls !== "s" ? " &middot; save " + $m(EX.flyerSum.save) + " in all" : "") + "</div>";
+    var nh = hot.filter(function(x) { return x.fresh; })[0] || hot[0];
+    if (nh && T.cls !== "s") h += "<div class='tl-r tl-s'>HOT: " + (nh.fresh ? "NEW " : "") + esc(nh.t) + "</div>";
+    if (!rs.length && !fl.length && !hot.length) h += "<div class='sv-empty'>Watch prices and flyers: tap to start.</div>";
+    tileFill("deals", T, h);
+};
+
+// ---------- money ----------
+function moneyStats() {
+    var M = moneyNow(), sp = recs("spend"), lm = monthKeyAgo(1), last = 0, lastToDay = 0, per = { p1: 0, p2: 0 }, i, dom = +todayKey().substring(8, 10);
+    for (i = 0; i < sp.length; i++) {
+        var s = sp[i]; if (s.cat === "Settle-up" || !s.date) continue;
+        if (s.date.substring(0, 7) === M.month) per[s.who === "p2" ? "p2" : "p1"] += s.amount;
+        if (s.date.substring(0, 7) === lm) { last += s.amount; if (+s.date.substring(8, 10) <= dom) lastToDay += s.amount; }
+    }
+    var dim = new Date(Date.UTC(+M.month.substring(0, 4), +M.month.substring(5, 7), 0)).getUTCDate(), eom = M.month + "-" + pad2(dim), billsLeft = 0, budLeft = 0, hasBud = false, c;
+    for (i = 0; i < M.bills.length; i++) if (!M.bills[i].paid && M.bills[i].date >= todayKey() && M.bills[i].date <= eom) billsLeft += M.bills[i].amount;
+    for (c in M.budgets) if (M.budgets.hasOwnProperty(c) && +M.budgets[c] > 0) { hasBud = true; budLeft += Math.max(0, +M.budgets[c] - (M.byCat[c] || 0)); }
+    return { M: M, per: per, last: Math.round(last * 100) / 100, lastToDay: lastToDay, pace: dom >= 5 && M.total > 0 ? Math.round(M.total / dom * dim) : 0, billsLeft: billsLeft, budLeft: hasBud ? budLeft : null, dim: dim };
+}
+function moneyExtraHtml() {
+    var S = moneyStats(), M = S.M, b = [];
+    if (hasP2() && (S.per.p1 || S.per.p2)) b.push("Paid by " + esc(pName("p1")) + " <b>" + $m(S.per.p1) + "</b> &middot; " + esc(pName("p2")) + " <b>" + $m(S.per.p2) + "</b>");
+    if (S.last) b.push(MON3[+monthKeyAgo(1).substring(5, 7) - 1] + " was " + $m(S.last) + (S.lastToDay ? " (" + $m(S.lastToDay) + " by this date" + (M.total > S.lastToDay ? ", so you've spent " + $m(M.total - S.lastToDay) + " more so far" : M.total < S.lastToDay ? ", so you've spent " + $m(S.lastToDay - M.total) + " less so far" : "") + ")" : ""));
+    if (S.pace) b.push("On pace for about <b>" + $m(S.pace) + "</b> this month");
+    if (S.budLeft !== null) b.push("<b>" + $m(S.budLeft) + "</b> left in your budgets");
+    if (S.billsLeft) b.push("Bills still to pay this month: <b>" + $m(S.billsLeft) + "</b>");
+    return b.length ? "<div class='hv-hint'>" + b.join("<br>") + "</div>" : "";
+}
+// rough take-home: CPP 5.95% over the $3,500 exemption, EI 1.63%, federal 14%/20.5%, B.C. 5.06%/7.7% (2026)
+function takeHome(gross, cycle) {
+    var n = cycle === "weekly" ? 52 : cycle === "semimonthly" ? 24 : 26, A = gross * n;
+    var cpp = Math.max(0, gross - 3500 / n) * 0.0595, ei = gross * 0.0163;
+    var fed = Math.min(A, 58523) * 0.14 + Math.max(0, A - 58523) * 0.205 - (16452 + Math.min(A, 1501) + (cpp + ei) * n) * 0.14;
+    var bc = Math.min(A, 50363) * 0.0506 + Math.max(0, A - 50363) * 0.077 - (13216 + (cpp + ei) * n) * 0.0506;
+    var tax = (Math.max(0, fed) + Math.max(0, bc)) / n;
+    return { net: Math.round((gross - cpp - ei - tax) * 100) / 100, cpp: Math.round(cpp * 100) / 100, ei: Math.round(ei * 100) / 100, tax: Math.round(tax * 100) / 100 };
+}
+function paychequeHtml() {
+    var cfg = PAYCFG.p1, r = payNow("p1", 0), h = "";
+    if (!r) return "<div class='sv-empty'>Set your hourly rate in Settings &rsaquo; Pay to see your paycheque here.</div>";
+    var t = takeHome(r.gross, cfg.cycle), dd = daysUntil(r.payday);
+    h += "<div class='py-big'>" + $m(r.gross) + " <span class='py-sub'>gross &middot; " + r.hours + " h &middot; " + shortK(r.from) + " &ndash; " + shortK(r.to) + "</span></div>";
+    h += "<div class='xr'><div class='xr-t'>About <b>" + $m(t.net) + "</b> take-home</div><div class='xr-s'>CPP " + $m(t.cpp) + " &middot; EI " + $m(t.ei) + " &middot; income tax ~" + $m(t.tax) + " &middot; payday " + shortK(r.payday) + (dd >= 0 ? " (" + (dd === 0 ? "today" : dd === 1 ? "tomorrow" : "in " + dd + " days") + ")" : "") + "</div></div>";
+    var ws = weekStartKey(0), wk = HubCal.payFor(SHIFTS, ws, addDays(ws, 6), cfg), left = Math.max(0, Math.round((40 - wk.hours) * 100) / 100);
+    h += "<div class='xr'><div class='xr-t'>" + wk.hours + " h this week</div><div class='bar'><i style='width:" + Math.min(100, Math.round(wk.hours / 40 * 100)) + "%'></i></div><div class='xr-s'>" + (left > 0 ? left + " h until weekly overtime (40 h)" : "In weekly overtime: hours past 40 pay 1.5&times;") + "</div></div>";
+    for (var i = 0; i < 14; i++) { var k = addDays(todayKey(), i); if (worksOn("p1", k)) { var one = HubCal.payFor(SHIFTS, k, k, cfg); h += "<div class='xr'><div class='xr-t'>Next shift " + (i === 0 ? "today" : i === 1 ? "tomorrow" : shortK(k)) + " &middot; " + esc(shortShift(SHIFTS[k])) + "</div><div class='xr-s'>" + one.hours + " h &middot; about " + $m(one.gross) + " gross</div></div>"; break; } }
+    var nx = payNow("p1", 1); if (nx && nx.hours) h += "<div class='xr'><div class='xr-t'>Next period so far: " + $m(nx.gross) + "</div><div class='xr-s'>" + nx.hours + " h scheduled &middot; about " + $m(takeHome(nx.gross, cfg.cycle).net) + " take-home</div></div>";
+    var y = payYTD("p1"); if (y && y.gross) h += "<div class='xr'><div class='xr-t'>" + todayKey().substring(0, 4) + " so far: " + $m(y.gross) + " gross</div><div class='xr-s'>" + y.hours + " h on the hub</div></div>";
+    return h + "<div class='hv-hint'>Take-home is a rough estimate (2026 CPP, EI, federal + B.C. tax, basic credits only). Your stub may differ by a few dollars.</div>";
+}
+var __xvMoney101 = XVR.money;
+XVR.money = function(tab) {
+    if (tab === 3) return paychequeHtml();
+    if (tab === 2) {
+        var gs = recs("goal"), h = "<div class='xv-bar'>" + btn("goalAdd", "", "+ NEW GOAL", "big sel") + "</div>";
+        if (!gs.length) h += "<div class='sv-empty'>Saving for something? A trip, a new phone, an emergency fund&hellip;</div>";
+        for (var i = 0; i < gs.length; i++) {
+            var g = gs[i], p = g.target ? Math.min(100, Math.round(g.saved / g.target * 100)) : 0, need = "";
+            if (g.by && g.target > g.saved) { var wks = Math.max(1, daysTo(g.by) / 7); need = daysTo(g.by) < 0 ? " &middot; target date passed" : " &middot; " + $m((g.target - g.saved) / wks) + "/week to make it by " + shortK(g.by); }
+            h += "<div class='xr'><div class='xr-t'>" + esc(g.name) + " <b>" + $m(g.saved) + "</b> of " + $m(g.target) + " &middot; " + p + "%" + (p >= 100 ? " <b class='tag'>DONE!</b>" : "") + "</div><div class='bar'><i style='width:" + p + "%'></i></div>" + (need ? "<div class='xr-s'>" + need.replace(/^ &middot; /, "") + "</div>" : "") +
+                 "<div class='xr-b'>" + btn("goalPut", g.id + "|25", "+$25") + btn("goalPut", g.id + "|50", "+$50") + btn("goalPut", g.id + "|100", "+$100") + btn("goalPut", g.id + "|x", "OTHER&hellip;") + btn("del", "goal:" + g.id, "REMOVE") + "</div></div>";
+        }
+        return h;
+    }
+    var h0 = __xvMoney101(tab);
+    if (tab === 0) { var at = h0.indexOf("</div>", h0.indexOf("py-big")); if (at > 0) h0 = h0.substring(0, at + 6) + moneyExtraHtml() + h0.substring(at + 6); }
+    return h0;
+};
+function spendFlow(v) {
+    if (!(v > 0)) return openXV("money", 0);
+    pickChips("$" + v.toFixed(2) + " for?", SPEND_CATS.map(function(c) { return [c, c]; }), function(cat) {
+        var save = function(who, split) { itemEdit(newId(), "spend", "open", HubCal.recText("spend", { date: todayKey(), amount: v, cat: cat, who: who, split: split, note: "" })); openXV("money", 0); };
+        if (!hasP2()) return save("p1", false);
+        pickChips("Who paid, and is it shared?", [["p1|1", pName("p1") + " paid, split it"], ["p2|1", pName("p2") + " paid, split it"], ["p1|0", pName("p1") + " paid, just mine"], ["p2|0", pName("p2") + " paid, just his"]], function(x) { save(x.split("|")[0], x.split("|")[1] === "1"); });
+    });
+}
+XVA.spendAdd = function() {
+    pickChips("How much?", [["5", "$5"], ["10", "$10"], ["20", "$20"], ["50", "$50"], ["100", "$100"], ["x", "OTHER AMOUNT&hellip;"]], function(a) {
+        if (a === "x") askNumber("How much? (e.g. 42.50)", "", spendFlow); else spendFlow(+a);
+    });
+};
+XVA.goalAdd = function() {
+    kbOpen("Saving for...", "", function(t) {
+        if (!t) return openXV("money", 2);
+        askNumber("How much do you need for " + t + "?", "", function(v) {
+            var y = +todayKey().substring(0, 4), xmas = (todayKey() < y + "-12-20" ? y : y + 1) + "-12-20";
+            pickChips("By when?", [["", "No date"], [dPlus(30), "1 month"], [dPlus(91), "3 months"], [dPlus(182), "6 months"], [dPlus(365), "1 year"], [xmas, "Before Christmas"]], function(by) {
+                itemEdit(newId(), "goal", "open", HubCal.recText("goal", { name: t, target: v || 0, saved: 0, by: by })); openXV("money", 2);
+            });
+        });
+    });
+};
+TILE_RENDER.money = function(T) {
+    var S = moneyStats(), M = S.M, h = "<span class='stamp'>Money &middot; " + MON3[+M.month.substring(5, 7) - 1] + "</span><div class='py-big'>" + $m(M.total) + "</div><div class='py-sub'>spent this month" + (S.pace && T.cls !== "s" ? " &middot; on pace for " + $m(S.pace) : "") + "</div>";
+    for (var i = 0; i < Math.min(2, M.due.length); i++) h += "<div class='tl-r'>" + (daysTo(M.due[i].date) < 0 ? "&#9888; " : "") + esc(M.due[i].name) + " " + $m(M.due[i].amount) + " &middot; " + (daysTo(M.due[i].date) === 0 ? "today" : shortK(M.due[i].date)) + "</div>";
+    if (hasP2() && M.owe) h += "<div class='tl-r tl-s'>" + (M.owe > 0 ? esc(pName("p2")) + " owes you " : "You owe " + esc(pName("p2")) + " ") + $m(Math.abs(M.owe)) + "</div>";
+    var r = payNow("p1", 0);
+    if (r && r.gross && T.cls !== "s") { var dd = daysUntil(r.payday); if (dd >= 0 && dd <= 7) h += "<div class='tl-r tl-s'>Payday " + (dd === 0 ? "today" : dd === 1 ? "tomorrow" : DAYS3[(getBCNow().getUTCDay() + dd) % 7]) + " &middot; ~" + $m(takeHome(r.gross, PAYCFG.p1.cycle).net) + " take-home</div>"; }
+    tileFill("money", T, h, 3.2);
+};
+
+// ---------- food ----------
+var PQUICK = [["Milk", 7, "fridge"], ["Chicken", 2, "fridge"], ["Ground beef", 2, "fridge"], ["Bread", 5, "pantry"], ["Eggs", 21, "fridge"], ["Yogurt", 10, "fridge"], ["Deli meat", 4, "fridge"], ["Salad greens", 4, "fridge"], ["Freezer meat", 90, "freezer"]];
+function wasteChart() {
+    var w = cfgJSON("waste"), vals = [], labs = [], mx = 1, i, h = "";
+    for (i = 5; i >= 0; i--) { var k = monthKeyAgo(i), v = Math.max(0, +w[k] || 0); vals.push(v); labs.push(MON3[+k.substring(5, 7) - 1]); mx = Math.max(mx, v); }
+    if (mx <= 1 && !vals.join("").replace(/0/g, "")) return "";
+    var bw = Math.round(FS * 2.2), ht = Math.round(FS * 3);
+    h += "<div class='hv-lbl' style='margin-top:.6em'>Food thrown out, last 6 months</div><svg width='" + (bw * 6 + 10) + "' height='" + (ht + FS * 1.6) + "'>";
+    for (i = 0; i < 6; i++) { var bh = Math.round(vals[i] / mx * ht); h += "<rect x='" + (i * bw + 4) + "' y='" + (ht - bh) + "' width='" + (bw - 8) + "' height='" + Math.max(1, bh) + "' fill='#000'/><text x='" + (i * bw + bw / 2) + "' y='" + (ht + FS * 0.8) + "' font-size='" + Math.round(FS * 0.6) + "' text-anchor='middle'>" + labs[i] + " " + vals[i] + "</text>"; }
+    return h + "</svg>";
+}
+XVR.food = function(tab) {
+    var h = "", i;
+    if (tab === 2) {
+        var ideas = (EX && EX.ideas) || [];
+        h += "<div class='hv-hint'>Dinner ideas that use up what expires in the next 3 days (TheMealDB). Recipes open on the phone.</div>";
+        if (!ideas.length) h += "<div class='sv-empty'>Nothing about to expire, or the cloud hasn't looked yet. Add food with a date on the PANTRY tab.</div>";
+        for (i = 0; i < ideas.length; i++) h += "<div class='xr'><div class='xr-t'>Use the <b>" + esc(ideas[i].for) + "</b></div><div class='xr-s'>" + ideas[i].meals.map(function(m) { return esc(m.n); }).join(" &middot; ") + "</div></div>";
+        return h;
+    }
+    var left = tab === 1, ps = recs("pantry").sort(function(a, b) { return (a.expires || "9") < (b.expires || "9") ? -1 : 1; });
+    h += "<div class='xv-bar'>" + (left ? btn("leftAdd", "", "+ LEFTOVERS", "big sel") + " <span class='hv-hint'>Good for 3 days in the fridge.</span>" : btn("pantryAdd", "", "+ ADD FOOD WITH A DATE", "big sel") + " <span class='hv-hint'>Your phone gets a \"use it up\" push the evening before.</span>") + "</div>";
+    if (!left) { h += "<div class='xr'>"; for (i = 0; i < PQUICK.length; i++) h += btn("pq", String(i), "+ " + PQUICK[i][0]); h += "</div>"; }
+    var list = ps.filter(function(p) { return left ? /^leftover/i.test(p.name) : !/^leftover/i.test(p.name); });
+    if (!list.length) h += "<div class='sv-empty'>" + (left ? "No leftovers logged." : "Nothing with a best-before date yet: tap a quick button above.") + "</div>";
+    var groups = left ? [""] : ["fridge", "freezer", "pantry"];
+    for (var g = 0; g < groups.length; g++) {
+        var sub = list.filter(function(p) { return left || (p.where || "fridge") === groups[g] || (groups[g] === "pantry" && ["fridge", "freezer", "pantry"].indexOf(p.where) < 0 && p.where); });
+        if (!sub.length) continue;
+        if (!left) h += "<div class='hv-lbl' style='margin-top:.4em'>" + groups[g].toUpperCase() + "</div>";
+        for (i = 0; i < sub.length; i++) {
+            var p = sub[i], d = p.expires ? daysTo(p.expires) : 99;
+            h += "<div class='xr'><div class='xr-t'>" + esc(p.name) + (p.qty > 1 ? " &times;" + p.qty : "") + " " + (d < 0 ? "<b class='tag'>EXPIRED</b>" : d === 0 ? "<b class='tag'>USE TODAY</b>" : d === 1 ? "<b class='tag'>USE TOMORROW</b>" : d <= 3 ? "<b class='tag o'>" + d + " DAYS</b>" : "") + "</div>" +
+                 "<div class='xr-s'>" + (p.expires ? "Best before " + shortK(p.expires) : "") + " " + btn("used", p.id, "&#10003; USED IT") + btn("tossed", p.id, "TOSSED") + btn("toList", p.id, "+ BUY AGAIN") + "</div></div>";
+        }
+    }
+    if (!left) { var wst = cfgJSON("waste"), mk = todayKey().substring(0, 7), pm = monthKeyAgo(1), w1 = +wst[mk] || 0, w2 = +wst[pm] || 0; if (w1 || w2) h += "<div class='hv-hint' style='margin-top:.5em'>Thrown out: " + w1 + " this month, " + w2 + " last month.</div>"; h += wasteChart(); }
+    return h;
+};
+XVA.pq = function(i) { var q = PQUICK[+i]; itemEdit(newId(), "pantry", "open", HubCal.recText("pantry", { name: q[0], expires: dPlus(q[1]), qty: 1, where: q[2] })); openXV("food", 0); };
+TILE_RENDER.food = function(T) {
+    var ps = recs("pantry").filter(function(p) { return p.expires; }).sort(function(a, b) { return a.expires < b.expires ? -1 : 1; }), wk = 0, i;
+    for (i = 0; i < ps.length; i++) if (daysTo(ps[i].expires) <= 7) wk++;
+    var h = "<span class='stamp'>Use it up" + (wk ? " &middot; " + wk + " this week" : "") + "</span>";
+    if (!ps.length) h += "<div class='sv-empty'>Add food with a best-before date and leftovers.</div>";
+    for (i = 0; i < Math.min(T.cls === "s" ? 2 : 5, ps.length); i++) { var d = daysTo(ps[i].expires); h += "<div class='tl-r'>" + (d <= 1 ? "<b>" : "") + esc(ps[i].name) + " &middot; " + (d < 0 ? "expired" : d === 0 ? "today" : d === 1 ? "tomorrow" : d + " days") + (d <= 1 ? "</b>" : "") + "</div>"; }
+    var id = (EX && EX.ideas) || []; if (id.length && T.cls !== "s") h += "<div class='tl-r tl-s'>Idea: " + esc(id[0].meals[0].n) + "</div>";
+    tileFill("food", T, h);
+};
+
+// ---------- home: chores done + scoreboard, Wi-Fi big, more upkeep ----------
+UPKEEP.push(["Winter tires on", "yearly:10-15", ""], ["Summer tires on", "yearly:04-15", ""], ["Clean the gutters", "yearly:10-01", ""], ["Test GFCI outlets", "months:6", ""], ["Clean bathroom fan", "months:6", ""], ["Check fire extinguisher", "months:12", ""]);
+XVA.upkeep = function(i) { var u = UPKEEP[+i], rule = /^months/.test(u[1]) ? u[1] + ":" + todayKey() : u[1]; itemEdit(newId(), "repeat", "open", HubCal.repeatText(rule, "", u[0], "", "")); openXV("home", 0); };
+function choreDoneMap() { var m = {}, cs = itemsOf("chdone"); for (var i = 0; i < cs.length; i++) if (cs[i].state === "open" && !cs[i].locked) m[cs[i].id] = cs[i].text || "p1"; return m; }
+function choreScore() { var m = choreDoneMap(), mk = todayKey().substring(0, 7).replace("-", ""), s = { p1: 0, p2: 0 }; for (var k in m) if (m.hasOwnProperty(k) && k.slice(-8, -2) === mk) s[m[k] === "p2" ? "p2" : "p1"]++; return s; }
+function cdId(rid, k) { return "cd" + rid + k.replace(/-/g, ""); }
+var __xvHome101 = XVR.home;
+XVR.home = function(tab) {
+    if (tab === 2 && XV.wbig) {
+        var wf = cfgJSON("wifi"), sz = Math.max(FS * 8, Math.round(Math.min($("xv-body").clientWidth * 0.8, $("xv-body").clientHeight - FS * 11)));     // 10.1.2: leave room for the name + password under it
+        return "<div class='xv-bar'>" + btn("wifiBig", "0", "&lsaquo; SMALL", "big sel") + "</div><div style='text-align:center'><div style='display:inline-block;width:" + sz + "px;height:" + sz + "px' class='wf-big'>" + qrSvg("WIFI:T:" + (wf.sec || "WPA") + ";S:" + String(wf.ssid || "").replace(/([\\;,:"])/g, "\\$1") + ";P:" + String(wf.pass || "").replace(/([\\;,:"])/g, "\\$1") + ";;") + "</div><div class='fun-q' style='font-size:1.3em'>" + esc(String(wf.ssid || "").substring(0, 40)) + " &middot; " + esc(String(wf.pass || "").substring(0, 64)) + "</div></div>";
+    }
+    if (tab !== 0) { var o = __xvHome101(tab); return tab === 2 && cfgJSON("wifi").ssid ? o.replace("</div>", " " + btn("wifiBig", "1", "BIG CODE") + "</div>") : o; }
+    var h = "<div class='xv-bar'>" + btn("choreAdd", "", "+ CHORE", "big sel") + "</div>", i, k = todayKey(), dm = choreDoneMap();
+    if (hasP2()) { var sc = choreScore(); h += "<div class='xv-owe'>Chores done in " + MONTHS[+k.substring(5, 7) - 1] + ": " + esc(pName("p1")) + " <b>" + sc.p1 + "</b> &middot; " + esc(pName("p2")) + " <b>" + sc.p2 + "</b>" + (sc.p1 !== sc.p2 ? " &middot; " + esc(pName(sc.p1 > sc.p2 ? "p1" : "p2")) + " is ahead" : "") + "</div>"; }
+    var rs = itemsOf("repeat"), rows = [];
+    for (i = 0; i < rs.length; i++) {
+        if (rs[i].state !== "open" || rs[i].locked) continue;
+        var r = HubCal.parseRepeat(rs[i].text); if (!r) continue;
+        var next = ""; for (var d = 0; d < 400 && !next; d++) if (HubCal.repeatOn(r, dPlus(d))) next = dPlus(d);
+        rows.push({ id: rs[i].id, r: r, next: next || "9999" });
+    }
+    rows.sort(function(a, b) { return a.next < b.next ? -1 : 1; });
+    for (i = 0; i < rows.length; i++) {
+        var R = rows[i].r, nx = rows[i].next, who = R.who === "rot" ? HubCal.rotWho(nx === "9999" ? k : nx) : R.who, done = dm[cdId(rows[i].id, k)];
+        h += "<div class='xr" + (done ? " done" : "") + "'><div class='xr-t'>" + esc(R.title) + " " + (who && hasP2() ? whoBadge(who) + (R.who === "rot" ? " <i>(alternates)</i>" : "") : "") + (done ? " <b class='tag o'>&#10003; DONE" + (hasP2() ? " &middot; " + esc(pName(done)) : "") + "</b>" : nx === k ? " <b class='tag'>TODAY</b>" : "") + "</div><div class='xr-s'>" + esc(HubCal.ruleLabel(R.rule)) + (R.time ? " " + HubCal.fmtTime(R.time) : "") + (nx !== "9999" ? " &middot; next " + (nx === k ? "today" : shortK(nx)) : "") + " " + (nx === k && !done ? btn("chDone", rows[i].id + "|" + (who || ""), "&#10003; DONE") : done ? btn("chUndo", rows[i].id, "UNDO") : "") + btn("del", "repeat:" + rows[i].id, "REMOVE") + "</div></div>";
+    }
+    h += "<div class='hv-lbl' style='margin-top:.7em'>Home upkeep (tap to add a reminder)</div><div class='xr'>";
+    for (i = 0; i < UPKEEP.length; i++) h += btn("upkeep", String(i), "+ " + UPKEEP[i][0]);
+    return h + "</div>";
+};
+XVA.chDone = function(v) {
+    var p = v.split("|"), save = function(w) { itemEdit(cdId(p[0], todayKey()), "chdone", "open", w || "p1"); renderXV(); };
+    if (!hasP2()) return save("p1");
+    pickChips("Who did it?", [["p1", pName("p1")], ["p2", pName("p2")]], save);
+};
+XVA.chUndo = function(rid) { var id = cdId(rid, todayKey()), cs = itemsOf("chdone"); for (var i = 0; i < cs.length; i++) if (cs[i].id === id) itemEdit(id, "chdone", "del", cs[i].text); renderXV(); };
+XVA.wifiBig = function(v) { XV.wbig = v === "1"; renderXV(); };
+
+// ---------- fun ----------
+function scramble(w, seed) {
+    var a = String(w).toUpperCase().split(""), s = seed || 7, i;
+    for (i = a.length - 1; i > 0; i--) { s = (s * 9301 + 49297) % 233280; var j = Math.floor(s / 233280 * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; }
+    var out = a.join(""); return out === String(w).toUpperCase() && a.length > 1 ? out.substring(1) + out.charAt(0) : out;
+}
+var __triv101 = XVA.triv;
+XVA.triv = function(v) {
+    if (XV.ans === undefined) {
+        var T = P101.tr || { r: 0, n: 0, s: 0, b: 0 }; T.n++;
+        if (v === "1") { T.r++; T.s++; T.b = Math.max(T.b, T.s); } else T.s = 0;
+        P101.tr = T; save101();
+    }
+    __triv101(v);
+};
+XVA.wordReveal = function() { P101.wrev = todayKey(); save101(); renderXV(); };
+XVA.gamePush = function() { var c = cfgJSON("fun"); c.gamepush = !c.gamepush; cfgSave("fun", c); renderXV(); };
+var __xvFun101 = XVR.fun;
+XVR.fun = function(tab) {
+    var h = "";
+    if (tab === 0) { var T = P101.tr; return (T && T.n ? "<div class='xv-owe'>Score <b>" + T.r + "/" + T.n + "</b> &middot; streak " + T.s + " &middot; best " + T.b + "</div>" : "") + __xvFun101(0); }
+    if (tab === 1) {
+        var w = EX && EX.wotd; if (!w) return __xvFun101(1);
+        var shown = P101.wrev === todayKey(), seed = +todayKey().replace(/-/g, "") % 233280;
+        h += "<div class='hv-lbl'>Word of the day &middot; unscramble it</div><div class='fun-q'>" + (shown ? esc(w.w) : esc(scramble(w.w, seed)).split("").join(" ")) + "</div><div class='fun-d'>" + esc(w.d) + "</div>";
+        return h + (shown ? "<div class='hv-hint'>Merriam-Webster word of the day.</div>" : btn("wordReveal", "", "REVEAL THE WORD", "big sel"));
+    }
+    if (tab === 2) {
+        var st = EX && EX.nhlst, on = !!cfgJSON("fun").gamepush;
+        if (st) h += "<div class='xv-owe'>Canucks: <b>" + st.place + ["th", "st", "nd", "rd"][st.place % 10 < 4 && Math.floor(st.place / 10) !== 1 ? st.place % 10 : 0] + "</b> in the " + esc(st.div) + " &middot; " + st.pts + " pts &middot; " + st.w + "-" + st.l + "-" + st.otl + "</div>";
+        h += "<div class='xv-bar'>" + btn("gamePush", "", on ? "GAME REMINDERS: ON" : "GAME REMINDERS: OFF", on ? "sel" : "") + " <span class='hv-hint'>A push an hour before puck drop. Scores refresh every 15 min on game day.</span></div>";
+        return h + __xvFun101(2);
+    }
+    var j = EX && EX.joke, f = EX && EX.fact;
+    if (j) h += "<div class='hv-lbl'>Joke of the day</div><div class='fun-d' style='font-size:1.3em'>" + esc(j) + "</div>";
+    if (f) h += "<div class='hv-lbl' style='margin-top:1em'>Fact of the day</div><div class='fun-d' style='font-size:1.3em'>" + esc(f) + "</div>";
+    return h || "<div class='sv-empty'>The joke and fact of the day arrive with the next cloud run.</div>";
+};
+TILE_RENDER.fun = function(T) {
+    var all = [], w = EX && EX.wotd, t = EX && EX.trivia && EX.trivia[0], g = EX && EX.nhl && EX.nhl[0], h = "<span class='stamp'>Fun</span>";
+    if (w) all.push("<b>" + esc(w.w) + "</b> &mdash; " + esc(String(w.d).substring(0, 90)));
+    if (t) all.push("Q: " + esc(t.q));
+    if (g) all.push("NHL " + esc(g.away) + " @ " + esc(g.home) + (g.state === "OFF" || g.state === "FINAL" || g.state === "LIVE" || g.state === "CRIT" ? " " + (g.as || 0) + "&ndash;" + (g.hs || 0) + (g.state === "LIVE" || g.state === "CRIT" ? " live" : "") : ""));
+    if (EX && EX.joke) all.push(esc(EX.joke));
+    if (EX && EX.fact) all.push(esc(EX.fact));
+    if (!all.length) return tileFill("fun", T, h + "<div class='sv-empty'>Trivia, word of the day and Canucks arrive with the cloud.</div>");
+    var n = T.cls === "s" ? 1 : 2, start = Math.floor(Date.now() / 1800000) % all.length;     // a new pair every half hour
+    for (var i = 0; i < Math.min(n, all.length); i++) h += "<div class='tl-r" + (i ? " tl-s" : "") + "'>" + all[(start + i) % all.length] + "</div>";
+    tileFill("fun", T, h);
+};
+
+// ---------- quick add (apps) ----------
+XVR.add = function() {
+    var A = [["spendAdd", "LOG A PURCHASE"], ["pantryAdd", "FOOD WITH A DATE"], ["leftAdd", "LEFTOVERS"], ["billAdd", "A BILL"], ["pkgAdd", "A PACKAGE"], ["choreAdd", "A CHORE"], ["wishAdd", "WATCH A PRICE"]], h = "<div class='hv-hint'>One place for the things you add most.</div><div class='xr qa'>";
+    for (var i = 0; i < A.length; i++) h += btn(A[i][0], "", A[i][1], "big");
+    return h + "</div>";
+};
+var __appList101 = appList;
+appList = function() {
+    var L = __appList101();
+    for (var i = 0; i < L.length; i++) if (L[i][0] === "fun") { L.splice(i + 1, 0, ["add", "Quick add", "purchase, food, bill, package, chore", function() { openXV("add", 0); }]); break; }
+    return L;
+};
+ICONS.add = "<circle cx='50' cy='50' r='40' fill='none' stroke='%c' stroke-width='8'/><path d='M50 28 V72 M28 50 H72' fill='none' stroke='%c' stroke-width='10' stroke-linecap='round'/>";
+IC_LABEL.add = "ADD";
+
+// ---------- front page: one money line ----------
+var __front101 = renderFront;
+renderFront = function() {
+    __front101();
+    var el = $("front"); if (!el || el.style.display !== "block") return;
+    var side = $("fp-side"); if (!side) return;
+    var M = moneyNow(); if (!M.total) return;
+    var d = document.createElement("div"); d.className = "fp-sec";
+    d.innerHTML = "<div class='fp-li'><b>Money</b> " + $m(M.total) + " spent in " + MON3[+M.month.substring(5, 7) - 1] + (hasP2() && M.owe ? " &middot; " + (M.owe > 0 ? esc(pName("p2")) + " owes " + $m(M.owe) : "you owe " + $m(-M.owe)) : "") + "</div>";
+    side.appendChild(d); fitText(side, 9, FS * 1.3);
+};
+var __itemsUI101 = renderItemsUI;
+renderItemsUI = function() { __itemsUI101(); renderTileById("fun"); };
+
+// =====================  10.1.2: FIXES  =====================
+// cloud data can arrive with fields missing (a store with no name, a team with no record); make every field safe to print
+function cleanEX(x) {
+    if (!x || typeof x !== "object") return null;
+    function arr(a) { return a instanceof Array ? a : []; }
+    function num(v) { v = +v; return isFinite(v) ? v : 0; }
+    function str(v) { return v === null || v === undefined ? "" : String(v); }
+    x.wish = arr(x.wish).filter(function(w) { return w && w.id; });
+    for (var i = 0; i < x.wish.length; i++) { var w = x.wish[i]; w.name = str(w.name); w.title = str(w.title); w.price = num(w.price); w.reg = num(w.reg); w.low = num(w.low) || w.price; w.target = num(w.target); w.hist = arr(w.hist).map(num); w.ends = str(w.ends); }
+    x.flyers = arr(x.flyers).filter(function(f) { return f && f.best && num(f.best.price) > 0; });
+    for (i = 0; i < x.flyers.length; i++) { var b = x.flyers[i].best; x.flyers[i].name = str(x.flyers[i].name); b.store = str(b.store); b.item = str(b.item); b.price = num(b.price); b.was = num(b.was); b.unit = str(b.unit); b.story = str(b.story); b.to = str(b.to); x.flyers[i].more = arr(x.flyers[i].more).filter(function(m) { return m && num(m.price) > 0; }); }
+    x.hot = arr(x.hot).filter(function(h) { return h && str(h.t).replace(/\s/g, ""); });
+    for (i = 0; i < x.hot.length; i++) { x.hot[i].t = str(x.hot[i].t); x.hot[i].score = num(x.hot[i].score); x.hot[i].store = str(x.hot[i].store); x.hot[i].price = str(x.hot[i].price); }
+    x.trivia = arr(x.trivia).filter(function(q) { return q && q.q && q.a; });
+    for (i = 0; i < x.trivia.length; i++) x.trivia[i].wrong = arr(x.trivia[i].wrong);
+    if (!x.wotd || !str(x.wotd.w)) x.wotd = null; else x.wotd.d = str(x.wotd.d);
+    x.nhl = arr(x.nhl).filter(function(g) { return g && g.start && !isNaN(Date.parse(g.start)) && g.home && g.away; });
+    if (x.nhlst && typeof x.nhlst === "object" && num(x.nhlst.place) > 0) { var s = x.nhlst; s.div = str(s.div); s.place = num(s.place); s.pts = num(s.pts); s.w = num(s.w); s.l = num(s.l); s.otl = num(s.otl); } else x.nhlst = null;
+    x.ideas = arr(x.ideas).filter(function(d) { return d && d.for && arr(d.meals).length; });
+    for (i = 0; i < x.ideas.length; i++) x.ideas[i].meals = arr(x.ideas[i].meals).filter(function(m) { return m && m.n; });
+    x.ideas = x.ideas.filter(function(d) { return d.meals.length; });
+    x.joke = str(x.joke); x.fact = str(x.fact);
+    if (x.flyerSum && typeof x.flyerSum === "object") { x.flyerSum.save = num(x.flyerSum.save); x.flyerSum.store = str(x.flyerSum.store); x.flyerSum.n = num(x.flyerSum.n); } else x.flyerSum = null;
+    return x;
+}
+
+// a new day: everything that says "today/tomorrow/this week" redraws (it used to wait for the next sync)
+var __clock1012 = updateClock, DAY1012 = todayKey();
+updateClock = function(force) {
+    __clock1012(force);
+    var k = todayKey();
+    if (k === DAY1012) return;
+    DAY1012 = k;
+    try { calItemsChanged.sig = null; calItemsChanged(); } catch (e) {}
+    renderAllTiles();
+    if (currentView === "xv" && $("xv").style.display === "block") renderXV();
+    if ($("front") && $("front").style.display === "block") renderFront();
+};
+
+// one shift parser everywhere: the hub's hours now match the pay page, the phone and the cloud calendar
+parseShift = function(v) { var sp = HubCal.shiftSpan(v); return sp ? { start: sp.s % 1440, dur: (sp.e - sp.s) / 60 } : null; };
+
+function wxValid(r) {
+    function arr(a) { return a instanceof Array && a.length > 0; }
+    return !!(r && r.current && typeof r.current.temperature_2m === "number" && r.hourly && arr(r.hourly.time) && arr(r.hourly.temperature_2m) && r.daily && arr(r.daily.time) && arr(r.daily.temperature_2m_max));
+}
+
+// paged lists: a FRIDGE / FREEZER / Recent heading whose rows all moved to another page is hidden too
+var __renderXV1012 = renderXV;
+renderXV = function() {
+    __renderXV1012();
+    var b = $("xv-body"); if (!b) return;
+    var kids = b.childNodes, lbl = null, seen = false, i;
+    function close() { if (lbl && !seen) lbl.style.display = "none"; }
+    for (i = 0; i < kids.length; i++) {
+        var el = kids[i]; if (el.nodeType !== 1) continue;
+        if (/(^| )hv-lbl( |$)/.test(el.className)) { close(); lbl = el; seen = false; }
+        else if (el.style.display !== "none") seen = true;          // a visible row, chart or note under the heading
+    }
+    close();
+};
+
+// on-screen keyboard: a case key (Aa / abc / ABC) and a symbols page, so Wi-Fi passwords and the like can be typed exactly
+// (it could only do sentence case and , . - ' before: a password like "HomeNet#24!" came out as "Homenet24")
+var KB_ABC = ["1234567890", "QWERTYUIOP", "ASDFGHJKL'", "ZXCVBNM,.-"], KB_SYM = ["1234567890", "!@#$%&*()?", "/:;_+=~^\"'", "<>[]{}|\\`,"];
+KB.cs = 0; KB.sym = 0;
+var __kbOpen1012 = kbOpen;
+kbOpen = function(title, initial, cb, sugg) { KB.cs = 0; KB.sym = 0; kbBuild(); __kbOpen1012(title, initial, cb, sugg); };
+kbBuild = function() {
+    var rows = KB.sym ? KB_SYM : KB_ABC, h = "", r, i;
+    for (r = 0; r < rows.length; r++) {
+        h += "<div class='kb-row'>";
+        for (i = 0; i < rows[r].length; i++) { var c = rows[r].charAt(i), show = !KB.sym && /[A-Z]/.test(c) && KB.cs === 1 ? c.toLowerCase() : c; h += "<span class='kb-k' data-k='" + esc(c) + "'>" + esc(show) + "</span>"; }
+        h += "</div>";
+    }
+    h += "<div class='kb-row'><span class='kb-k' data-k='SYM'>" + (KB.sym ? "ABC" : "#+=") + "</span><span class='kb-k" + (KB.cs ? " sel" : "") + "' data-k='CASE'>" + ["Aa", "abc", "ABC"][KB.cs] + "</span><span class='kb-k' data-k='CLR'>CLR</span><span class='kb-k kb-sp' data-k='SP'>SPACE</span><span class='kb-k kb-w' data-k='BK'>&#9003; DEL</span></div>";
+    $("kb-rows").innerHTML = h;
+    var ks = $("kb-rows").getElementsByClassName("kb-k");
+    for (i = 0; i < ks.length; i++) (function(el) { quickTap(el, function() { kbKey(el.getAttribute("data-k")); }); })(ks[i]);
+    if ($("kb").style.display === "block") layoutItems();
+};
+var __kbKey1012 = kbKey;
+kbKey = function(k) {
+    if (k === "SYM") { KB.sym = KB.sym ? 0 : 1; kbBuild(); return; }
+    if (k === "CASE") { KB.cs = (KB.cs + 1) % 3; kbBuild(); return; }
+    if (k.length === 1 && /[A-Z]/.test(k) && KB.cs) { KB.val += KB.cs === 2 ? k : k.toLowerCase(); kbDraw(); return; }
+    if (k.length === 1 && !/[A-Za-z]/.test(k)) { KB.val += k; kbDraw(); return; }
+    __kbKey1012(k);
+};
+kbBuild();
+var __layoutItems1012 = layoutItems;
+layoutItems = function() {
+    __layoutItems1012.apply(this, arguments);
+    var ks = $("kb-rows") ? $("kb-rows").getElementsByClassName("kb-k") : [];
+    for (var i = 0; i < ks.length; i++) { var k = ks[i].getAttribute("data-k"); if (k === "SYM" || k === "CASE" || k === "CLR") ks[i].style.fontSize = Math.round(ks[i].offsetWidth * 0.3) + "px"; }
+};
+
+// =====================  10.2: AUTO-UPDATE + ROLLBACK, WEB READER  =====================
+// ---------- the page tells the loop it started fine (keeps a fresh update; silence = automatic rollback) ----------
+setTimeout(function() { sendPower("health=" + encodeURIComponent(VERSION)); }, 20000);
+(function() {      // and again on every wake while an update is on probation
+    var last = 0;
+    setInterval(function() { var S = window.HUB_STATE || {}; if (S.updPending && new Date().getTime() - last > 60000) { last = new Date().getTime(); sendPower("health=" + encodeURIComponent(VERSION)); } }, 15000);
+})();
+
+// ---------- Settings > Phone: update center ----------
+var __ghPane102 = gitHubPane;
+gitHubPane = function() {
+    __ghPane102();
+    var box = $("ph-gh"), S = window.HUB_STATE || {};
+    if (!box || !$("gh-msg")) return;
+    var d = document.createElement("div");
+    d.innerHTML = "<div style='margin:.4em 0'><span class='hv-lbl' style='margin-right:.5em'>Updates</span><span id='opt-autoupd'></span></div>" +
+        "<div class='hv-hint'>&ldquo;At night&rdquo; installs new versions from your GitHub site after 2 am. If a new version doesn't start properly it is undone by itself, and that version is skipped from then on.</div>" +
+        "<div style='margin:.3em 0'><span class='opt-btn' id='gh-rb'>GO BACK TO THE PREVIOUS VERSION</span> <span class='opt-btn' id='gh-new'>WHAT'S NEW</span></div>";
+    $("gh-msg").parentNode.insertBefore(d, $("gh-msg").nextSibling);
+    chipRow("opt-autoupd", [0, 1, 2], ["Only when I tap", "Tell me", "At night"], S.autoUpd === undefined ? 2 : +S.autoUpd, function(v) { S.autoUpd = v; sendPower("autoupd=" + v); });
+    bindTap($("gh-rb"), function() {
+        var el = $("gh-rb");
+        if (!el.__sure) { el.__sure = 1; el.innerHTML = "SURE? TAP AGAIN TO GO BACK"; return; }
+        sendPower("job=update-rollback"); $("gh-msg").innerHTML = "Going back to the previous version&hellip; the hub restarts by itself.";
+    });
+    bindTap($("gh-new"), function() { closeHub(); openXV("news102", 0); });
+};
+var __updText102 = updText;
+updText = function() {
+    var u = UPD;
+    if (u && u.state === "rolledback") return "<b>Went back to " + esc(u.nv) + "</b> &mdash; " + esc(u.msg) + ". That version won't be installed again by itself.";
+    if (u && u.state === "installed" && /running fine/.test(u.msg || "")) return "Up to date: <b>" + esc(u.nv) + "</b> is running fine.";
+    return __updText102();
+};
+// what's new: the notes for this version ship as whatsnew.js; shown once after an update
+XV_TABS.news102 = ["WHAT'S NEW"]; XV_TITLE.news102 = "WHAT'S NEW";
+XVR.news102 = function() {
+    var w = window.HUB_WHATSNEW;
+    if (!w || !w.lines) return "<div class='sv-empty'>The notes for this version aren't here.</div>";
+    var h = "<div class='hv-hint'>Version " + esc(w.v) + "</div>";
+    for (var i = 0; i < w.lines.length; i++) { var L = w.lines[i]; h += /^[A-Z][A-Z0-9 +&\/,.'-]{3,}$/.test(L) ? "<div class='hv-lbl' style='margin-top:.5em'>" + esc(L) + "</div>" : "<div class='xr'><div class='xr-s'>" + esc(L) + "</div></div>"; }
+    return h;
+};
+loadScript("whatsnew.js", function(ok) {
+    var w = window.HUB_WHATSNEW, seen = "";
+    try { seen = window.localStorage.getItem("pg_seen_ver") || ""; } catch (e) {}
+    if (ok && w && w.v === VERSION && seen && seen !== VERSION) setTimeout(function() { if (currentView === "main" && !EDIT) openXV("news102", 0); }, 4000);
+    try { window.localStorage.setItem("pg_seen_ver", VERSION); } catch (e) {}
+});
+
+// =====================  WEB READER  =====================
+// The Kindle fetches the page (web_fetch.sh); here it becomes plain text with numbered links. The site's own
+// scripts never run and its pictures never load, so even heavy sites read fine on e-ink.
+var WEB = { cur: null, back: [], want: "", wantAt: 0, err: "" };
+var WEB_SAVED_DEFAULT = [["text.npr.org", "NPR (text only)"], ["lite.cnn.com", "CNN Lite"], ["https://www.cbc.ca/lite/news", "CBC Lite"], ["en.m.wikipedia.org", "Wikipedia"],
+                         ["https://weather.gc.ca/en/location/index.html?coords=53.913,-122.749", "Prince George weather (Env. Canada)"], ["news.ycombinator.com", "Hacker News"]];
+function webStore() { var o = {}; try { o = JSON.parse(window.localStorage.getItem("pg_web") || "{}") || {}; } catch (e) {} o.saved = o.saved || WEB_SAVED_DEFAULT.slice(); o.hist = o.hist || []; return o; }
+function webSave(o) { try { window.localStorage.setItem("pg_web", JSON.stringify(o)); } catch (e) {} }
+function webAbs(href, base) {
+    href = String(href || "").replace(/^\s+|\s+$/g, "");
+    if (!href || /^(javascript|mailto|tel|data):/i.test(href) || href.charAt(0) === "#") return "";
+    if (/^https?:\/\//i.test(href)) return href;
+    var m = /^(https?:)\/\/([^\/?#]+)([^?#]*)/i.exec(base || ""); if (!m) return "";
+    if (href.substring(0, 2) === "//") return m[1] + href;
+    if (href.charAt(0) === "/") return m[1] + "//" + m[2] + href;
+    var dir = m[3].replace(/[^\/]*$/, "") || "/", p = (dir + href).split("/"), out = [];
+    for (var i = 0; i < p.length; i++) { if (p[i] === "..") out.pop(); else if (p[i] !== ".") out.push(p[i]); }
+    return m[1] + "//" + m[2] + (out.join("/").charAt(0) === "/" ? "" : "/") + out.join("/");
+}
+function webUnwrap(u) {     // search-result redirects -> the real address
+    var m = /[?&]uddg=([^&]+)/.exec(u); if (m) { try { return decodeURIComponent(m[1]); } catch (e) {} }
+    return u;
+}
+function webParse(html, base) {
+    var doc = document.implementation.createHTMLDocument("r"), out = { title: "", blocks: [], links: [], cut: html.length >= 699000 };
+    doc.documentElement.innerHTML = String(html || "").replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "");
+    out.title = (doc.title || "").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
+    var kill = ["script", "style", "noscript", "iframe", "svg", "form", "button", "select", "input", "textarea", "nav", "footer", "aside", "header", "figure", "img", "video", "audio", "canvas"], i, j;
+    for (i = 0; i < kill.length; i++) { var ks = doc.getElementsByTagName(kill[i]); for (j = ks.length - 1; j >= 0; j--) if (ks[j].parentNode) ks[j].parentNode.removeChild(ks[j]); }
+    var root = doc.getElementsByTagName("article")[0] || doc.getElementsByTagName("main")[0] || doc.body;
+    if (!root) return out;
+    var BLOCK = /^(P|DIV|LI|H1|H2|H3|H4|H5|H6|BLOCKQUOTE|PRE|TR|DT|DD|SECTION|TABLE|UL|OL|BR|HR)$/, cur = null;
+    function flush() {
+        if (cur && cur.segs.length) {
+            var t = "", k, part = { h: cur.h, segs: [] }, n = 0;
+            for (k = 0; k < cur.segs.length; k++) t += cur.segs[k].t;
+            if (t.replace(/\s/g, "").length) {
+                // a very long paragraph becomes several, so a page of the reader never has to cut one off
+                for (k = 0; k < cur.segs.length; k++) {
+                    var sg = cur.segs[k], pieces = !sg.l && sg.t.length > 500 ? sg.t.match(/[^.!?]+[.!?]*\s*/g) || [sg.t] : [sg.t];
+                    for (var q = 0; q < pieces.length; q++) {
+                        if (n > 450 && part.segs.length) { out.blocks.push(part); part = { h: 0, segs: [] }; n = 0; }
+                        part.segs.push(sg.l ? { t: pieces[q], l: sg.l } : { t: pieces[q] }); n += pieces[q].length;
+                    }
+                }
+                if (part.segs.length) out.blocks.push(part);
+            }
+        }
+        cur = null;
+    }
+    function add(t, link) {
+        t = t.replace(/\s+/g, " "); if (!t) return;
+        if (!cur) cur = { h: 0, segs: [] };
+        if (!cur.segs.length) t = t.replace(/^\s+/, "");
+        if (t) cur.segs.push(link ? { t: t, l: link } : { t: t });
+    }
+    function walk(n, inLink) {
+        if (out.blocks.length > 900) return;
+        if (n.nodeType === 3) { add(n.nodeValue, inLink); return; }
+        if (n.nodeType !== 1) return;
+        var tag = n.tagName.toUpperCase(), isBlock = BLOCK.test(tag), link = inLink;
+        if (isBlock) { flush(); if (/^H[1-4]$/.test(tag)) cur = { h: +tag.charAt(1), segs: [] }; }
+        if (tag === "A" && !inLink) {
+            var u = webUnwrap(webAbs(n.getAttribute("href"), base));
+            if (u) { out.links.push(u); link = out.links.length; }
+        }
+        for (var c = n.firstChild; c; c = c.nextSibling) walk(c, link);
+        if (isBlock) flush();
+    }
+    walk(root, 0); flush();
+    return out;
+}
+function webLooksUrl(t) { return !/\s/.test(t) && /\.[a-z]{2,}(\/|$|\?|:)/i.test(t); }
+function webGo(u, noBack) {
+    u = String(u || "").replace(/^\s+|\s+$/g, ""); if (!u) return;
+    if (!/^(q:|https?:\/\/)/i.test(u)) u = webLooksUrl(u) ? "https://" + u : "q:" + u;
+    if (WEB.cur && !noBack) WEB.back.push(WEB.cur.url);
+    if (WEB.back.length > 30) WEB.back.shift();
+    var id = "w" + new Date().getTime().toString(36);
+    WEB.want = id; WEB.wantAt = new Date().getTime(); WEB.err = ""; WEB.asked = u;
+    sendPower("web=" + encodeURIComponent(u) + "&wid=" + id);
+    if (currentView !== "xv" || XV.mode !== "web") openXV("web", 0); else { XV.tab = 0; XV.page = 0; renderXV(); }
+    webPoll(id, 0);
+}
+function webPoll(id, n) {
+    if (WEB.want !== id) return;
+    loadScript("web.js", function(ok) {
+        if (WEB.want !== id) return;
+        var w = window.HUB_WEB;
+        if (ok && w && w.id === id) {
+            WEB.want = "";
+            if (w.err && !w.html) { WEB.err = w.err; }
+            else {
+                var p = webParse(w.html, w.final || w.url);
+                WEB.cur = { url: w.final || w.url, asked: WEB.asked, title: p.title || (w.final || w.url), blocks: p.blocks, links: p.links, cut: p.cut, code: w.code };
+                if (!/^q:/.test(WEB.asked)) { var o = webStore(); o.hist.unshift([WEB.cur.url, WEB.cur.title.substring(0, 80), todayKey()]); o.hist = o.hist.slice(0, 40); webSave(o); }
+                window.HUB_WEB = null;      // the page text can be large: let it go
+            }
+            XV.page = 0; if (currentView === "xv" && XV.mode === "web") renderXV();
+            return;
+        }
+        if (n < 25) setTimeout(function() { webPoll(id, n + 1); }, 3000);
+        else { WEB.want = ""; WEB.err = "The page didn't arrive (the hub may have gone to sleep). Try again."; if (currentView === "xv" && XV.mode === "web") renderXV(); }
+    });
+}
+XV_TABS.web = ["PAGE", "SAVED", "HISTORY"]; XV_TITLE.web = "WEB";
+XVR.web = function(tab) {
+    var h = "<div class='xv-bar'>" + btn("webAsk", "", "GO TO / SEARCH&hellip;", "big sel") + " " + (WEB.back.length ? btn("webBack", "", "&lsaquo; BACK") : "") + (WEB.cur ? btn("webReload", "", "RELOAD") + btn("webSaveCur", "", "&#9733; SAVE") : "") + btn("webKindle", "", "KINDLE BROWSER") + "</div>", i, o = webStore();
+    if (tab === 1) {
+        for (i = 0; i < o.saved.length; i++) h += "<div class='xr'><div class='xr-t'>" + btn("webOpen", o.saved[i][0], esc(o.saved[i][1])) + " " + btn("webUnsave", String(i), "&times;") + "</div><div class='xr-s'>" + esc(o.saved[i][0]) + "</div></div>";
+        return h;
+    }
+    if (tab === 2) {
+        if (!o.hist.length) h += "<div class='sv-empty'>Pages you open show up here.</div>";
+        for (i = 0; i < o.hist.length; i++) h += "<div class='xr'><div class='xr-t'>" + btn("webOpen", o.hist[i][0], esc(o.hist[i][1] || o.hist[i][0])) + "</div><div class='xr-s'>" + esc(o.hist[i][2] || "") + " &middot; " + esc(String(o.hist[i][0]).replace(/^https?:\/\//, "").substring(0, 60)) + "</div></div>";
+        if (o.hist.length) h += "<div class='xr'>" + btn("webClearHist", "", "CLEAR HISTORY") + "</div>";
+        return h;
+    }
+    if (WEB.want) return h + "<div class='sv-empty'>Getting " + esc(/^q:/.test(WEB.asked) ? "results for \u201c" + WEB.asked.substring(2) + "\u201d" : WEB.asked.replace(/^https?:\/\//, "")) + "&hellip;<br>(Wi-Fi turns on for a moment; about 10-20 seconds.)</div>";
+    if (WEB.err) h += "<div class='sv-empty'>" + esc(WEB.err) + "</div>";
+    var c = WEB.cur;
+    if (!c) return h + "<div class='sv-empty'>Type a web address or some search words. Pages show as clean text: tap a <u>link [3]</u> to follow it. SAVED has a few sites that read well on e-ink.</div>";
+    h += "<div class='hv-lbl'>" + esc(c.title.substring(0, 120)) + "</div><div class='hv-hint'>" + esc(c.url.replace(/^https?:\/\//, "").substring(0, 90)) + (c.cut ? " &middot; long page, the end was cut" : "") + "</div>";
+    if (!c.blocks.length) h += "<div class='sv-empty'>This page has no readable text (it may need its own scripts to show anything). Try KINDLE BROWSER.</div>";
+    for (i = 0; i < c.blocks.length; i++) {
+        var b = c.blocks[i], t = "";
+        for (var k = 0; k < b.segs.length; k++) { var s = b.segs[k]; t += s.l ? "<span class='wl' data-a='webLink' data-v='" + s.l + "'>" + esc(s.t) + "<sup>" + s.l + "</sup></span>" : esc(s.t); }
+        h += "<div class='xr web-b" + (b.h ? " web-h" + b.h : "") + "'>" + t + "</div>";
+    }
+    return h;
+};
+XVA.webAsk = function() { kbOpen("Web address or search words", "", function(t) { if (t) webGo(t); else renderXV(); }); };
+XVA.webOpen = function(u) { webGo(u); };
+XVA.webLink = function(n) { var u = WEB.cur && WEB.cur.links[+n - 1]; if (u) webGo(u); };
+XVA.webBack = function() { var u = WEB.back.pop(); if (u) webGo(u, true); };
+XVA.webReload = function() { if (WEB.cur) webGo(WEB.cur.url, true); };
+XVA.webSaveCur = function() { var o = webStore(); if (WEB.cur) { o.saved.unshift([WEB.cur.url, WEB.cur.title.substring(0, 60)]); o.saved = o.saved.slice(0, 30); webSave(o); XV.tab = 1; renderXV(); } };
+XVA.webUnsave = function(i) { var o = webStore(); o.saved.splice(+i, 1); webSave(o); renderXV(); };
+XVA.webClearHist = function() { var o = webStore(); o.hist = []; webSave(o); renderXV(); };
+XVA.webKindle = function() { sendPower("kbrowser=1"); };
+
+// apps + the phone/PC can send a page to the fridge ("web|https://...")
+var __appList102 = appList;
+appList = function() {
+    var L = __appList102();
+    for (var i = 0; i < L.length; i++) if (L[i][0] === "add") { L.splice(i + 1, 0, ["web", "Web", WEB.cur ? esc(WEB.cur.title.substring(0, 40)) : "read a web page, search", function() { openXV("web", 0); }]); break; }
+    return L;
+};
+ICONS.web = "<circle cx='50' cy='50' r='40' fill='none' stroke='%c' stroke-width='7'/><path d='M10 50 H90 M50 10 Q24 50 50 90 M50 10 Q76 50 50 90' fill='none' stroke='%c' stroke-width='6'/>";
+IC_LABEL.web = "WEB";
+var __runCmd102 = runCommands;
+runCommands = function() {
+    var cs = itemsOf("cmd");
+    for (var i = 0; i < cs.length; i++) {
+        var c = cs[i];
+        if (c.state !== "open" || !c.text || CMD_DONE[c.id] || c.text.split("|")[0] !== "web") continue;
+        CMD_DONE[c.id] = 1;
+        var u = c.text.substring(4);
+        itemEdit(c.id, "cmd", "done", c.text + "|ok");
+        if (/^(q:|https?:\/\/)/i.test(u)) webGo(u);
+    }
+    __runCmd102();
+};
+
+// web reader: send the page you're reading to your phone (a push with the link)
+var __xvWeb102 = XVR.web;
+XVR.web = function(tab) {
+    var h = __xvWeb102(tab);
+    if (tab === 0 && WEB.cur && !WEB.want && window.HUB_CLOUD && window.HUB_CLOUD.ntfy) h = h.replace(btn("webKindle", "", "KINDLE BROWSER"), btn("webPhone", "", "SEND TO PHONE") + btn("webKindle", "", "KINDLE BROWSER"));
+    return h;
+};
+XVA.webPhone = function() { if (WEB.cur) { sendPower("notify=" + encodeURIComponent(WEB.cur.title.substring(0, 80) + " " + WEB.cur.url)); var b = document.querySelector("#xv-body [data-a=webPhone]"); if (b) b.innerHTML = "SENT &#10003;"; } };
+
+// the bulletin strip mentions a waiting update when you chose "Tell me"
+var __bull102 = bulletinItem;
+bulletinItem = function() {
+    var S = window.HUB_STATE || {};
+    if (!TIMER.done && UPD && UPD.state === "available" && +S.autoUpd === 1 && !openNote()) return { t: "UPDATE " + UPD.nv + " IS READY  —  tap to install", a: function() { sendPower("job=update-install"); UPD.state = "downloading"; checkBulletin(); } };
+    return __bull102();
+};
+
+// =====================  10.3: BOOK CLOUD, SAVE PAGES TO THE LIBRARY  =====================
+// Your books live in your private book cloud (a secret gist). Each one is a "book" line in the list:
+// title|author|ext|size|want|src|added|conv. "want = kindle" ones are downloaded into the Kindle's library
+// ("Kitchen Hub" collection folder) by the loop at the next sync; "cloud" ones are only kept online.
+var BOOKS_ST = null, BOOKS_SIG = "";
+function bookName(b) {
+    var t = (b.title || "Untitled").replace(/[^A-Za-z0-9 ._()'-]/g, "").replace(/\s+/g, " ").replace(/^[\s.]+|\s+$/g, "").substring(0, 70) || "Book";
+    var a = (b.author || "").replace(/[^A-Za-z0-9 .'-]/g, "").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "").substring(0, 30);
+    return (a ? t + " - " + a : t).replace(/'/g, "") + "." + (/^(azw3|azw|mobi|pdf|txt|epub|prc|kfx)$/.test(b.ext) ? b.ext : "pdf");
+}
+function booksSync(force) {          // tell the loop which books belong on the Kindle (only when that changed)
+    var bs = recs("book"), lines = [];
+    for (var i = 0; i < bs.length; i++) if (bs[i].want === "kindle" && /^[A-Za-z0-9]+$/.test(bs[i].id)) lines.push(bs[i].id + "\t" + bookName(bs[i]));
+    var sig = lines.join("\n");
+    if (!force && sig === BOOKS_SIG) return;
+    BOOKS_SIG = sig;
+    sendPower("books=" + encodeURIComponent(sig || "-\t-"));
+}
+function booksLoad(cb) { loadScript("books.js", function(ok) { if (ok && window.HUB_BOOKS) BOOKS_ST = window.HUB_BOOKS; if (cb) cb(); }); }
+var __itemsUI103 = renderItemsUI;
+renderItemsUI = function() { __itemsUI103(); try { booksSync(false); } catch (e) {} };
+setTimeout(function() { try { booksSync(true); } catch (e) {} }, 8000);
+function fmtSize(n) { n = +n || 0; return n >= 1048576 ? (Math.round(n / 104857.6) / 10) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB"; }
+
+XV_TABS.books = ["MY BOOKS", "FREE BOOKS"]; XV_TITLE.books = "BOOKS";
+var FREEB = { q: "", res: null, want: "", err: "" };
+XVR.books = function(tab) {
+    var h = "", i, st = BOOKS_ST || { have: [], fail: {} }, have = {};
+    for (i = 0; i < (st.have || []).length; i++) have[st.have[i]] = 1;
+    if (tab === 1) {
+        h += "<div class='xv-bar'>" + btn("bookSearch", "", "SEARCH PROJECT GUTENBERG&hellip;", "big sel") + " <span class='hv-hint'>70,000 free classics. ADD sends one to your book cloud; it's on the Kindle after the next sync or two.</span></div>";
+        if (FREEB.want) return h + "<div class='sv-empty'>Searching for &ldquo;" + esc(FREEB.q) + "&rdquo;&hellip;</div>";
+        if (FREEB.err) h += "<div class='sv-empty'>" + esc(FREEB.err) + "</div>";
+        var reqd = {}, rq = itemsOf("req");
+        for (i = 0; i < rq.length; i++) { var m = /^book\|gut\|(\d+)/.exec(rq[i].text || ""); if (m) reqd[m[1]] = rq[i].state === "open" ? "asked" : /\|ok\|/.test(rq[i].text) ? "done" : "fail"; }
+        var res = FREEB.res || [];
+        if (!FREEB.res && !FREEB.err) h += "<div class='sv-empty'>Try &ldquo;Austen&rdquo;, &ldquo;Sherlock Holmes&rdquo;, &ldquo;Jack London&rdquo;&hellip;</div>";
+        else if (!res.length && !FREEB.err) h += "<div class='sv-empty'>Nothing found.</div>";
+        for (i = 0; i < res.length; i++) {
+            var r = res[i], on = reqd[r.id] || (recs("book").filter(function(b) { return b.id === "g" + r.id; }).length ? "done" : "");
+            h += "<div class='xr'><div class='xr-t'>" + esc(r.title) + "</div><div class='xr-s'>" + esc(r.author) + (r.dl ? " &middot; " + r.dl + " downloads" : "") + " " +
+                 (on === "done" ? "<b class='tag o'>ON YOUR SHELF</b>" : on === "asked" ? "<b class='tag o'>ASKED - THE CLOUD FETCHES IT</b>" : btn("bookAdd", r.id + "|" + r.title.substring(0, 60), "+ ADD")) + "</div></div>";
+        }
+        return h;
+    }
+    var bs = recs("book").sort(function(a, b) { return (b.added || "") < (a.added || "") ? -1 : 1; }), onK = 0, size = 0;
+    for (i = 0; i < bs.length; i++) if (bs[i].want === "kindle") { onK++; if (have[bs[i].id]) size += bs[i].size; }
+    h += "<div class='hv-hint'>" + plural(bs.length, "book") + " in your cloud &middot; " + onK + " on this Kindle" + (st.free ? " &middot; " + fmtSize(st.free * 1024) + " free here" : "") + ". Add your own books from the phone app (BOOKS tab).</div>";
+    if (!bs.length) h += "<div class='sv-empty'>Your book cloud is empty. Upload EPUB, PDF, MOBI or AZW3 files you own from the phone app, or add free classics on the FREE BOOKS tab.</div>";
+    for (i = 0; i < bs.length; i++) {
+        var b = bs[i], s;
+        if (b.want !== "kindle") s = "<b class='tag o'>IN THE CLOUD</b>";
+        else if (have[b.id]) s = "<b class='tag'>&#10003; ON THE KINDLE</b>";
+        else if (st.fail && st.fail[b.id]) s = "<b class='tag o'>" + esc(String(st.fail[b.id]).toUpperCase()) + "</b>";
+        else s = "<b class='tag o'>DOWNLOADS AT THE NEXT SYNC</b>";
+        h += "<div class='xr'><div class='xr-t'>" + esc(b.title || "Untitled") + (b.author ? " <span class='hv-hint'>" + esc(b.author) + "</span>" : "") + " " + s + "</div>" +
+             "<div class='xr-s'>" + esc(String(b.ext).toUpperCase()) + " &middot; " + fmtSize(b.size) + (b.conv === "epub" ? " &middot; converted from EPUB" : b.conv === "fail" && b.ext === "epub" ? " &middot; EPUB (needs KOReader to read)" : "") + (b.src === "gutenberg" ? " &middot; Project Gutenberg" : "") + " " +
+             (b.want === "kindle" ? btn("bookWant", b.id + "|cloud", "MOVE TO CLOUD ONLY") : btn("bookWant", b.id + "|kindle", "PUT ON THE KINDLE")) + btn("bookDel", b.id, "DELETE") + "</div></div>";
+    }
+    return h;
+};
+XVA.bookWant = function(v) {
+    var p = v.split("|"), b = recs("book").filter(function(x) { return x.id === p[0]; })[0]; if (!b) return;
+    b.want = p[1] === "kindle" ? "kindle" : "cloud";
+    itemEdit(b.id, "book", "open", HubCal.recText("book", b)); booksSync(false); renderXV();
+};
+XVA.bookDel = function(id, el) {
+    if (el && !el.__sure) { el.__sure = 1; el.innerHTML = "SURE? TAP AGAIN"; return; }
+    var its = itemsOf("book"); for (var i = 0; i < its.length; i++) if (its[i].id === id) itemEdit(id, "book", "del", its[i].text);
+    booksSync(false); renderXV();
+};
+XVA.bookAdd = function(v) { var p = v.split("|"); itemEdit(newId(), "req", "open", "book|gut|" + p[0].replace(/\D/g, "") + "|" + (p[1] || "").replace(/\|/g, "/")); renderXV(); };
+XVA.bookSearch = function() {
+    kbOpen("Search free books (title or author)", FREEB.q, function(t) {
+        if (!t) return renderXV();
+        FREEB.q = t; FREEB.res = null; FREEB.err = "";
+        rawFetch("https://gutendex.com/books/?search=" + encodeURIComponent(t), function(html, err) {
+            FREEB.want = "";
+            var j = null; try { j = JSON.parse(html); } catch (e) {}
+            if (!j || !(j.results instanceof Array)) FREEB.err = err || "Project Gutenberg's search didn't answer. Try again in a bit.";
+            else FREEB.res = j.results.slice(0, 32).map(function(r) { var a = r.authors && r.authors[0] ? String(r.authors[0].name || "") : ""; return { id: String(r.id), title: String(r.title || "").substring(0, 120), author: a.replace(/^([^,]+), (.+)$/, "$2 $1"), dl: r.download_count || 0 }; });
+            if (currentView === "xv" && XV.mode === "books") renderXV();
+        });
+        FREEB.want = "1"; renderXV();
+    });
+};
+// one raw download through the loop (the web reader's pipe), for things that aren't pages: JSON from an API
+function rawFetch(url, cb) {
+    var id = "r" + new Date().getTime().toString(36), n = 0;
+    sendPower("web=" + encodeURIComponent(url) + "&wid=" + id);
+    (function poll() {
+        loadScript("web.js", function(ok) {
+            var w = window.HUB_WEB;
+            if (ok && w && w.id === id) { window.HUB_WEB = null; return cb(w.html || "", w.err || ""); }
+            if (++n < 25) setTimeout(poll, 3000); else cb("", "No answer (the hub may have gone to sleep).");
+        });
+    })();
+}
+var __openXV103 = openXV;
+openXV = function(mode, tab) { __openXV103(mode, tab); if (mode === "books") booksLoad(function() { if (currentView === "xv" && XV.mode === "books") renderXV(); }); };
+
+// apps + icon
+var __appList103 = appList;
+appList = function() {
+    var L = __appList103(), bs = recs("book"), k = 0;
+    for (var j = 0; j < bs.length; j++) if (bs[j].want === "kindle") k++;
+    for (var i = 0; i < L.length; i++) if (L[i][0] === "web") { L.splice(i + 1, 0, ["books", "Books", bs.length ? plural(bs.length, "book") + " in your cloud &middot; " + k + " here" : "your book cloud, free classics", function() { openXV("books", 0); }]); break; }
+    return L;
+};
+ICONS.books = "<rect x='14' y='14' width='22' height='72' fill='none' stroke='%c' stroke-width='7'/><rect x='40' y='14' width='22' height='72' fill='none' stroke='%c' stroke-width='7'/><path d='M68 20 L86 16 L94 82 L76 86 Z' fill='none' stroke='%c' stroke-width='7' stroke-linejoin='round'/>";
+IC_LABEL.books = "BOOKS";
+
+// web reader: keep the page you're reading in the Kindle library (as text)
+var __xvWeb103 = XVR.web;
+XVR.web = function(tab) {
+    var h = __xvWeb103(tab);
+    if (tab === 0 && WEB.cur && !WEB.want) h = h.replace(btn("webKindle", "", "KINDLE BROWSER"), btn("webKeep", "", "SAVE TO LIBRARY") + btn("webKindle", "", "KINDLE BROWSER"));
+    return h;
+};
+XVA.webKeep = function() {
+    if (!WEB.cur) return;
+    sendPower("savepage=" + encodeURIComponent(WEB.cur.title.replace(/[^A-Za-z0-9 ._()-]/g, "").substring(0, 70) || "Web page"));
+    var b = document.querySelector("#xv-body [data-a=webKeep]"); if (b) b.innerHTML = "SAVED &#10003; (Kitchen Hub / Web pages)";
+};
 
 // =====================  BIND + BOOT  ==================================
 // =====================================================================
@@ -6711,15 +8109,9 @@ bindTap($("hv-exit"), exitHub);
 bindTap($("hv-sync"), function() { closeHub(); hubSync(); });
 bindTap($("hv-edit"), enterEdit);
 bindTap($("hv-logref"), renderLog);
-bindTap($("btn-cancel"), closeShiftModal);
-bindTap($("btn-save"), function() { saveShiftValue($("shift-input").value); });
 (function() {
     var tabs = $("hv-tabs").getElementsByTagName("div");
     for (var i = 0; i < tabs.length; i++) (function(t) { bindTap(t, function() { selectTab(t.getAttribute("data-tab")); }); })(tabs[i]);
-    var ps = document.getElementsByClassName("preset-btn");
-    for (var p = 0; p < ps.length; p++) (function(el) { bindTap(el, function() { saveShiftValue(el.getAttribute("data-val")); }); })(ps[p]);
-    var rs = document.getElementsByClassName("rep-btn");
-    for (var q = 0; q < rs.length; q++) (function(el) { bindTap(el, function() { setRepeat(parseInt(el.getAttribute("data-n"), 10)); }); })(rs[q]);
 })();
 window.onresize = function() { clockFitKey = ""; relayout(); reportViewport(); };
 
@@ -6730,7 +8122,7 @@ try {
     var cachedNews = window.localStorage.getItem("pg_news_v5");
     if (cachedNews) FEED_RESULTS = JSON.parse(cachedNews);
     var cachedWx = window.localStorage.getItem("pg_wx_v6");
-    if (cachedWx) WX = JSON.parse(cachedWx);
+    if (cachedWx) { WX = JSON.parse(cachedWx); if (!wxValid(WX)) WX = null; }
 } catch (e) {}
 applyTitle();
 layout();

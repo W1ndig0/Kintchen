@@ -231,9 +231,14 @@ var HubCal = (function() {
         if (sh > 23 || eh > 24 || sm > 59 || em > 59) return null;
         if (sa === "p" && sh < 12) sh += 12; if (sa === "a" && sh === 12) sh = 0;
         if (ea === "p" && eh < 12) eh += 12; if (ea === "a" && eh === 12) eh = 0;
-        if (!sa && m[1].charAt(0) !== "0" && sh < 7) sh += 12;          // "1-7:15p" starts in the afternoon
+        // 10.1.2: "1-7" / "1-7:15p" start in the afternoon, but "6-2" / "6-2p" / "5-1" are morning shifts (was 6pm-2am / 20 h)
+        if (!sa && m[1].charAt(0) !== "0" && sh < 7) {
+            if (ea === "p") { if ((sh + 12) * 60 + sm < eh * 60 + em) sh += 12; }
+            else if (!ea && (eh > sh || (eh === sh && em > sm))) sh += 12;
+        }
         var s = sh * 60 + sm, e = eh * 60 + em;
         if (!ea && e <= s && eh < 12 && eh + 12 > sh) e += 720;          // "9-5"
+        if (!ea && eh === 12 && e <= s) e = 1440 + em;                   // 10.1.2: "4-12" ends at midnight (was noon the next day)
         if (e <= s) e += 1440;                                            // overnight "22-6"
         return { s: s, e: e };
     }
@@ -258,6 +263,11 @@ var HubCal = (function() {
     function payFor(shifts, fromK, toK, cfg) {
         var rate = +cfg.rate || 0, out = { from: fromK, to: toK, reg: 0, ot15: 0, ot2: 0, hours: 0, gross: 0, days: [] };
         var weekReg = {}, n0 = dayNum(fromK), n1 = dayNum(toK);
+        if (cfg.ot !== 0) for (var pn = n0 - new Date(n0 * 86400000).getUTCDay(); pn < n0; pn++) {   // 10.1.2: a period that starts mid-week still knows the week's earlier hours
+            var pv = shifts[keyN(pn)], psp = pv ? shiftSpan(pv) : null; if (!psp) continue;
+            var ph = (psp.e - psp.s) / 60; if (cfg.brk !== 0 && ph > 5) ph -= 0.5;
+            var pw = pn - new Date(pn * 86400000).getUTCDay(); weekReg[pw] = Math.min(40, (weekReg[pw] || 0) + Math.min(ph, 8));
+        }
         for (var n = n0; n <= n1; n++) {
             var k = keyN(n), v = shifts[k], sp = v ? shiftSpan(v) : null;
             if (!sp) continue;
@@ -267,7 +277,7 @@ var HubCal = (function() {
             if (cfg.ot !== 0) { if (h > 12) { o2 = h - 12; o15 = 4; r = 8; } else if (h > 8) { o15 = h - 8; r = 8; } }
             var wk = n - new Date(n * 86400000).getUTCDay();                  // the Sunday of that week
             if (cfg.ot !== 0) { var before = weekReg[wk] || 0; if (before + r > 40) { var over = before + r - Math.max(40, before); o15 += over; r -= over; } weekReg[wk] = before + r; }
-            var mult = cfg.stat !== 0 && holiday(k) ? 1.5 : 1, pay;
+            var mult = cfg.stat !== 0 && holiday(k) && !/Easter Monday|Boxing Day/.test(holiday(k)) ? 1.5 : 1, pay;      // 10.1.2: those two aren't B.C. stats
             if (mult > 1) pay = rate * (Math.min(h, 12) * 1.5 + Math.max(0, h - 12) * 2);
             else pay = rate * (r + o15 * 1.5 + o2 * 2);
             out.reg += r; out.ot15 += o15; out.ot2 += o2; out.hours += h; out.gross += pay;
@@ -277,6 +287,30 @@ var HubCal = (function() {
         out.gross = Math.round(out.gross * 100) / 100;
         return out;
     }
+    /* 10.0 records, all "|"-separated (no pipes inside fields):
+     *   wish    name|target|query                      bill   name|amount|rule|who|autopay
+     *   spend   date|amount|category|who|split|note     goal   name|target|saved|by (10.1.1)
+     *   pantry  name|expires|qty|where                  pkg    name|carrier|tracking|expected      */
+    var REC = { wish: ["name", "target", "query"], bill: ["name", "amount", "rule", "who", "autopay"], spend: ["date", "amount", "cat", "who", "split", "note"],
+                goal: ["name", "target", "saved", "by"], pantry: ["name", "expires", "qty", "where"], pkg: ["name", "carrier", "tracking", "expected"],
+                book: ["title", "author", "ext", "size", "want", "src", "added", "conv"] };      // 10.3: the book cloud (want = kindle | cloud)
+    function parseRec(kind, text) {
+        var f = String(text || "").split("|"), o = {}, ks = REC[kind] || [];
+        for (var i = 0; i < ks.length; i++) o[ks[i]] = f[i] === undefined ? "" : f[i];
+        ["target", "amount", "saved", "qty", "size"].forEach(function(n) { if (o[n] !== undefined) o[n] = o[n] === "" ? 0 : +o[n] || 0; });
+        ["date", "expires", "expected", "by", "added"].forEach(function(n) {          // 10.1.2: a broken date reads as "no date" (was "undefined NaN" on screen)
+            if (o[n] && !(/^\d{4}-\d\d-\d\d$/.test(o[n]) && +o[n].substring(5, 7) >= 1 && +o[n].substring(5, 7) <= 12 && +o[n].substring(8, 10) >= 1 && +o[n].substring(8, 10) <= 31)) o[n] = "";
+        });
+        if (o.split !== undefined) o.split = o.split === "1";
+        if (o.autopay !== undefined) o.autopay = o.autopay === "1";
+        return o;
+    }
+    function recText(kind, o) {
+        var ks = REC[kind] || [], out = [];
+        for (var i = 0; i < ks.length; i++) { var v = o[ks[i]]; if (v === true) v = "1"; if (v === false || v === undefined || v === null) v = ""; out.push(String(v).replace(/[|\t\n]/g, " ")); }
+        return out.join("|");
+    }
+    function money2(x) { var s = (Math.round((+x || 0) * 100) / 100).toFixed(2), p = s.split("."); return (s.charAt(0) === "-" ? "-$" + p[0].substring(1) : "$" + p[0]).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + p[1]; }
     function payPeriod(shifts, k, cfg) { var p = periodOf(k, cfg), r = payFor(shifts, p.from, p.to, cfg); r.payday = p.payday; return r; }
     function fmtTime(t) {
         if (!t) return "";
@@ -322,8 +356,8 @@ var HubCal = (function() {
      *   monthly:15 | monthly:last | yearly:11-17                                                 */
     function parseRepeat(text) {
         var f = String(text).split("|");
-        if (f.length < 3 || !/^(daily|weekly:[0-6](,[0-6])*|every2w:[0-6]:\d{4}-\d\d-\d\d|monthly:(\d{1,2}|last)|yearly:\d\d-\d\d)$/.test(f[0])) return null;
-        var who = f.length >= 5 && /^(p1|p2|all)?$/.test(f[f.length - 1]) ? f.pop() : "";
+        if (f.length < 3 || !/^(daily|weekly:[0-6](,[0-6])*|every2w:[0-6]:\d{4}-\d\d-\d\d|monthly:(\d{1,2}|last)|yearly:\d\d-\d\d|months:\d{1,2}:\d{4}-\d\d-\d\d)$/.test(f[0])) return null;
+        var who = f.length >= 5 && /^(p1|p2|all|rot)?$/.test(f[f.length - 1]) ? f.pop() : "";
         return { rule: f[0], time: /^\d\d:\d\d$/.test(f[1]) ? f[1] : "", title: f[2], note: f.slice(3).join("|"), who: who === "all" ? "" : who };
     }
     function repeatText(rule, time, title, note, who) { return rule + "|" + (time || "") + "|" + String(title).replace(/\|/g, "/") + "|" + String(note || "").replace(/\|/g, "/") + (who ? "|" + who : ""); }
@@ -338,16 +372,25 @@ var HubCal = (function() {
             var last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
             return dom === Math.min(+p[1], last);          // the 31st becomes the last day in short months
         }
-        if (p[0] === "yearly") return k.substring(5) === p[1];
+        var mlast = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+        if (p[0] === "yearly") return k.substring(5) === p[1] || (p[1] === "02-29" && mlast === 28 && k.substring(5) === "02-28");   // 10.1.1: Feb 29 -> Feb 28
+        if (p[0] === "months") {          // 10.0: every N months from a start date (furnace filter, smoke alarms...)
+            if (k < p[2] || dom !== Math.min(+p[2].substring(8, 10), mlast)) return false;      // 10.1.1: started on the 31st -> last day of short months
+            var mm = (+k.substring(0, 4) - +p[2].substring(0, 4)) * 12 + (+k.substring(5, 7) - +p[2].substring(5, 7));
+            return mm % (+p[1] || 1) === 0;
+        }
         return false;
     }
+    // 10.0: "rot" = a chore that alternates weekly between the two of you (week of the year decides)
+    function rotWho(k) { var wk = Math.floor((dayNum(k) + 4) / 7); return wk % 2 === 0 ? "p1" : "p2"; }
     function ruleLabel(rule) {
         var D = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], p = rule.split(":");
         if (p[0] === "daily") return "every day";
         if (p[0] === "weekly") return "every " + p[1].split(",").map(function(x) { return D[+x]; }).join(", ");
         if (p[0] === "every2w") return "every 2nd " + D[+p[1]];
         if (p[0] === "monthly") return p[1] === "last" ? "last day of the month" : "monthly on the " + p[1];
-        if (p[0] === "yearly") return "every year";
+        if (p[0] === "yearly") { var MO = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]; return "every year on " + (MO[+String(p[1]).substring(0, 2) - 1] || "") + " " + (+String(p[1]).substring(3, 5) || ""); }
+        if (p[0] === "months") return "every " + p[1] + " months";
         return rule;
     }
     // items: [{id, text}] of kind "repeat" (already unlocked) -> {date: [{id, time, title, note, rep}]}
@@ -358,13 +401,14 @@ var HubCal = (function() {
         var n0 = dayNum(fromKey);
         for (j = 0; j < days; j++) {
             var d = new Date((n0 + j) * 86400000), k = key(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-            for (i = 0; i < rs.length; i++) if (repeatOn(rs[i], k)) (out[k] = out[k] || []).push({ id: rs[i].id, date: k, time: rs[i].time, title: rs[i].title, note: rs[i].note, rep: rs[i].rule, who: rs[i].who });
+            for (i = 0; i < rs.length; i++) if (repeatOn(rs[i], k)) (out[k] = out[k] || []).push({ id: rs[i].id, date: k, time: rs[i].time, title: rs[i].title, note: rs[i].note, rep: rs[i].rule, who: rs[i].who === "rot" ? rotWho(k) : rs[i].who, rot: rs[i].who === "rot" });
         }
         return out;
     }
     return { key: key, shiftId: shiftId, parseShift: parseShift, parseEvent: parseEvent, eventText: eventText, fmtTime: fmtTime, holidays: holidays, holiday: holiday,
              parseRepeat: parseRepeat, repeatText: repeatText, repeatOn: repeatOn, ruleLabel: ruleLabel, expandRepeats: expandRepeats,
              shiftIdFor: shiftIdFor, whoOfShift: whoOfShift, parseShop: parseShop, shopText: shopText, shiftSpan: shiftSpan,
-             periodOf: periodOf, payFor: payFor, payPeriod: payPeriod };
+             periodOf: periodOf, payFor: payFor, payPeriod: payPeriod, rotWho: rotWho, dayNum: dayNum, keyN: keyN,
+             parseRec: parseRec, recText: recText, money: money2 };
 })();
 if (typeof module !== "undefined") { module.exports.HubCrypt = HubCrypt; module.exports.HubCal = HubCal; }

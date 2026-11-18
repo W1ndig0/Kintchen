@@ -29,6 +29,7 @@ jobs:
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
           HUB_PASS: ${{ secrets.HUB_PASS }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          POSTAL: ${{ vars.POSTAL }}
         run: node cloud/brain.js
       # GitHub pauses scheduled workflows in a public repo after 60 days without a commit.
       # This writes one tiny file a month so the brain never silently stops.

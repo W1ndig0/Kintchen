@@ -1,5 +1,5 @@
 #!/bin/sh
-# Kitchen Hub v9.9 launcher.  Usage: run_hub.sh [eco|always]
+# Kitchen Hub v10.3 launcher.  Usage: run_hub.sh [eco|always]
 DIR="/mnt/us/extensions/shiftcal"
 CONF="$DIR/eco.conf"
 MODE="${1:-eco}"
@@ -14,9 +14,17 @@ PILLOW_DISABLE=2
 
 [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 50000 ] && tail -n 100 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 exec >> "$LOG" 2>&1
-echo "=== Launching Kitchen Hub v9.9 ($MODE) at $(date) ==="
+echo "=== Launching Kitchen Hub v10.3 ($MODE) at $(date) ==="
 
 chmod +x "$DIR"/*.sh 2>/dev/null
+# 10.2: a just-installed update whose scripts don't even parse is undone before anything starts
+if [ -f "$DIR/.update/pending" ]; then
+    for S in power_loop.sh sync_data.sh hub_cloud.sh hub_update.sh; do
+        if [ -f "$DIR/$S" ] && ! /bin/sh -n "$DIR/$S" 2>/dev/null; then
+            echo "update broke $S - rolling back"; /bin/sh "$DIR/hub_update.sh" rollback; break
+        fi
+    done
+fi
 /bin/sh "$DIR/register_mesquite.sh"
 
 # Stop EVERY older loop, not just the one in the pid file (v8.5 logs showed two loops fighting),

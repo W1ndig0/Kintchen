@@ -107,7 +107,7 @@ function keyOf(d) { return d.getUTCFullYear() + "-" + p2(d.getUTCMonth() + 1) + 
 function addK(k, n) { var d = new Date(Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10) + n)); return keyOf(d); }
 function dow(k) { return new Date(Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10))).getUTCDay(); }
 function fmt(t) { if (!t) return ""; var h = +t.slice(0, 2), m = t.slice(3); return (h % 12 || 12) + (m === "00" ? "" : ":" + m) + (h >= 12 ? "p" : "a"); }
-function off(v) { return !v || /^\s*(off|x|-)\s*$/i.test(v); }
+function off(v) { return !v || /^\s*(off|x|-|vac|vacation|sick|stat|holiday)\s*$/i.test(v); }
 
 function load() {
   if (!CFG.g) { $("setup").style.display = "block"; return; }
@@ -120,6 +120,7 @@ function load() {
 }
 function slidesList() {
   var s = ["today", "week", "kitchen", "news", "fridge"];
+  if (D && D.home && (D.home.bills.length || D.home.use.length || D.home.chores.length || D.home.flyers.length)) s.splice(2, 0, "home");     // 10.2
   if (CFG.photos && CFG.photos.length) s.push("photo");
   var h = now().getUTCHours();
   if (h >= 23 || h < 6) s = ["night"];
@@ -207,6 +208,16 @@ var R = {
     h += '</div><div class="col">';
     if (D.stocks && D.stocks.length) { h += '<div class="k">Markets</div>'; D.stocks.forEach(function(s) { var ch = s.prev ? (s.price - s.prev) / s.prev * 100 : 0; h += '<div class="li"><b>' + esc(s.sym) + "</b>" + (+s.price).toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' <span class="dim">' + (ch >= 0 ? "▲ " : "▼ ") + Math.abs(ch).toFixed(2) + "%</span></div>"; }); }
     if (D.feed && D.feed.length) { h += '<div class="k">New recipes on the web</div>'; D.feed.slice(0, 5).forEach(function(f) { h += '<div class="li">' + esc(f.t) + "</div>"; }); }
+    return h + "</div></div>";
+  },
+  home: function() {      // 10.2: bills this week, food to use, today's chores, flyer deals
+    var H = D.home, h = '<div class="cols"><div class="col">';
+    if (H.chores.length) { h += '<div class="k">Chores today</div>'; H.chores.forEach(function(c) { h += '<div class="li">' + (c.done ? "\u2713 " : "\u25a1 ") + esc(c.title) + (c.who && two() && D.people[c.who] ? ' <span class="dim">' + esc(D.people[c.who].name) + "</span>" : "") + "</div>"; }); }
+    if (H.bills.length) { h += '<div class="k">Bills this week</div>'; H.bills.forEach(function(b) { h += '<div class="li"><b>$' + (+b.amount).toFixed(2) + "</b> " + esc(b.name) + ' <span class="dim">' + DAYS[dow(b.date)].slice(0, 3) + (b.autopay ? " \u00b7 autopay" : "") + "</span></div>"; }); }
+    h += '</div><div class="col">';
+    if (H.use.length) { h += '<div class="k">Use it up</div>'; H.use.forEach(function(p) { h += '<div class="li">' + esc(p.name) + ' <span class="dim">' + (p.expires < keyOf(now()) ? "expired" : p.expires === keyOf(now()) ? "today" : "tomorrow") + "</span></div>"; }); }
+    if (H.flyers.length) { h += '<div class="k">On sale this week</div>'; H.flyers.forEach(function(f) { h += '<div class="li">' + esc(f.name) + " <b>$" + (+f.price).toFixed(2) + '</b> <span class="dim">' + esc(f.store) + "</span></div>"; }); }
+    if (H.joke) h += '<div class="k">Joke of the day</div><div class="li">' + esc(H.joke) + "</div>";
     return h + "</div></div>";
   },
   night: function() {

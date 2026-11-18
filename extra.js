@@ -37,6 +37,7 @@
       '<div id="ch-days" style="margin:6px 0">' + DN.map(function(d, i) { return '<label style="margin-right:10px;font-size:16px"><input type="checkbox" value="' + i + '"> ' + d + '</label>'; }).join("") + '</div>' +
       '<label class="fl" id="ch-dl">Starting / date<input type="date" id="ch-d"></label><label class="fl" id="ch-ml">Day of month<input type="number" min="1" max="31" id="ch-m" value="1"></label>' +
       '<label class="fl">Time (empty = all day; with a time your phone gets a push then)<input type="time" id="ch-tm"></label>' +
+      (hasP2() ? '<label class="fl">Whose job<select id="ch-who"><option value="">Whoever</option><option value="rot">Take turns each week</option><option value="p1">' + esc(pName("p1")) + '</option><option value="p2">' + esc(pName("p2")) + '</option></select></label>' : "") +
       '<p class="row"><button class="btn" id="ch-save">Save</button><button class="btn ghost" id="ch-cancel">Cancel</button></p>' +
       '<h2>Your chores</h2><ul id="ch-list"></ul>';
     box.innerHTML = h;
@@ -47,13 +48,14 @@
     $("ch-save").addEventListener("click", function() {
       var t = $("ch-t").value.trim(), k = $("ch-k").value, d = $("ch-d").value, rule = "";
       if (!t) { $("ch-t").focus(); return; }
+      if ((k === "every2w" || k === "yearly") && !/^\d{4}-\d\d-\d\d$/.test(d)) { alert("Pick a date first"); return; }     // 10.1.2: an empty date saved a broken chore
       if (k === "weekly") { var ds = [].slice.call(document.querySelectorAll("#ch-days input:checked")).map(function(c) { return c.value; }); if (!ds.length) { alert("Pick at least one day"); return; } rule = "weekly:" + ds.join(","); }
       else if (k === "every2w") { var p = d.split("-"); rule = "every2w:" + new Date(+p[0], +p[1] - 1, +p[2]).getDay() + ":" + d; }
       else if (k === "monthly") rule = "monthly:" + Math.max(1, Math.min(31, +$("ch-m").value || 1));
       else if (k === "last") rule = "monthly:last";
       else if (k === "yearly") rule = "yearly:" + d.slice(5);
       else rule = "daily";
-      put("repeat", HubCal.repeatText(rule, $("ch-tm").value, t, ""));
+      put("repeat", HubCal.repeatText(rule, $("ch-tm").value, t, "", $("ch-who") ? $("ch-who").value : ""));
       choreForm();
     });
     var ul = $("ch-list");
@@ -114,7 +116,14 @@
         (k.left7 > 0 && !k.charging ? 'About <b>' + (k.left7 >= 48 ? Math.round(k.left7 / 24) + " days" : k.left7 + " h") + '</b> left (' + k.rate7 + '%/h)<br>' : "") +
         'Checked in <b>' + ago(k.ts) + '</b>' + (quiet ? ' — <b>quiet longer than usual</b>' : "") + '<br>' +
         'Wakes every ' + (k.interval || "?") + ' min · version ' + esc(k.v) + ' · ' + (k.cloudData && Date.now() / 1000 - k.cloudData < 7200 ? "data from the cloud" : "fetches its own data") + '</div>';
+      // 10.2: updates on the fridge
+      var ev = String(k.upd || "").split(" "), au = ["only when you tap", "tells you", "installs at night"][k.auto === undefined ? 2 : +k.auto] || "";
+      h += '<div style="font-size:14px;margin-top:6px">Updates: <b>' + au + '</b>' + (k.avail ? ' · <b>' + esc(k.avail) + ' is ready</b>' : "") +
+        (ev[1] === "rolledback" ? ' · last update (' + esc(ev[2] || "") + ') was undone, back on ' + esc(ev[3] || "") : ev[1] === "healthy" ? " · " + esc(ev[2] || "") + " running fine" : "") + '</div>';
     } else h += '<p class="empty">No check-in yet. The fridge reports in after its next sync (9.8.5 or newer).</p>';
+    // 10.2: open a page in the fridge's web reader
+    h += '<h2>Send a web page to the fridge</h2><div class="row"><input id="fw-u" inputmode="url" placeholder="https://… or search words" style="flex:1;font-size:17px;padding:10px;border:2px solid var(--ink)"><button class="btn" id="fw-go">Send</button></div>' +
+      '<p style="font-size:13px;color:var(--mute);margin:4px 0 0">Opens as clean text in the fridge\'s WEB app at its next wake. Handy for a recipe or an article.</p>';
     h += '<p style="font-size:14px;color:var(--mute)">Cloud brain: ' + (b && b.lastRun ? "ran " + ago(b.lastRun / 1000) + (b.pushes ? " · sent " + b.pushes + " push" + (b.pushes > 1 ? "es" : "") : "") : 'not running — see GITHUB_SETUP.txt') + '</p>';
     // note
     var notes = itemsOf("msg").filter(function(m) { return !m.locked; }).sort(function(a, c) { return c.ts - a.ts; }).slice(0, 3);
@@ -123,7 +132,7 @@
     // remote
     h += '<h2>Remote control</h2><p style="font-size:13px;color:var(--mute);margin:0 0 8px">Runs on the fridge at its next wake (or right away if it is awake).</p><div class="rc">' +
       '<button class="btn ghost" data-c="sync">Sync now</button><button class="btn ghost" data-c="timer|5">Timer 5</button><button class="btn ghost" data-c="timer|10">10</button><button class="btn ghost" data-c="timer|20">20</button><button class="btn ghost" data-c="timer|45">45 min</button>' +
-      '<button class="btn ghost" data-c="update|check">Check update</button><button class="btn ghost" data-c="update|install">Install update</button><button class="btn ghost" data-c="log">Send log</button>' +
+      '<button class="btn ghost" data-c="update|check">Check update</button><button class="btn ghost" data-c="update|install">Install update</button><button class="btn ghost" data-c="update|rollback">Undo last update</button><button class="btn ghost" data-c="log">Send log</button>' +
       '<button class="btn ghost" data-c="screen|front">Front page</button><button class="btn ghost" data-c="screen|tiles">Tiles</button><button class="btn ghost" data-c="contrast|max">Max contrast</button><button class="btn ghost" data-c="contrast|normal">Normal</button><button class="btn ghost" data-c="reload">Reload page</button></div>';
     var cmds = itemsOf("cmd").filter(function(c) { return !c.locked; }).sort(function(a, c) { return c.ts - a.ts; }).slice(0, 3);
     cmds.forEach(function(c) { h += '<div style="font-size:13px;color:var(--mute)">' + (c.state === "open" ? "waiting: " : "done: ") + esc(c.text.split("|").slice(0, 2).join(" ")) + '</div>'; });
@@ -137,9 +146,14 @@
     h += '<h2>Fridge log</h2><p class="row"><button class="btn ghost" id="lg-show">Show the last log</button><button class="btn ghost" id="pt-go">Test phone push</button></p><pre id="lg-box" style="white-space:pre-wrap;font-size:11px;max-height:340px;overflow:auto;border:1px solid var(--rule);padding:6px" hidden></pre>';
     box.innerHTML = h;
     $("fn-go").addEventListener("click", function() { var t = $("fn-t").value.trim(); if (t) { put("msg", t); } });
+    $("fw-go").addEventListener("click", function() {
+      var t = $("fw-u").value.trim(); if (!t) return;
+      var u = /^https?:\/\//i.test(t) ? t : (!/\s/.test(t) && /\.[a-z]{2,}/i.test(t) ? "https://" + t : "q:" + t);
+      put("cmd", "web|" + u.replace(/[\r\n]/g, "")); $("fw-u").value = ""; $("fw-go").textContent = "Sent";
+    });
     [].forEach.call(box.querySelectorAll(".rc .btn"), function(bt) {
       bt.style.margin = "0 6px 6px 0";
-      bt.addEventListener("click", function() { var c = bt.getAttribute("data-c"); if (c === "update|install" && !confirm("Install the update from your GitHub site at the next wake? The hub restarts by itself.")) return; put("cmd", c); });
+      bt.addEventListener("click", function() { var c = bt.getAttribute("data-c"); if (c === "update|install" && !confirm("Install the update from your GitHub site at the next wake? The hub restarts by itself.")) return; if (c === "update|rollback" && !confirm("Go back to the version the fridge had before its last update?")) return; put("cmd", c); });
     });
     if ($("tv-copy")) $("tv-copy").addEventListener("click", function() { copy(tv, $("tv-copy")); });
     if ($("ics-copy")) $("ics-copy").addEventListener("click", function() { copy(ics, $("ics-copy")); });

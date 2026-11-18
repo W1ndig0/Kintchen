@@ -15,7 +15,17 @@ html, body { margin: 0; background: var(--paper); color: var(--ink); font-family
 header { position: sticky; top: 0; background: var(--ink); color: #fff; padding: calc(env(safe-area-inset-top) + 12px) 16px 10px; z-index: 2; }
 header h1 { margin: 0; font: 900 22px/1.1 Georgia, "Times New Roman", serif; letter-spacing: .14em; text-transform: uppercase; }
 #tabs { display: flex; margin-top: 10px; border: 2px solid #fff; }
-#tabs span { flex: 1; text-align: center; padding: 7px 0; font: 800 11px/1 -apple-system, Arial, sans-serif; letter-spacing: .06em; }
+#tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+#tabs span { flex: none; text-align: center; padding: 9px 11px; font: 800 12px/1 -apple-system, Arial, sans-serif; letter-spacing: .06em; }
+.xl { list-style: none; padding: 0; margin: 0; } .xl li { border-bottom: 1px solid var(--rule); padding: 10px 0; display: block !important; min-height: 0 !important; }
+.sub { color: var(--mute); font-size: 14px; margin-top: 3px; line-height: 1.35; }
+.tg { display: inline-block; background: var(--ink); color: #fff; font: 800 10px/16px -apple-system, Arial, sans-serif; padding: 0 5px; letter-spacing: .06em; vertical-align: 2px; }
+.tg.o { background: #fff; color: var(--ink); border: 1.5px solid var(--ink); }
+.card { border: 2px solid var(--ink); background: #fff; padding: 12px; margin: 8px 0; }
+.card b.big { font: 900 28px/1.1 Georgia, serif; }
+.bar { height: 8px; border: 1.5px solid var(--ink); margin-top: 5px; } .bar i { display: block; height: 100%; background: var(--ink); }
+.btn.sm { padding: 6px 10px; font-size: 13px; min-height: 0; margin: 4px 6px 0 0; display: inline-block; text-decoration: none; }
+#app-d input, #app-d select, #app-h input, #app-h select, #app-k input, #app-k select { font-size: 16px; padding: 9px; border: 2px solid var(--ink); min-width: 0; background: #fff; }
 [hidden] { display: none !important; }
 #tabs span.sel { background: #fff; color: var(--ink); }
 #status { margin-top: 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
@@ -67,7 +77,7 @@ body.store #open .box { width: 30px; height: 30px; }
 </head>
 <body>
 <header><h1>Kitchen Hub</h1><div id="status">Starting…</div>
-<div id="tabs" hidden><span data-tab="list" class="sel">LIST</span><span data-tab="cal">CALENDAR</span><span data-tab="recipes">RECIPES</span><span data-tab="board">BOARD</span><span data-tab="fridge">FRIDGE</span></div></header>
+<div id="tabs" hidden><span data-tab="list" class="sel">LIST</span><span data-tab="cal">CALENDAR</span><span data-tab="recipes">RECIPES</span><span data-tab="board">BOARD</span><span data-tab="deals">DEALS</span><span data-tab="home">HOME</span><span data-tab="books">BOOKS</span><span data-tab="fridge">FRIDGE</span></div></header>
 <main>
   <section id="setup" hidden>
     <p>Scan the pairing code in the fridge's Settings with your camera.</p>
@@ -122,6 +132,9 @@ Cook 3 minutes a side.    (steps, one per line — 'N minutes' offers a timer on
     </div>
   </section>
   <section id="app-f" hidden></section>
+  <section id="app-d" hidden></section>
+  <section id="app-h" hidden></section>
+  <section id="app-k" hidden></section>
   <section id="app-b" hidden>
     <h2>The notice board <span style="float:right;font-weight:400">(shows on the fridge)</span></h2>
     <div id="b-tools" style="margin:6px 0">
@@ -138,6 +151,8 @@ Cook 3 minutes a side.    (steps, one per line — 'N minutes' offers a timer on
 <form id="add" hidden><input id="add-t" placeholder="Add an item" autocomplete="off" enterkeyhint="done"><button>Add</button></form>
 <script src="hubdata.js"></script>
 <script src="extra.js" defer></script>
+<script src="extra2.js" defer></script>
+<script src="extra3.js" defer></script>
 <script>
 "use strict";
 var K = { cfg: "kh_cfg", store: "kh_store", remote: "kh_remote", synced: "kh_synced", etag: "kh_etag" };
@@ -217,6 +232,10 @@ function render() {
   if (TAB === "recipes") renderRecipes();
   if (TAB === "board") renderBoardTab();
   $("app-f").hidden = TAB !== "fridge";
+  $("app-d").hidden = TAB !== "deals"; $("app-h").hidden = TAB !== "home"; $("app-k").hidden = TAB !== "books";
+  if (TAB === "books" && window.renderBooks) renderBooks();
+  if (TAB === "deals" && window.renderDeals) renderDeals();
+  if (TAB === "home" && window.renderHome) renderHome();
   if (TAB === "fridge" && window.renderFridge) renderFridge();
   if (TAB === "recipes" && window.renderPlanImport) renderPlanImport();
   var all = itemsOf("shop"), pend = pendingIds(), open = [], done = [];

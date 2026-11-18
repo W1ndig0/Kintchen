@@ -113,7 +113,7 @@ push() {
 # ---------- 9.8.5 ----------
 # kindle.conf in the list gist (written by the cloud brain): where the bundle / cloud gist live
 save_links() {
-    { tr -d '\r' < "$T/b.$$" | grep -o '\(BUNDLE_URL\|CLOUD_GIST\|ICS_URL\|ICS2_URL\|TV_REF\)=[^\\" ]*'
+    { tr -d '\r' < "$T/b.$$" | grep -o '\(BUNDLE_URL\|CLOUD_GIST\|ICS_URL\|ICS2_URL\|TV_REF\|EXTRA_URL\|BOOKS_URL\)=[^\\" ]*'
       tr -d '\r' < "$T/b.$$" | grep -o 'lastRun\\*"*: *[0-9]\{13\}' | head -1 | sed 's/.*\([0-9]\{10\}\)[0-9]\{3\}$/BRAIN_AT=\1/'; } | sort -u > "$T/links.$$"
     if [ -s "$T/links.$$" ]; then cmp -s "$T/links.$$" "$DIR/.cloud_links" || { mv "$T/links.$$" "$DIR/.cloud_links"; say "cloud brain links saved"; }
     else rm -f "$T/links.$$"; fi
@@ -135,10 +135,11 @@ take_inbox() {
             { sub(/\r$/, ""); sub(/^[ \t]+/, ""); sub(/[ \t]+$/, "") }
             $0 == "" || /^#/ { next }
             tolower($0) ~ /^(event|chore|recipe) *:/ { bad = 1; next }
-            tolower($0) ~ /^note *:/ { t = $0; sub(/^[^:]*: */, "", t); add("msg", substr(t, 1, 280)); next }
+            tolower($0) ~ /^note *: *[^ ]/ { t = $0; sub(/^[^:]*: */, "", t); gsub(/\|/, "/", t); add("msg", substr(t, 1, 280)); next }
             tolower($0) ~ /^timer *: *[0-9]+/ { t = $0; sub(/^[^:]*: */, "", t); sub(/[^0-9].*$/, "", t); add("cmd", "timer|" t); next }
+            tolower($0) ~ /^(timer|note) *:/ { next }
             { t = $0; if (tolower(t) ~ /^(shop|buy|list) *:/) sub(/^[^:]*: */, "", t)
-              k = split(t, parts, / *, */); for (i = 1; i <= k; i++) if (parts[i] != "") add("shop", substr(parts[i], 1, 80)) }
+              k = split(t, parts, / *, */); for (i = 1; i <= k; i++) if (parts[i] != "") { p = parts[i]; gsub(/\|/, "/", p); add("shop", substr(p, 1, 80)) } }
             END { if (!bad) printf "%s", out; else exit 3 }' "$T/in.$$" >> "$T/inbox_new.$$" && echo "$NAME" >> "$T/inbox_done"
     done
     if [ -s "$T/inbox_new.$$" ]; then merge_local "$T/inbox_new.$$"; say "inbox: $(grep -c . "$T/inbox_new.$$") items from Siri/PC"; fi
@@ -159,8 +160,13 @@ do_status() {
     # the cloud brain fetches the news and markets for the fridge: it needs your choices from Settings
     NEWS=$(grep '^http' "$DIR/news.conf" 2>/dev/null | tr -d '"\\\r' | tr '\n' ';')
     STK=$(grep -v '^[[:space:]]*#' "$DIR/stocks.conf" 2>/dev/null | tr -d '"\\\r' | tr '\n' ' ')
-    printf '{"ts":%s,"v":"%s","pct":%s,"charging":%s,"rate7":%s,"left7":%s,"interval":%s,"lastSync":%s,"cloudData":%s,"reminded":%s,"wake":"%s","items":%s,"news":"%s","stocks":"%s"}' \
-        "$(date +%s)" "$V" "${PCT:-0}" "${CH:-0}" "${R7:-0}" "${L7:-0}" "${INT:-60}" "${LS:-0}" "${CD:-0}" "$REM" "$WR" "$(grep -c -v '^#' "$LOCAL")" "$NEWS" "$STK" > "$T/st.$$"
+    # 10.2: what the updater did last (installed / healthy / rolledback), the auto-update setting, a waiting version
+    UEV=$(cat "$DIR/.update/event" 2>/dev/null | head -1 | tr -cd 'A-Za-z0-9 .-' | cut -c1-80)
+    AUP=$(sed -n 's/^AUTO_UPDATE=\([0-2]\)$/\1/p' "$DIR/eco.conf" 2>/dev/null | head -1)
+    BKS=$(cut -f1 "$DIR/.books_have" 2>/dev/null | tr -cd 'A-Za-z0-9\n' | awk 'NF { printf "%s\"%s\"", (n++ ? "," : ""), $0 }')      # 10.3: books on this Kindle
+    UAV=$(grep -o 'state:"available",cur:"[^"]*",nv:"[^"]*"' "$DIR/mesquite/update.js" 2>/dev/null | sed 's/.*nv:"\([^"]*\)"/\1/' | tr -cd 'A-Za-z0-9.-')
+    printf '{"ts":%s,"v":"%s","pct":%s,"charging":%s,"rate7":%s,"left7":%s,"interval":%s,"lastSync":%s,"cloudData":%s,"reminded":%s,"wake":"%s","items":%s,"news":"%s","stocks":"%s","upd":"%s","auto":%s,"avail":"%s","books":[%s]}' \
+        "$(date +%s)" "$V" "${PCT:-0}" "${CH:-0}" "${R7:-0}" "${L7:-0}" "${INT:-60}" "${LS:-0}" "${CD:-0}" "$REM" "$WR" "$(grep -c -v '^#' "$LOCAL")" "$NEWS" "$STK" "$UEV" "${AUP:-2}" "$UAV" "$BKS" > "$T/st.$$"
     { printf '{"files":{"kindle.json":{"content":"'; jstr < "$T/st.$$" | sed 's/\\n$//'; printf '"}}}'; } > "$T/p.$$"
     CODE=$(api PATCH "$API/gists/$GIST_ID" -H "Content-Type: application/json" --data-binary "@$T/p.$$")
     [ "$CODE" = "200" ] && { date +%s > "$DIR/.status_at"; rm -f "$ETAGF"; } || say "status upload refused ($CODE)"

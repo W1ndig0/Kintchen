@@ -1,5 +1,6 @@
 # When you upload new Kindle files into kindle/shiftcal, this rebuilds kindle/manifest.txt so the
-# fridge can update itself (Settings > Phone > Check for update).
+# fridge can update itself (Settings > Phone > Check for update, or by itself at night).
+# 10.2: a broken upload (a script that won't parse, a page the Kindle can't run) stops here.
 name: kindle-manifest
 on:
   push:
@@ -12,6 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Check the build before the fridge sees it
+        run: sh kindle/check_build.sh
       - name: Build manifest
         run: sh kindle/make_manifest.sh
       - name: Commit

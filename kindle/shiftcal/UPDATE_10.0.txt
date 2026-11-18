@@ -1,0 +1,103 @@
+KITCHEN HUB 10.0 - DEALS, MONEY, FOOD, HOME, FUN
+Install: upload the kit to GitHub like before (drag everything, including the .github folder), then on
+the fridge Settings > Phone > CHECK FOR UPDATE (tap twice). Deals and flyers fill in after the next cloud
+brain run (within 15 min; Best Buy every 3 h, flyers every 6 h).
+New tiles are off by default: Edit tiles (grid button) > tap the tray chips DEALS / MONEY / FOOD / FUN.
+Every tile opens a full page with tabs; the same things are on the phone under DEALS and HOME.
+
+DEALS (fridge tile + phone DEALS tab)
+ 1  Wishlist: add anything ("air fryer", "PS5 controller"); the cloud brain checks Best Buy Canada for it.
+ 2  Shows the current Best Buy price, the regular price and how much it's marked down.
+ 3  Optional target price per item - set it from the fridge or the phone.
+ 4  Push to your phone when an item hits your target price.
+ 5  Push when a wishlist item drops 10% or more since the last check.
+ 6  Price history kept per item (lowest seen is shown).
+ 7  Sale end date shown when Best Buy gives one.
+ 8  Grocery flyers for V2N (Prince George) from Flipp: Save-On, Walmart, Real Canadian Superstore, etc.
+ 9  Flyer search runs for everything on your shopping list, so you see who has it on sale this week.
+10  Flyer price tag next to list items that are on sale somewhere ("$3.99 Walmart").
+11  Flyer "sale story" (e.g. "2 for $5", "Save $2") and valid-until date.
+12  Thursday push: "N things on your list are on sale this week" (new flyers drop Thursday).
+13  Hot deals feed from RedFlagDeals (Canada) - top deals, refreshed hourly.
+14  Push when a hot deal matches something on your wishlist.
+15  Black Friday week and Boxing week: a banner on the hot deals page, and deals are checked every 20 min.
+16  "+ WATCH" on any hot deal puts it on your wishlist in one tap.
+17  Deals tile summary: best markdown, count on sale, count of list items in flyers.
+18  Phone DEALS tab: add wishlist items, set targets, open the product page.
+
+MONEY (fridge tile + phone HOME tab)
+19  Log spending in two taps: amount, then a category chip (groceries, eating out, gas, fun, home, other).
+20  Who paid (you / roommate) on every expense.
+21  "Settle up": shows who owes who and how much, and records the payback.
+22  Monthly budgets per category, with a bar on the tile.
+23  Push when a category passes 90% of its budget.
+24  Bills: name, amount, due day of the month (rent, phone, internet, hydro...).
+25  Bills due in the next week show on the front page and the tile.
+26  Push 2 days before a bill is due, and again if it's overdue.
+27  Mark a bill paid from the fridge; it comes back next month by itself.
+28  Bills on autopay are marked AUTOPAY and don't nag you.
+29  Savings goals with a target and a progress bar; add money to a goal from the fridge or phone.
+30  This-month view: total spent, by category, by person, and the bigger expenses.
+31  Pay period estimate (from 9.9) now sits next to the month's spending so you can see what's left.
+32  Repeat rule "every N months" for things like car insurance or quarterly bills.
+
+FOOD
+33  Pantry: what's in the fridge/freezer with an optional use-by date.
+34  Leftovers: one tap logs "leftovers" with a 4-day use-by.
+35  Use-it-up list on the front page: things expiring today or tomorrow.
+36  Morning push for anything that has to be used today.
+37  "Used" / "Tossed" buttons; tossed items are counted as waste.
+38  Waste tracker: how many things were thrown out this month vs last (on the pantry page).
+39  "To list": a finished pantry item goes straight back onto the shopping list.
+40  Food tile: next item to use up plus counts.
+41  Meal plan "tonight" line stays on the Food page too.
+
+HOME
+42  Chores with rotation: "take turns" alternates you and your roommate week by week.
+43  Chore list shows whose turn it is next, with "(alternates)" on take-turns chores.
+44  Upkeep presets in one tap: furnace filter, fridge coils, smoke alarm test, dryer vent, water filter,
+    deep clean - each with a sensible repeat.
+45  Packages: track what's coming (name + carrier); shows on the front page until you mark it received.
+46  Packages line in the morning briefing.
+47  Guest Wi-Fi card: network and password in big text on the fridge, so guests can read it.
+48  Phone HOME tab: chores, bills, spending, pantry and packages in one place.
+49  Phone chore editor: "Whose job" now has "Take turns".
+
+FUN (fridge tile)
+50  Trivia question of the day (Open Trivia DB) - tap to reveal the answer, NEXT for another.
+51  Word of the day (Merriam-Webster) with its meaning.
+52  Canucks: next game, opponent, time (BC time), home/away, and last result.
+53  Game-day line in the morning briefing.
+54  Fun tile shows the word, today's question and the next Canucks game at a glance.
+
+CLOUD BRAIN
+55  New deals/extras step: Best Buy, Flipp, RFD, trivia, word, NHL - each on its own timer so GitHub
+    minutes stay low.
+56  Everything it finds goes into an encrypted extra.js in your cloud gist (same passphrase).
+57  extra.js is only rewritten when something changed (less noise, fewer Kindle downloads).
+58  The fridge and the phone both read it; the Kindle fetches it with the normal sync.
+59  Morning briefing now includes bills due, use-today food, packages, game day and flyer matches.
+60  Postal code for flyers can be changed: repo Settings > Secrets and variables > Actions > Variables,
+    add POSTAL (default V2N4Z9).
+
+FRIDGE PAGE
+61  New full-page overlay with tabs for Deals, Money, Food, Home and Fun (big text, BACK button).
+62  Quick chooser chips for categories/people instead of typing.
+63  New icons for the four new tiles and the apps page.
+64  The apps page has entries for Deals, Money, Food, Home and Fun.
+65  Front page: bills-due and use-it-up lines.
+66  New tiles re-draw when the list or money changes (no waiting for the next sync).
+67  Each wishlist item has a small price-trend line.
+68  Bills page shows OVERDUE / DUE TODAY / TOMORROW / IN 2 DAYS tags.
+69  All new data is shared with the phone and TV through the same encrypted list (last change wins).
+70  Phone app version bumped so it picks up the new screens right away.
+
+FIXED
+71  A timer check could get stuck "not due" for hours if the cloud clock ever jumped backwards.
+72  Tiles didn't refresh after adding things from the phone until the next full sync.
+73  "1 things on sale" grammar (and similar counts).
+74  Phone FRIDGE tab could say "Checked -3 min ago" when the clocks were a little out.
+75  The suspend back-off on the Kindle could grow past 6 s and delay waking up; capped.
+76  Calendar second-person link (ICS2) and the extras link are kept when re-pairing the cloud.
+
+That's 70 new things and 6 fixes, not the 100 you asked for - I'd rather ship 70 that work than pad the list.

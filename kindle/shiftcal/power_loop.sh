@@ -14,7 +14,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="9.9"
+VERSION="10.3"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -54,7 +54,9 @@ load_conf() {
     CLOUD_ON_WAKE=1
     PHONE_ALERTS=1
     USE_CLOUD_DATA=1
+    AUTO_UPDATE=2                      # 10.2: 0 = only when you tap, 1 = check nightly and tell you, 2 = install at night (undone by itself if it fails)
     [ -f "$CONF" ] && . "$CONF"
+    case "$AUTO_UPDATE" in 0|1|2) ;; *) AUTO_UPDATE=2 ;; esac
     case "$USE_CLOUD_DATA" in 0|1) ;; *) USE_CLOUD_DATA=1 ;; esac
     case "$PHONE_ALERTS" in 0|1) ;; *) PHONE_ALERTS=1 ;; esac
     case "$CLOUD_ON_WAKE" in 0|1) ;; *) CLOUD_ON_WAKE=1 ;; esac
@@ -83,6 +85,7 @@ PILLOW_DISABLE=$PILLOW_DISABLE
 CLOUD_ON_WAKE=$CLOUD_ON_WAKE
 PHONE_ALERTS=$PHONE_ALERTS
 USE_CLOUD_DATA=$USE_CLOUD_DATA
+AUTO_UPDATE=$AUTO_UPDATE
 EOT
     mv "$CONF.tmp" "$CONF"
 }
@@ -192,6 +195,8 @@ write_ui_state() {
     cat > "$STATE_JS.tmp" <<EOT
 window.HUB_STATE = {
     v: "$VERSION",
+    autoUpd: $AUTO_UPDATE,
+    updPending: $([ -f "$DIR/.update/pending" ] && echo 1 || echo 0),
     now: $(date +%s),
     sleeping: $SLEEPING,
     awakeUntil: $AWAKE_UNTIL,
@@ -300,6 +305,8 @@ start_sync() {   # $1 = "lists": only exchange the lists with the gist (quick)
                     N=$((N + 1))
                 done
                 write_cloud_js                                # 9.8.5: the cloud brain's links (TV, calendar) for the page
+                # 10.3: the book cloud - fetch books you put on the Kindle, remove ones you moved back
+                { [ -s "$DIR/.books_want" ] || [ -s "$DIR/.books_have" ]; } && sh "$DIR/hub_books.sh"
             fi
         else
             log "wifi did not connect within ${WIFI_TIMEOUT}s"
@@ -316,6 +323,15 @@ start_search() {   # a recipe search uses the same one-at-a-time network job as 
     ) &
     SYNC_PID=$!
 }
+start_web() {     # 10.2: the hub's web reader (same one-at-a-time network job)
+    (
+        trap - EXIT INT TERM
+        if wifi_on; then log "$(sh "$DIR/web_fetch.sh" "$1" "$2")"; else
+            printf 'window.HUB_WEB={id:"%s",url:"",final:"",code:0,err:"Wi-Fi did not connect",ts:%s,html:""};\n' "$2" "$(date +%s)" > "$DIR/mesquite/web.js"; log "web: no Wi-Fi"; fi
+        wifi_off
+    ) &
+    SYNC_PID=$!
+}
 start_job() {     # 9.8.5: update-check | update-install | logup | status  (same one-at-a-time network job)
     (
         trap - EXIT INT TERM
@@ -325,6 +341,15 @@ start_job() {     # 9.8.5: update-check | update-install | logup | status  (same
                 update-install)
                     if sh "$DIR/hub_update.sh" install; then
                         log "update installed - restarting the hub"
+                        wifi_off
+                        setsid /bin/sh "$DIR/run_hub.sh" eco >/dev/null 2>&1 < /dev/null &
+                        exit 0
+                    fi ;;
+                update-auto)
+                    date +%Y-%m-%d > "$DIR/.update_auto_day"
+                    sh "$DIR/hub_update.sh" auto
+                    if [ -f "$DIR/.update/pending" ] && [ "$(cut -d' ' -f4 "$DIR/.update/pending")" = "0" ] && grep -q '"installed"' "$DIR/mesquite/update.js" 2>/dev/null; then
+                        log "night update installed - restarting the hub"
                         wifi_off
                         setsid /bin/sh "$DIR/run_hub.sh" eco >/dev/null 2>&1 < /dev/null &
                         exit 0
@@ -421,12 +446,39 @@ poll_settings_http() {
     fi
     JB=$(qv job | tr -cd 'a-z-')
     case "$JB" in
-        update-check|update-install|logup|status)
+        update-rollback)
+            log "rollback asked for from the hub"
+            if sh "$DIR/hub_update.sh" rollback; then log "rolled back - restarting the hub"; setsid /bin/sh "$DIR/run_hub.sh" eco >/dev/null 2>&1 < /dev/null & exit 0; fi ;;
+        update-check|update-install|update-auto|logup|status)
             NEWU=$((NOWQ + 180)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
             if sync_running; then log "$JB waits for the running sync"; echo "$JB" > "$DIR/.job_next"; else log "job: $JB"; start_job "$JB"; fi ;;
     esac
     V=$(num_or_empty "$(qv clouddata)")
     if [ -n "$V" ]; then case "$V" in 1) USE_CLOUD_DATA=1 ;; *) USE_CLOUD_DATA=0 ;; esac; CHANGED=1; write_cloud_js; log "cloud data: $USE_CLOUD_DATA"; fi
+    BK=$(qv books)
+    if [ -n "$BK" ]; then       # 10.3: which books belong on the Kindle: lines "id<TAB>file name"
+        urldecode "$BK" | awk -F'\t' 'NF == 2 && $1 ~ /^[A-Za-z0-9]+$/ && $2 !~ /\// && $2 !~ /^\./ && length($2) < 120 { print $1 "\t" $2 }' > "$DIR/.books_want.tmp"
+        if ! cmp -s "$DIR/.books_want.tmp" "$DIR/.books_want"; then mv "$DIR/.books_want.tmp" "$DIR/.books_want"; log "books on the Kindle: $(grep -c . "$DIR/.books_want")"; sync_running || start_sync lists; else rm -f "$DIR/.books_want.tmp"; fi
+    fi
+    SP=$(qv savepage)
+    if [ -n "$SP" ]; then       # 10.3: the web page you're reading -> a text file in the Kindle library
+        SPN=$(urldecode "$SP" | tr -cd 'A-Za-z0-9 ._()-' | cut -c1-80)
+        [ -n "$SPN" ] && log "$(sh "$DIR/web_fetch.sh" save "$SPN")"
+    fi
+    WU=$(qv web)
+    if [ -n "$WU" ]; then
+        WU=$(urldecode "$WU" | tr -d '\r\n"`$\\' | cut -c1-500); WID=$(qv wid | tr -cd 'A-Za-z0-9' | cut -c1-20)
+        NEWU=$((NOWQ + 240)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+        case "$WU" in
+            q:*|http://*|https://*|[A-Za-z0-9]*.*)
+                if sync_running; then log "web page waits for the running sync"; printf '%s\n%s\n' "$WU" "$WID" > "$DIR/.web_next"; else log "web: page asked for"; start_web "$WU" "$WID"; fi ;;
+        esac
+    fi
+    if [ "$(qv kbrowser)" = "1" ]; then log "opening the Kindle's own browser (the hub comes back at the next wake)"; lipc-set-prop com.lab126.appmgrd start app://com.lab126.browser 2>/dev/null; fi
+    HV=$(qv health | tr -cd 'A-Za-z0-9.-')
+    [ -n "$HV" ] && [ -f "$DIR/.update/pending" ] && sh "$DIR/hub_update.sh" health "$HV" && [ ! -f "$DIR/.update/pending" ] && log "update $HV confirmed by the page"
+    V=$(num_or_empty "$(qv autoupd)")
+    if [ -n "$V" ]; then case "$V" in 0|1|2) AUTO_UPDATE=$V ;; esac; save_conf; write_ui_state 0; log "auto update: $AUTO_UPDATE"; fi
     DG=$(qv diag)
     [ -n "$DG" ] && log "page: $(urldecode "$DG" | tr -cd 'A-Za-z0-9 :=.,x/-' | cut -c1-160)"
     NTF=$(qv notify)
@@ -730,6 +782,12 @@ while true; do
     if ! sync_running && cloud_ready && [ "$CLOUD_ON_WAKE" = "1" ]; then
         case "$WAKE_REASON" in button|touch|start) start_sync lists ;; esac
     fi
+    # 10.2: once a day after 2 am, check GitHub for an update (and install it if you chose that)
+    if [ "$AUTO_UPDATE" != "0" ] && [ "$(date +%H)" -ge 2 ] && [ "$(cat "$DIR/.update_auto_day" 2>/dev/null)" != "$(date +%Y-%m-%d)" ] && grep -q 'PAGES_URL="*http' "$DIR/cloud.conf" 2>/dev/null; then
+        J="update-check"; [ "$AUTO_UPDATE" = "2" ] && [ ! -f "$DIR/.update/pending" ] && J="update-auto"
+        [ "$J" = "update-check" ] && date +%Y-%m-%d > "$DIR/.update_auto_day"
+        if sync_running; then echo "$J" > "$DIR/.job_next"; else log "job: $J (nightly)"; start_job "$J"; fi
+    fi
     CLOUD_DUE=0
     FIRST=0
     write_log_js
@@ -744,6 +802,7 @@ while true; do
         fi
         poll_settings_http
         if [ -s "$DIR/.job_next" ] && ! sync_running; then J2=$(cat "$DIR/.job_next"); rm -f "$DIR/.job_next"; log "job: $J2"; start_job "$J2"; fi
+        if [ -s "$DIR/.web_next" ] && ! sync_running; then W1=$(sed -n 1p "$DIR/.web_next"); W2=$(sed -n 2p "$DIR/.web_next"); rm -f "$DIR/.web_next"; start_web "$W1" "$W2"; fi
         if [ -s "$DIR/.rsearch_next" ] && ! sync_running; then Q2=$(cat "$DIR/.rsearch_next"); rm -f "$DIR/.rsearch_next"; log "recipe search: $Q2"; start_search "$Q2"; fi
         if [ "${CLOUD_DUE:-0}" -gt 0 ] && [ "$(date +%s)" -ge "$CLOUD_DUE" ]; then
             CLOUD_DUE=0
@@ -754,6 +813,16 @@ while true; do
         still_owner || { log "another loop owns $PIDF - exiting"; exit 0; }
     done
     SYNC_PID=""
+
+    # 10.2: a fresh update must hear from the page; after two whole awake windows of silence it is undone
+    if [ -f "$DIR/.update/pending" ]; then
+        read -r PNV PPV PAT PW < "$DIR/.update/pending"
+        PW=$(( ${PW:-0} + 1 ))
+        if [ "$PW" -ge 2 ]; then
+            log "update $PNV never reported in from the page - rolling back to $PPV"
+            if sh "$DIR/hub_update.sh" rollback; then setsid /bin/sh "$DIR/run_hub.sh" eco >/dev/null 2>&1 < /dev/null & exit 0; fi
+        else echo "$PNV $PPV $PAT $PW" > "$DIR/.update/pending"; fi
+    fi
 
     NOW=$(date +%s)
     SECS=$((STEP - (NOW % STEP)))

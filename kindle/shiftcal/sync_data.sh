@@ -23,6 +23,14 @@ CURL="${CURL_BIN:-/usr/bin/curl}"
 [ -x "$CURL" ] || CURL="curl"
 mkdir -p "$IMG_DIR" 2>/dev/null
 
+# ---------- 10.0: deals, money, pantry and fun from the cloud brain (one small locked file; the page unlocks it)
+if [ "$1" != "search" ] && [ -z "$CLOUD_BUNDLE" ] && [ -s "$DIR/.cloud_links" ]; then
+    XU=$(sed -n 's/^EXTRA_URL=\(https*:[^ ]*\)$/\1/p' "$DIR/.cloud_links" | head -1)
+    if [ -n "$XU" ] && $CURL -sk --connect-timeout 6 --max-time 25 -o "$MESQ/extra.js.part" "$XU?t=$(date +%s)" 2>/dev/null && head -c 26 "$MESQ/extra.js.part" | grep -q '^window.HUB_EXTRA_LOCKED'; then
+        mv "$MESQ/extra.js.part" "$MESQ/extra.js"; echo "Extras: deals/money/fun updated"
+    else rm -f "$MESQ/extra.js.part"; fi
+fi
+
 # ---------- 9.8.5: cloud data. The GitHub Action already fetched weather, news, what's on, recipes and
 # horoscopes into ONE file (bundle.txt in your cloud gist). One download instead of ~25 = Wi-Fi off sooner.
 # Falls through to the normal fetches below when it's missing, broken or older than 2 hours.
@@ -283,7 +291,7 @@ elif [ -f "$DIR/.whatson_cache" ]; then
 fi
 ALERTS=""
 # Environment Canada: the Prince George forecast feed carries any active warning as its own entry
-EC=$($CURL -sk --connect-timeout 5 --max-time 12 -A "KitchenHub/9.9" "https://weather.gc.ca/rss/weather/53.912_-122.776_e.xml" | tr '\r\n\t' '   ')
+EC=$($CURL -sk --connect-timeout 5 --max-time 12 -A "KitchenHub/10.3" "https://weather.gc.ca/rss/weather/53.912_-122.776_e.xml" | tr '\r\n\t' '   ')
 for T in $(printf '%s' "$EC" | sed 's#</entry>#\
 #g' | grep -i 'term="Warnings and Watches"' | sed -n 's#.*<title>\([^<]*\)</title>.*#\1#p' | sed 's/ /_SP_/g'); do
     T=$(printf '%s' "$T" | sed 's/_SP_/ /g' | jesc)
@@ -291,7 +299,7 @@ for T in $(printf '%s' "$EC" | sed 's#</entry>#\
     [ -n "$ALERTS" ] && ALERTS="$ALERTS,"; ALERTS="$ALERTS{\"s\":\"WEATHER\",\"t\":\"$T\"}"
 done
 # DriveBC (Open511): active major/moderate events on the roads around Prince George
-RD=$($CURL -sk --connect-timeout 5 --max-time 12 -A "KitchenHub/9.9" "https://api.open511.gov.bc.ca/events?format=json&status=ACTIVE&bbox=-124.0,53.4,-121.6,54.4&limit=40" | tr '\r\n\t' '   ')
+RD=$($CURL -sk --connect-timeout 5 --max-time 12 -A "KitchenHub/10.3" "https://api.open511.gov.bc.ca/events?format=json&status=ACTIVE&bbox=-124.0,53.4,-121.6,54.4&limit=40" | tr '\r\n\t' '   ')
 NR=0
 for EV in $(printf '%s' "$RD" | sed 's/"jurisdiction_url"/\
 @EV@/g' | grep '^@EV@' | sed 's/ /_SP_/g'); do
