@@ -365,6 +365,7 @@ start_job() {     # 9.8.5: update-check | update-install | logup | status  (same
 sync_running() { [ -n "$SYNC_PID" ] && kill -0 "$SYNC_PID" 2>/dev/null; }
 
 HAVE_NC=0
+NC_OUT="${TMPDIR:-/tmp}/kitchenhub_nc.$$"      # 10.5: in RAM, not on the flash storage
 command -v nc >/dev/null 2>&1 && HAVE_NC=1
 qv() { echo "$QS" | tr '&' '\n' | sed -n "s/^$1=//p" | head -1; }
 num_or_empty() { case "$1" in ''|*[!0-9]*) echo "" ;; *) echo "$1" ;; esac; }
@@ -373,7 +374,21 @@ num_or_empty() { case "$1" in ''|*[!0-9]*) echo "" ;; *) echo "$1" ;; esac; }
 # interval=, window=, ss= (0 off, 1 eips, 2 eips+slots), pillow=0/1/2, rotate=1.
 poll_settings_http() {
     if [ "$HAVE_NC" != "1" ]; then sleep 1; return; fi
-    REQ=$(printf 'HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' | nc -l -p 8765 -w 1 2>/dev/null | head -1)
+    # 10.5: nc runs in the background with a watchdog. BusyBox nc only gives up on its own when nobody
+    # connects; a page that connects and then freezes (Kindle error box) kept the socket open and blocked
+    # the loop forever - no standby, no auto-rollback, a Kindle that needed a reboot.
+    : > "$NC_OUT"
+    printf 'HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' | nc -l -p 8765 -w 1 > "$NC_OUT" 2>/dev/null &
+    NCP=$!
+    ( sleep 5; kill "$NCP" 2>/dev/null ) >/dev/null 2>&1 &
+    NCW=$!
+    wait "$NCP" 2>/dev/null; NCRC=$?
+    kill "$NCW" 2>/dev/null
+    if [ "$NCRC" -gt 128 ]; then     # the watchdog had to stop it: log at most once a minute
+        NCN=$(( ${NCN:-0} + 1 ))
+        [ $(( $(date +%s) - ${NC_LOGGED:-0} )) -ge 60 ] && { log "page connection hung - listener reset (${NCN}x so far)"; NC_LOGGED=$(date +%s); }
+    fi
+    REQ=$(head -1 "$NC_OUT" 2>/dev/null)
     case "$REQ" in *"/save?"*) ;; *) return ;; esac
     QS=$(echo "$REQ" | sed -n 's#.* /save?\([^ ]*\) HTTP.*#\1#p')
     NOWQ=$(date +%s)
@@ -601,6 +616,7 @@ rtc_path() {
 
 cleanup() {
     thaw_powerd
+    [ -n "$NCP" ] && kill "$NCP" 2>/dev/null; rm -f "$NC_OUT"     # 10.5
     [ -n "$SYNC_PID" ] && kill "$SYNC_PID" 2>/dev/null
     if still_owner; then
         # only undo global state if a newer loop has not taken over
