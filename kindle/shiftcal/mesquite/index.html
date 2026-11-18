@@ -1530,7 +1530,7 @@ function exitHub() {
 // =====================================================================
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.3";
+var VERSION = "10.4";
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
 var EDIT = false;
@@ -1875,6 +1875,7 @@ function layout() {
     root.style.webkitTransformOrigin = "0 0"; root.style.transformOrigin = "0 0";
     root.style.webkitTransform = tf; root.style.transform = tf;
 
+    railLayout();          // 10.4: the open-apps rail takes its width off the left (W is the stage from here on)
     PORTRAIT = H > W;
     FS = Math.max(10, Math.min(W, H) / 48 * uiScale());
     document.documentElement.style.fontSize = FS + "px";
@@ -2595,6 +2596,7 @@ function renderSysbarContext() {
     var mid = $("sb-mid"), right = $("sb-right");
     mid.innerHTML = ""; right.innerHTML = "";
     if (EDIT) { renderTray(mid); addTextBtn(right, "DONE", exitEdit, true); return; }
+    mid.style.whiteSpace = "";
     var list = ctxList();
     for (var j = 0; j < list.length; j++) addIconBtn(mid, list[j][0], list[j][1], false);
     if (currentView !== "hub") addIconBtn(right, "cog", function() { if (!HUB_OPEN) openHub(); }, true);
@@ -2772,6 +2774,7 @@ function renderEditOverlays() {
 }
 function renderTray(mid) {
     var l = LAYOUT[orientKey()], any = false;
+    mid.style.whiteSpace = "normal";   // 10.4: the chips wrap instead of running off the right edge
     var lbl = document.createElement("span"); lbl.className = "tray-lbl"; lbl.innerHTML = "ADD:"; mid.appendChild(lbl);
     for (var i = 0; i < l.length; i++) {
         var p = PLACED[l[i].id];
@@ -3534,15 +3537,16 @@ var HubCal = (function() {
     /* 10.0 records, all "|"-separated (no pipes inside fields):
      *   wish    name|target|query                      bill   name|amount|rule|who|autopay
      *   spend   date|amount|category|who|split|note     goal   name|target|saved|by (10.1.1)
-     *   pantry  name|expires|qty|where                  pkg    name|carrier|tracking|expected      */
+     *   pantry  name|expires|qty|where|opened|low|unit  (10.4 added opened, low = keep at least this many, unit)
+     *   pkg     name|carrier|tracking|expected                                                       */
     var REC = { wish: ["name", "target", "query"], bill: ["name", "amount", "rule", "who", "autopay"], spend: ["date", "amount", "cat", "who", "split", "note"],
-                goal: ["name", "target", "saved", "by"], pantry: ["name", "expires", "qty", "where"], pkg: ["name", "carrier", "tracking", "expected"],
+                goal: ["name", "target", "saved", "by"], pantry: ["name", "expires", "qty", "where", "opened", "low", "unit"], pkg: ["name", "carrier", "tracking", "expected"],
                 book: ["title", "author", "ext", "size", "want", "src", "added", "conv"] };      // 10.3: the book cloud (want = kindle | cloud)
     function parseRec(kind, text) {
         var f = String(text || "").split("|"), o = {}, ks = REC[kind] || [];
         for (var i = 0; i < ks.length; i++) o[ks[i]] = f[i] === undefined ? "" : f[i];
-        ["target", "amount", "saved", "qty", "size"].forEach(function(n) { if (o[n] !== undefined) o[n] = o[n] === "" ? 0 : +o[n] || 0; });
-        ["date", "expires", "expected", "by", "added"].forEach(function(n) {          // 10.1.2: a broken date reads as "no date" (was "undefined NaN" on screen)
+        ["target", "amount", "saved", "qty", "size", "low"].forEach(function(n) { if (o[n] !== undefined) o[n] = o[n] === "" ? 0 : +o[n] || 0; });
+        ["date", "expires", "expected", "by", "added", "opened"].forEach(function(n) {          // 10.1.2: a broken date reads as "no date" (was "undefined NaN" on screen)
             if (o[n] && !(/^\d{4}-\d\d-\d\d$/.test(o[n]) && +o[n].substring(5, 7) >= 1 && +o[n].substring(5, 7) <= 12 && +o[n].substring(8, 10) >= 1 && +o[n].substring(8, 10) <= 31)) o[n] = "";
         });
         if (o.split !== undefined) o.split = o.split === "1";
@@ -3551,7 +3555,13 @@ var HubCal = (function() {
     }
     function recText(kind, o) {
         var ks = REC[kind] || [], out = [];
-        for (var i = 0; i < ks.length; i++) { var v = o[ks[i]]; if (v === true) v = "1"; if (v === false || v === undefined || v === null) v = ""; out.push(String(v).replace(/[|\t\n]/g, " ")); }
+        for (var i = 0; i < ks.length; i++) {
+            var v = o[ks[i]];
+            if (v === true) v = "1";
+            if (v === false || v === undefined || v === null || (kind === "pantry" && ks[i] === "low" && !(+v > 0))) v = "";      // 10.4: "keep at least 0" is the same as not set
+            out.push(String(v).replace(/[|\t\n]/g, " "));
+        }
+        if (kind === "pantry") while (out.length > 4 && out[out.length - 1] === "") out.pop();      // 10.4: lines without the new fields look exactly like 10.3's
         return out.join("|");
     }
     function money2(x) { var s = (Math.round((+x || 0) * 100) / 100).toFixed(2), p = s.split("."); return (s.charAt(0) === "-" ? "-$" + p[0].substring(1) : "$" + p[0]).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + p[1]; }
@@ -5003,7 +5013,7 @@ function openHoro() {
     HORO.view = HORO.view === undefined ? HORO.mine : HORO.view;
     $("horo-view").style.display = "block";
     setView("horo");
-    renderHoroView();
+    layoutV96();          // 10.4: place the reading and the sign list first (they were left stacked at the top-left, so the sign list covered the sign's name); layoutV96 also renders
 }
 function closeHoro() { $("horo-view").style.display = "none"; setView("main"); goHome(); }
 function renderHoroView() {
@@ -6907,6 +6917,9 @@ function renderXV() {
         if (i < XV.page) { rows[i].style.display = "none"; continue; }
         if (shown > 0 && rows[i].offsetTop + rows[i].offsetHeight > room) { rows[i].style.display = "none"; cut++; } else shown++;      // 10.2: a row taller than the page is shown (clipped), not skipped forever
     }
+    // 10.4: a heading whose first item is on another page is hidden too
+    var hl = body.getElementsByClassName("hv-lbl");
+    for (i = 0; i < hl.length; i++) { var nx = hl[i].nextElementSibling; if (nx && nx.className.indexOf("xr") >= 0 && nx.style.display === "none") hl[i].style.display = "none"; }
     var mb = $("xv-more");
     if (cut || XV.page) { mb.style.display = "inline-block"; mb.innerHTML = cut ? "MORE &middot; " + cut + " &#9662;" : "BACK TO THE TOP &#9652;"; mb.__next = cut ? XV.page + Math.max(1, shown) : 0; }
     else mb.style.display = "none";
@@ -7276,7 +7289,7 @@ function layoutV100() {
         var m = xv.getElementsByClassName("ov-mast")[0].offsetHeight, tb = $("xv-tabs");
         place(tb, 0, m, W, Math.round(FS * 2.6));
         place($("xv-body"), Math.round(FS * 0.8), m + Math.round(FS * 2.9), W - Math.round(FS * 1.6), xv.clientHeight - m - Math.round(FS * 3.1));
-        place($("xv-more"), W - Math.round(FS * 12), xv.clientHeight - Math.round(FS * 2.6), Math.round(FS * 11), Math.round(FS * 2.2));
+        place($("xv-more"), W - Math.round(FS * 17), xv.clientHeight - Math.round(FS * 2.6), Math.round(FS * 16), Math.round(FS * 2.2));
     }
 }
 // morning/front page + coming up: bills due and food to use
@@ -8161,6 +8174,521 @@ function tick() {
     }
 }
 setInterval(tick, 4000);
+
+/* ---------------- HubPantry (10.4): the pantry rules every device shares ----------------
+ * Settings live in the list as cfg item "pantry" (JSON):
+ *   { locs: ["Fridge", "Freezer", "Pantry"],          where food can be (up to 8)
+ *     days: { Fridge: 5, Freezer: 90, Pantry: 60 },   shelf life when nothing better is known
+ *     on: { board, tile, remind, fromList, restock, cook } }   each feature on (1) or off (0)
+ * Pantry items: HubCal "pantry" records (name|expires|qty|where|opened|low|unit).
+ *   low = keep at least this many: when qty drops below it (or the item is used up) it goes on the list.  */
+var HubPantry = (function() {
+    var FEATURES = ["board", "tile", "remind", "fromList", "restock", "cook"];
+    var DEF = { locs: ["Fridge", "Freezer", "Pantry"], days: { Fridge: 5, Freezer: 90, Pantry: 60 } };
+    // [what it matches, days unopened, where it usually lives, days once opened (0 = no change)]
+    var SHELF = [
+        [/ice cream|frozen|freezer/, 180, "Freezer", 0],
+        [/leftover/, 3, "Fridge", 0],
+        [/\bmilk\b|cream\b|half and half/, 10, "Fridge", 7],
+        [/yogh?urt|kefir|sour cream|cottage/, 14, "Fridge", 5],
+        [/cheese/, 30, "Fridge", 21],
+        [/butter|margarine/, 60, "Fridge", 30],
+        [/\beggs?\b/, 28, "Fridge", 0],
+        [/chicken|turkey|pork|beef|steak|ground|mince|sausage|fish|salmon|cod|tilapia|shrimp|prawn|lamb/, 2, "Fridge", 0],
+        [/\bdeli\b|\bham\b|bacon|salami|hot dog|wiener/, 7, "Fridge", 4],
+        [/juice/, 10, "Fridge", 7],
+        [/lettuce|greens|spinach|salad|kale|arugula|herb|cilantro|parsley|basil/, 5, "Fridge", 0],
+        [/berr|grape/, 5, "Fridge", 0],
+        [/mushroom/, 5, "Fridge", 0],
+        [/carrot|celery|pepper|cucumber|broccoli|cauliflower|zucchini|cabbage/, 10, "Fridge", 0],
+        [/apple|orange|lemon|lime|pear/, 21, "Fridge", 0],
+        [/banana|avocado|tomato/, 5, "Pantry", 0],
+        [/potato|onion|garlic|squash/, 30, "Pantry", 0],
+        [/bread|\bbuns?\b|bagel|tortilla|wrap|pita|muffin/, 6, "Pantry", 0],
+        [/salsa|pesto|hummus|dip/, 14, "Fridge", 7],
+        [/ketchup|mustard|mayo|jam|sauce|dressing/, 180, "Pantry", 60],
+        [/rice|pasta|noodle|flour|sugar|cereal|oat|bean|lentil|can|soup|broth|oil|coffee|tea|spice|salt|honey|peanut/, 365, "Pantry", 0]
+    ];
+    var NOT_FOOD = /paper|towel|toilet|tissue|soap|detergent|laundry|dish ?wash|garbage|bags?\b|foil|wrap film|cleaner|bleach|sponge|batter(y|ies)|shampoo|conditioner|toothpaste|razor|diaper|wipes|deodorant|lotion|light ?bulb|cat litter|dog food/;
+
+    function cfg(text) {
+        var o = {}; try { o = text ? JSON.parse(text) : {}; } catch (e) { o = {}; }
+        if (!o || typeof o !== "object") o = {};
+        var locs = [], i;
+        if (Array.isArray(o.locs)) for (i = 0; i < o.locs.length && locs.length < 8; i++) { var l = String(o.locs[i] || "").replace(/[|\t\n]/g, " ").replace(/^\s+|\s+$/g, "").substring(0, 20); if (l && locs.indexOf(l) < 0) locs.push(l); }
+        if (!locs.length) locs = DEF.locs.slice();
+        var days = {};
+        for (i = 0; i < locs.length; i++) { var d = o.days && +o.days[locs[i]]; days[locs[i]] = d >= 1 && d <= 730 ? Math.round(d) : (DEF.days[locs[i]] || 7); }
+        var on = {};
+        for (i = 0; i < FEATURES.length; i++) on[FEATURES[i]] = !(o.on && (o.on[FEATURES[i]] === 0 || o.on[FEATURES[i]] === false));
+        return { locs: locs, days: days, on: on };
+    }
+    function cfgText(c) {
+        var on = {}; for (var i = 0; i < FEATURES.length; i++) on[FEATURES[i]] = c.on[FEATURES[i]] ? 1 : 0;
+        return JSON.stringify({ locs: c.locs, days: c.days, on: on });
+    }
+    // best guess for something new: how long it keeps, where it goes, how long once opened
+    function guess(name, c) {
+        c = c || cfg(null);
+        var n = String(name || "").toLowerCase();
+        for (var i = 0; i < SHELF.length; i++) if (SHELF[i][0].test(n)) {
+            var w = c.locs.indexOf(SHELF[i][2]) >= 0 ? SHELF[i][2] : c.locs[0];
+            return { days: SHELF[i][1], where: w, open: SHELF[i][3] };
+        }
+        return { days: c.days[c.locs[0]] || 7, where: c.locs[0], open: 0 };
+    }
+    function isFood(name) { return !NOT_FOOD.test(String(name || "").toLowerCase()); }
+    function daysLeft(p, today) { return p && p.expires ? HubCal.dayNum(p.expires) - HubCal.dayNum(today) : null; }
+    // expired | today | soon (1-2 days) | week (3-7) | ok | none (no date)
+    function status(p, today) {
+        var d = daysLeft(p, today);
+        return d === null ? "none" : d < 0 ? "expired" : d === 0 ? "today" : d <= 2 ? "soon" : d <= 7 ? "week" : "ok";
+    }
+    // opening something can shorten how long it keeps (milk: 7 days once open)
+    function opened(p, today, c) {
+        var g = guess(p.name, c), o = {}, k;
+        for (k in p) if (p.hasOwnProperty(k)) o[k] = p[k];
+        o.opened = today;
+        if (g.open > 0) { var lim = HubCal.keyN(HubCal.dayNum(today) + g.open); if (!o.expires || o.expires > lim) o.expires = lim; }
+        return o;
+    }
+    function sameName(a, b) { var f = function(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/s\b/g, "").replace(/\s+/g, " ").replace(/^\s|\s$/g, ""); }; return f(a) === f(b) && f(a) !== ""; }
+    function needsRestock(p) { return p.low > 0 && (+p.qty || 0) < p.low; }
+    // which of your places an item is in: the fridge saved "fridge" before 10.4, the phone "Fridge"; unknown -> first place
+    function place(where, c) {
+        c = c || cfg(null);
+        var w = String(where || "").toLowerCase();
+        for (var i = 0; i < c.locs.length; i++) if (c.locs[i].toLowerCase() === w) return c.locs[i];
+        return w ? String(where) : c.locs[0];
+    }
+    return { FEATURES: FEATURES, cfg: cfg, cfgText: cfgText, guess: guess, isFood: isFood, daysLeft: daysLeft, status: status, opened: opened, sameName: sameName, needsRestock: needsRestock, place: place };
+})();
+
+// =====================  10.4 PANTRY APP  =====================
+// The Pantry app: USE FIRST (the expiry board), EVERYTHING (by place), COOK (your saved recipes that use what's
+// about to expire, then ideas) and SETTINGS. Same rules as the phone and the cloud (HubPantry, above).
+// It takes over the 10.0/10.1 pantry screens and the Pantry tile; the ticking-off-the-list part runs in the cloud.
+XV_TABS.food = ["USE FIRST", "EVERYTHING", "COOK", "SETTINGS"]; XV_TITLE.food = "PANTRY";
+var PAN = { loc: "" };
+var PAN_FEAT = { board: "Use-first board (this app's first page)", tile: "Use-it-up list on the Pantry tile", remind: "Evening \"use it up\" push to the phone", fromList: "Food ticked off the list goes into the pantry", restock: "Staples that run low go back on the list", cook: "Cook-from-pantry suggestions" };
+var PAN_GROUPS = [["expired", "PAST ITS DATE"], ["today", "USE TODAY"], ["soon", "IN THE NEXT 2 DAYS"], ["week", "THIS WEEK"], ["ok", "LATER"], ["none", "NO DATE"]];
+var PAN_QUICK = ["Milk", "Eggs", "Bread", "Chicken", "Ground beef", "Yogurt", "Cheese", "Butter", "Deli meat", "Salad greens", "Bananas", "Leftovers"];
+function panCfg() { var cs = itemsOf("cfg"); for (var i = 0; i < cs.length; i++) if (cs[i].id === "pantry" && !cs[i].locked) return HubPantry.cfg(cs[i].text); return HubPantry.cfg(null); }
+function panCfgSave(C) { itemEdit("pantry", "cfg", "open", HubPantry.cfgText(C)); }
+function panItems(C) { var ps = recs("pantry"); for (var i = 0; i < ps.length; i++) ps[i].where = HubPantry.place(ps[i].where, C); return ps; }
+function panGet(id) { var ps = panItems(panCfg()); for (var i = 0; i < ps.length; i++) if (ps[i].id === id) return ps[i]; return null; }
+function panSave(p, state) { itemEdit(p.id, "pantry", state || "open", HubCal.recText("pantry", p)); }
+function panWhen(p) { var d = HubPantry.daysLeft(p, todayKey()); return d === null ? "no date" : d < 0 ? (d === -1 ? "yesterday" : (-d) + " days ago") : d === 0 ? "today" : d === 1 ? "tomorrow" : d + " days"; }
+function panSort(a, b) { var x = a.expires || "9999", y = b.expires || "9999"; return x < y ? -1 : x > y ? 1 : (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); }
+function panDone() { renderXV(); renderTileById("food"); }
+// add food: more of something you have (same name and place) adds to it; otherwise a new item
+function panAdd(name, qty, where, expires) {
+    var C = panCfg(), ps = panItems(C), i;
+    for (i = 0; i < ps.length; i++) if (HubPantry.sameName(ps[i].name, name) && ps[i].where === where) {
+        ps[i].qty = (+ps[i].qty || 0) + qty;
+        if (expires && (!ps[i].expires || ps[i].expires < expires)) ps[i].expires = expires;
+        return panSave(ps[i]);
+    }
+    panSave({ id: newId(), name: name, expires: expires, qty: qty, where: where, opened: "", low: 0, unit: "" });
+}
+function panRow(p, full) {
+    var st = HubPantry.status(p, todayKey());
+    var tag = st === "expired" ? " <b class='tag'>PAST DATE</b>" : st === "today" ? " <b class='tag'>TODAY</b>" : st === "soon" ? " <b class='tag o'>" + panWhen(p).toUpperCase() + "</b>" : "";
+    return "<div class='xr'><div class='xr-t'>" + esc(p.name) + (p.qty > 1 ? " &times;" + p.qty + (p.unit ? " " + esc(p.unit) : "") : "") + tag + "</div>" +
+        "<div class='xr-s'>" + esc(p.where) + " &middot; " + panWhen(p) + (p.opened ? " &middot; opened " + shortK(p.opened) : "") + (p.low > 0 ? " &middot; keep " + p.low : "") + "</div>" +
+        "<div class='xr-b'>" + (p.qty > 1 ? btn("pnMinus", p.id, "&minus;1") : "") + btn("pnUsed", p.id, "&#10003; USED UP") + (p.opened ? "" : btn("pnOpen", p.id, "OPENED")) + btn("pnToss", p.id, "TOSSED") +
+        (full ? btn("pnPlus", p.id, "+1") + btn("pnMove", p.id, "MOVE") + btn("pnDate", p.id, "DATE") + btn("pnKeep", p.id, "KEEP " + (p.low || 0)) : "") + btn("toList", p.id, "+ LIST") + "</div></div>";
+}
+function panGroups(list, from, to, full) {
+    var h = "", g, i;
+    for (g = from; g <= to; g++) {
+        var sub = [];
+        for (i = 0; i < list.length; i++) if (HubPantry.status(list[i], todayKey()) === PAN_GROUPS[g][0]) sub.push(list[i]);
+        if (!sub.length) continue;
+        h += "<div class='hv-lbl' style='margin-top:.4em'>" + PAN_GROUPS[g][1] + " (" + sub.length + ")</div>";
+        for (i = 0; i < sub.length; i++) h += panRow(sub[i], full);
+    }
+    return h;
+}
+XVR.food = function(tab) {
+    var C = panCfg(), all = panItems(C).sort(panSort), h = "", i;
+    var bar = "<div class='xv-bar'>" + btn("pnAdd", "", "+ ADD FOOD", "big sel") + " " + btn("leftAdd", "", "+ LEFTOVERS", "big") + "</div>";
+    if (tab === 0) {
+        if (!C.on.board) return "<div class='sv-empty'>The use-first board is off (SETTINGS). Everything is on the EVERYTHING page.</div>";
+        h += bar;
+        var urgent = panGroups(all, 0, 3, false);
+        h += urgent || "<div class='sv-empty'>" + (all.length ? "Nothing needs using up this week. " + all.length + " thing" + (all.length > 1 ? "s" : "") + " in the pantry: see EVERYTHING." : "The pantry is empty. Add food above" + (C.on.fromList ? ", or tick food off the shopping list" : "") + ".") + "</div>";
+        return h;
+    }
+    if (tab === 1) {
+        h += bar + "<div class='xv-bar'>" + btn("pnLoc", "", "ALL (" + all.length + ")", PAN.loc ? "" : "sel");
+        for (i = 0; i < C.locs.length; i++) { var n = 0; for (var j = 0; j < all.length; j++) if (all[j].where === C.locs[i]) n++; h += " " + btn("pnLoc", C.locs[i], esc(C.locs[i]).toUpperCase() + " (" + n + ")", PAN.loc === C.locs[i] ? "sel" : ""); }
+        h += "</div>";
+        var list = [];
+        for (i = 0; i < all.length; i++) if (!PAN.loc || all[i].where === PAN.loc) list.push(all[i]);
+        h += list.length ? panGroups(list, 0, PAN_GROUPS.length - 1, true) : "<div class='sv-empty'>Nothing here.</div>";
+        var wst = cfgJSON("waste"), mk = todayKey().substring(0, 7), w1 = +wst[mk] || 0, w2 = +wst[monthKeyAgo(1)] || 0;
+        if (w1 || w2) h += "<div class='hv-hint' style='margin-top:.5em'>Thrown out: " + w1 + " this month, " + w2 + " last month.</div>";
+        return h + wasteChart();
+    }
+    if (tab === 2) {
+        if (!C.on.cook) return "<div class='sv-empty'>Cook suggestions are off (SETTINGS).</div>";
+        var cook = (EX && EX.cook) || [], ideas = (EX && EX.ideas) || [];
+        h += "<div class='hv-hint'>Recipes that use food expiring in the next 3 days. Yours first; the ideas open on the phone.</div>";
+        if (!cook.length && !ideas.length) h += "<div class='sv-empty'>Nothing about to expire, or the cloud hasn't looked yet.</div>";
+        for (i = 0; i < cook.length; i++) h += "<div class='xr'><div class='xr-t'>" + esc(cook[i].title) + "</div><div class='xr-s'>uses " + esc(cook[i].uses.join(", ")) + "</div><div class='xr-b'>" + btn("pnCook", cook[i].id, "COOK IT") + "</div></div>";
+        for (i = 0; i < ideas.length; i++) h += "<div class='xr'><div class='xr-t'>Use the <b>" + esc(ideas[i].for) + "</b></div><div class='xr-s'>" + ideas[i].meals.map(function(m) { return esc(m.n); }).join(" &middot; ") + "</div></div>";
+        return h;
+    }
+    h += "<div class='hv-hint'>Changes reach the phone and the cloud at the next sync.</div>";
+    for (i = 0; i < HubPantry.FEATURES.length; i++) { var f = HubPantry.FEATURES[i]; h += "<div class='xr'><div class='xr-t'>" + PAN_FEAT[f] + "</div><div class='xr-b'>" + btn("pnSet", f, C.on[f] ? "&#10003; ON" : "OFF", C.on[f] ? "sel" : "") + "</div></div>"; }
+    h += "<div class='hv-lbl' style='margin-top:.5em'>PLACES" + (C.locs.length < 8 ? " " + btn("pnPlace", "", "+ PLACE") : "") + "</div>";
+    for (i = 0; i < C.locs.length; i++) h += "<div class='xr'><div class='xr-t'>" + esc(C.locs[i]) + "</div><div class='xr-s'>food keeps " + C.days[C.locs[i]] + " days here when the hub can't guess</div><div class='xr-b'>" + btn("pnDays", C.locs[i], "DAYS") + (C.locs.length > 1 ? btn("pnDel", C.locs[i], "REMOVE") : "") + "</div></div>";
+    return h;
+};
+XVA.pnAdd = function() {
+    var C = panCfg();
+    kbOpen("What food? (chicken thighs, oat milk...)", "", function(t) {
+        t = String(t || "").replace(/[|\t\n]/g, " ").replace(/^\s+|\s+$/g, "").substring(0, 60);
+        if (!t) return renderXV();
+        var g = HubPantry.guess(t, C), opts = [[g.days, "ABOUT " + g.days + " DAYS (GUESS)"], [1, "Tomorrow"], [3, "3 days"], [7, "1 week"], [14, "2 weeks"], [30, "1 month"], [90, "3 months"], [0, "No date"]];
+        pickChips("Best before?", opts, function(n) {
+            var where = [[g.where, g.where.toUpperCase() + " (GUESS)"]];
+            for (var i = 0; i < C.locs.length; i++) if (C.locs[i] !== g.where) where.push([C.locs[i], C.locs[i]]);
+            pickChips("Where does it go?", where, function(wh) { panAdd(t, 1, wh, n ? dPlus(n) : ""); panDone(); });
+        });
+    }, function(v) { var r = [], s = String(v || "").toLowerCase(); for (var i = 0; i < PAN_QUICK.length; i++) if (!s || PAN_QUICK[i].toLowerCase().indexOf(s) === 0) r.push(PAN_QUICK[i]); return r; });
+};
+XVA.leftAdd = function() {
+    var C = panCfg();
+    kbOpen("Leftovers of what?", planFor(todayKey()) || "", function(t) {
+        t = String(t || "").replace(/[|\t\n]/g, " ").replace(/^\s+|\s+$/g, "").substring(0, 50);
+        if (t) panAdd("Leftovers: " + t, 1, HubPantry.place("Fridge", C), dPlus(3));
+        panDone();
+    });
+};
+XVA.pnMinus = function(id) { var p = panGet(id); if (!p) return; p.qty = Math.max(0, (+p.qty || 1) - 1); panSave(p, p.qty ? "open" : "done"); panDone(); };
+XVA.pnPlus = function(id) { var p = panGet(id); if (!p) return; p.qty = (+p.qty || 0) + 1; panSave(p); panDone(); };
+XVA.pnUsed = function(id) { var p = panGet(id); if (!p) return; p.qty = 0; panSave(p, "done"); panDone(); };      // a staple then goes back on the list (cloud)
+XVA.pnOpen = function(id) { var p = panGet(id); if (p) panSave(HubPantry.opened(p, todayKey(), panCfg())); panDone(); };
+XVA.pnToss = function(id) {
+    var p = panGet(id); if (!p) return;
+    var w = cfgJSON("waste"), mk = todayKey().substring(0, 7); w[mk] = (+w[mk] || 0) + 1; cfgSave("waste", w);
+    p.qty = 0; panSave(p, "done"); panDone();
+};
+XVA.pnMove = function(id) {
+    var C = panCfg(), p = panGet(id); if (!p) return;
+    var i = C.locs.indexOf(p.where); p.where = C.locs[(i + 1) % C.locs.length];      // tap again to keep moving
+    if (/freez/i.test(p.where) && (!p.expires || HubPantry.daysLeft(p, todayKey()) < (C.days[p.where] || 90))) p.expires = dPlus(C.days[p.where] || 90);      // frozen food keeps much longer
+    panSave(p); panDone();
+};
+XVA.pnDate = function(id) {
+    var p = panGet(id); if (!p) return;
+    pickChips("Best before for " + p.name + "?", [[1, "Tomorrow"], [2, "2 days"], [3, "3 days"], [5, "5 days"], [7, "1 week"], [14, "2 weeks"], [30, "1 month"], [90, "3 months"], [0, "No date"]], function(n) { p.expires = n ? dPlus(n) : ""; panSave(p); panDone(); });
+};
+XVA.pnKeep = function(id) {
+    var p = panGet(id); if (!p) return;
+    askNumber("Keep at least how many " + p.name + "? (0 = don't put it back on the list)", p.low || "", function(v) { if (v === null) return renderXV(); p.low = Math.max(0, Math.round(v)); panSave(p); panDone(); });
+};
+XVA.pnLoc = function(l) { PAN.loc = l; XV.page = 0; renderXV(); };
+XVA.pnCook = function(id) { openCook(id); };
+XVA.pnSet = function(f) { var C = panCfg(); C.on[f] = !C.on[f]; panCfgSave(C); panDone(); };
+XVA.pnDays = function(l) { var C = panCfg(); askNumber("How many days does food keep in " + l + "?", C.days[l], function(v) { if (v !== null && v >= 1) { C.days[l] = Math.min(730, Math.round(v)); panCfgSave(C); } renderXV(); }); };
+XVA.pnDel = function(l) { var C = panCfg(), i = C.locs.indexOf(l); if (i < 0 || C.locs.length < 2) return; C.locs.splice(i, 1); delete C.days[l]; panCfgSave(C); renderXV(); };
+XVA.pnPlace = function() {
+    kbOpen("New place (garage freezer, cold room...)", "", function(t) {
+        var C = panCfg(); t = String(t || "").replace(/[|\t\n]/g, " ").replace(/^\s+|\s+$/g, "").substring(0, 20);
+        if (t && C.locs.length < 8 && C.locs.indexOf(t) < 0) { C.locs.push(t); C.days[t] = /freez/i.test(t) ? 90 : 7; panCfgSave(C); }
+        renderXV();
+    });
+};
+TILE_RENDER.food = function(T) {
+    var C = panCfg(), ps = panItems(C).sort(panSort), tk = todayKey(), wk = 0, i, shown = 0;
+    for (i = 0; i < ps.length; i++) { var s = HubPantry.status(ps[i], tk); if (s !== "ok" && s !== "none") wk++; }
+    var h = "<span class='stamp'>Pantry" + (wk ? " &middot; " + wk + " to use this week" : "") + "</span>";
+    if (!ps.length) h += "<div class='sv-empty'>Tap to add food" + (C.on.fromList ? ", or tick food off the shopping list" : "") + ".</div>";
+    else if (!C.on.tile) h += "<div class='py-big'>" + ps.length + "</div><div class='py-sub'>in the pantry</div>";
+    else for (i = 0; i < ps.length && shown < (T.cls === "s" ? 2 : 5); i++) {
+        if (!ps[i].expires) continue;
+        var st = HubPantry.status(ps[i], tk), hot = st === "expired" || st === "today" || st === "soon";
+        h += "<div class='tl-r'>" + (hot ? "<b>" : "") + esc(ps[i].name) + " &middot; " + panWhen(ps[i]) + (hot ? "</b>" : "") + "</div>"; shown++;
+    }
+    var ck = C.on.cook && EX && EX.cook && EX.cook[0], idea = C.on.cook && EX && EX.ideas && EX.ideas[0];
+    if (T.cls !== "s" && (ck || idea)) h += "<div class='tl-r tl-s'>Cook: " + esc(ck ? ck.title : idea.meals[0].n) + "</div>";
+    tileFill("food", T, h);
+};
+renderTileById("food");
+
+
+// =====================  10.4 PRIVACY: PIN LOCK  =====================
+// Each person can set a PIN. Locked: their Pay (only their own PIN opens it), and the shared Money, fridge
+// Notes and the Board (either person's PIN opens those). Opens for a few minutes, and everything locks again
+// when the hub goes to standby, so the standby page (and the screensaver copied from it) never shows them.
+// A PIN keeps private things off the screen for people at the fridge; the list itself is protected by the
+// passphrase (cloud.conf). PINs are stored as salted, stretched SHA-256 hashes (cfg item "pins").
+var LOCK = { until: { p1: 0, p2: 0 }, fails: 0, waitUntil: 0, was: "" };
+var LOCK_SHARED = { money: 1, notes: 1, board: 1 };
+function pinsCfg() { var o = cfgJSON("pins"); o.mins = Math.max(1, Math.min(60, +o.mins || 5)); return o; }
+function pinSet(who) { var p = pinsCfg()[who]; return !!(p && p.h && p.s); }
+function lockOn() { return pinSet("p1") || pinSet("p2"); }
+function lockNow() { return new Date().getTime(); }
+function pinHash(salt, pin) { var k = HubCrypt.utf8("kitchenhub-pin|" + salt + "|" + pin); for (var i = 0; i < 2000; i++) k = HubCrypt.sha256(k); return HubCrypt.hex(k); }
+function pinOk(who, pin) { var p = pinsCfg()[who]; return !!(p && p.h && p.s && pinHash(p.s, pin) === p.h); }
+function isOpen(who) { return !pinSet(who) || (!HUB.sleeping && LOCK.until[who] > lockNow()); }
+// area: "pay:p1", "pay:p2", "money", "notes", "board"
+function canSee(area) {
+    if (area.indexOf("pay:") === 0) return isOpen(area.substring(4));
+    if (!LOCK_SHARED[area] || !lockOn()) return true;
+    return (pinSet("p1") && isOpen("p1")) || (pinSet("p2") && isOpen("p2"));
+}
+function lockAll() { LOCK.until.p1 = 0; LOCK.until.p2 = 0; }
+function lockSig() { return [canSee("pay:p1"), canSee("pay:p2"), canSee("money"), canSee("notes"), canSee("board")].join(""); }
+function lockRefresh() {          // redraw whatever shows private things, and close a private screen that just locked
+    var s = lockSig();
+    if (s === LOCK.was) return;
+    LOCK.was = s;
+    renderTileById("pay"); renderTileById("money"); renderTileById("board"); renderTileById("shifts");
+    try { checkBulletin(); } catch (e) {}
+    if (currentView === "xv" && XV.mode === "money" && !canSee("money")) closeXV();
+    if (currentView === "xv" && XV.mode === "lock") renderXV();
+    if (currentView === "board" && !canSee("board")) { $("board-view").style.display = "none"; setView("main"); goHome(); }
+    if (HUB_OPEN && curTab === "pay" && !canSee("pay:p1")) closeHub();
+}
+// ---------- the keypad (digits never shown; a dot per digit) ----------
+var PIN = { val: "", cb: null };
+(function() {
+    var el = document.createElement("div"); el.id = "pin-pad";
+    el.style.cssText = "display:none;position:absolute;z-index:400;background:#fff;border:6px double #000;padding:1em;box-sizing:border-box;text-align:center;font-family:Helvetica,Arial,sans-serif";
+    $("root").appendChild(el);          // inside #root, so it turns with the screen
+})();
+function pinDraw(title, note) {
+    var el = $("pin-pad"), h = "<div class='hv-lbl'>" + title + "</div><div style='font-size:2.4em;letter-spacing:.3em;min-height:1.3em;margin:.2em 0'>" + (PIN.val ? new Array(PIN.val.length + 1).join("&#9679;") : "&nbsp;") + "</div>" +
+        "<div class='hv-hint' style='min-height:1.3em'>" + (note || "") + "</div>", keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "CANCEL", "0", "&#9003;"], i;
+    for (i = 0; i < keys.length; i++) h += (i % 3 === 0 ? "<div>" : "") + "<span class='opt-btn big' data-k='" + i + "' style='display:inline-block;min-width:26%;margin:.2em;text-align:center'>" + keys[i] + "</span>" + (i % 3 === 2 ? "</div>" : "");
+    h += "<div style='margin-top:.3em'><span class='opt-btn big sel' data-k='ok' style='display:inline-block;min-width:82%;text-align:center'>OK</span></div>";
+    el.innerHTML = h;
+    var bs = el.getElementsByTagName("span");
+    for (i = 0; i < bs.length; i++) (function(b) {
+        quickTap(b, function() {
+            var k = b.getAttribute("data-k");
+            if (k === "ok") { if (PIN.val.length >= 4) pinClose(PIN.val); return; }
+            k = +k;
+            if (k === 9) return pinClose(null);
+            if (k === 11) PIN.val = PIN.val.substring(0, PIN.val.length - 1); else if (PIN.val.length < 6) PIN.val += keys[k];
+            pinDraw(title, note);
+        });
+    })(bs[i]);
+}
+function pinAsk(title, cb, note) {
+    var el = $("pin-pad"); PIN.val = ""; PIN.cb = cb;
+    el.style.display = "block";
+    place(el, Math.round(W * 0.2), Math.round(H * 0.12), Math.round(W * 0.6), Math.round(H * 0.7));
+    pinDraw(title, note || "4 to 6 digits");
+}
+function pinClose(v) { $("pin-pad").style.display = "none"; var cb = PIN.cb; PIN.cb = null; PIN.val = ""; if (cb) cb(v); }
+// ask for a PIN that opens `area`, then run `then`
+function unlock(area, then) {
+    if (canSee(area)) return then();
+    var who = area.indexOf("pay:") === 0 ? [area.substring(4)] : ["p1", "p2"].filter(pinSet);
+    var name = who.length === 1 ? pName(who[0]) : "your";
+    (function ask(note) {
+        if (LOCK.waitUntil > lockNow()) note = "Too many tries. Wait " + Math.ceil((LOCK.waitUntil - lockNow()) / 1000) + " s.";
+        pinAsk((who.length === 1 ? esc(name) + "'s" : "Your") + " PIN", function(pin) {
+            if (pin === null) return;
+            if (LOCK.waitUntil > lockNow()) return ask();
+            for (var i = 0; i < who.length; i++) if (pinOk(who[i], pin)) {
+                LOCK.fails = 0; LOCK.until[who[i]] = lockNow() + pinsCfg().mins * 60000;
+                lockRefresh(); return then();
+            }
+            if (++LOCK.fails >= 5) { LOCK.fails = 0; LOCK.waitUntil = lockNow() + 60000; }
+            ask("Wrong PIN");
+        }, note);
+    })();
+}
+// ---------- what locks ----------
+var __payNow104 = payNow;
+payNow = function(w, off) { return canSee("pay:" + (w || "p1")) ? __payNow104(w, off) : null; };        // pay hides everywhere (tile, shifts, front page)
+var __moneyNow104 = moneyNow;
+moneyNow = function() {
+    if (canSee("money")) return __moneyNow104();
+    var M = __moneyNow104();        // keep its shape, hide the amounts
+    return { month: M.month, total: 0, byCat: {}, owe: 0, bills: [], due: [], budgets: {}, goals: [], locked: true };
+};
+var __openNote104 = openNote;
+openNote = function() { return canSee("notes") ? __openNote104() : null; };
+var __bull104 = bulletinItem;
+bulletinItem = function() {
+    if (!TIMER.done && !canSee("notes") && __openNote104()) return { t: "NOTE · private — tap to read", a: function() { unlock("notes", function() { checkBulletin(); }); } };
+    return __bull104();
+};
+function lockedTile(id, name, T) { tileFill(id, T, "<span class='stamp'>" + name + "</span><div class='py-big'>&#128274;</div><div class='py-sub'>locked &middot; tap to unlock</div>"); }
+var __payTile104 = TILE_RENDER.pay;
+TILE_RENDER.pay = function(T) { if (!canSee("pay:p1") && pinSet("p1")) return lockedTile("pay", "Pay", T); __payTile104(T); };
+var __moneyTile104 = TILE_RENDER.money;
+TILE_RENDER.money = function(T) { if (!canSee("money")) return lockedTile("money", "Money", T); __moneyTile104(T); };
+var __boardTile104 = TILE_RENDER.board;
+TILE_RENDER.board = function(T) { if (!canSee("board")) { var inner = $("board-in"); inner.__fk = ""; return lockedTile("board", "The Board", T); } __boardTile104(T); };
+var __openXV104 = openXV;
+openXV = function(mode, tab) { if (mode === "money" && !canSee("money")) return unlock("money", function() { __openXV104(mode, tab); }); __openXV104(mode, tab); };
+var __openBoard104 = openBoard;
+openBoard = function() { if (!canSee("board")) return unlock("board", function() { __openBoard104(); }); __openBoard104(); };
+var __selectTab104 = selectTab;
+selectTab = function(name) { if (name === "pay" && !canSee("pay:p1")) return unlock("pay:p1", function() { __selectTab104(name); }); __selectTab104(name); };
+var __rss104 = renderStandbySketch;
+renderStandbySketch = function() { if (HUB.sleeping && !canSee("board")) { $("standby-sketch").style.display = "none"; return; } __rss104(); };
+var __appList104 = appList;
+appList = function() {
+    var L = __appList104();
+    for (var i = 0; i < L.length; i++) if (L[i][0] === "money" && !canSee("money")) L[i][2] = "&#128274; locked";
+    L.push(["lock", "Privacy", lockOn() ? "PINs on &middot; LOCK NOW" : "PINs for pay, money, notes", function() { openXV("lock", 0); }]);
+    return L;
+};
+ICONS.lock = "<rect x='20' y='44' width='60' height='46' rx='6' fill='none' stroke='%c' stroke-width='8'/><path d='M32 44 V30 Q32 12 50 12 Q68 12 68 30 V44' fill='none' stroke='%c' stroke-width='8'/>";
+IC_LABEL.lock = "PRIVACY";
+// ---------- the Privacy app: set / change / remove PINs, how long they stay open, lock now ----------
+XV_TABS.lock = ["PINS"]; XV_TITLE.lock = "PRIVACY";
+XVR.lock = function() {
+    var P = pinsCfg(), h = "<div class='hv-hint'>A PIN hides pay, money, fridge notes and the board from anyone at the fridge. Pay opens only with its owner's PIN; the rest with either PIN. Everything locks again after " + P.mins + " min and at standby.</div>";
+    var people = hasP2() ? ["p1", "p2"] : ["p1"];
+    for (var i = 0; i < people.length; i++) {
+        var w = people[i], set = pinSet(w);
+        h += "<div class='xr'><div class='xr-t'>" + esc(pName(w)) + (set ? " <b class='tag o'>" + (isOpen(w) ? "OPEN" : "LOCKED") + "</b>" : "") + "</div><div class='xr-s'>" + (set ? "PIN set" : "No PIN: " + esc(pName(w)) + "'s pay is not locked") + "</div><div class='xr-b'>" +
+            (set ? btn("pinChange", w, "CHANGE PIN") + btn("pinRemove", w, "REMOVE PIN") : btn("pinNew", w, "SET A PIN", "sel")) + "</div></div>";
+    }
+    h += "<div class='xr'><div class='xr-t'>Stays open for</div><div class='xr-b'>" + [2, 5, 10, 30].map(function(m) { return btn("pinMins", String(m), m + " MIN", P.mins === m ? "sel" : ""); }).join("") + "</div></div>";
+    if (lockOn()) h += "<div class='xv-bar'>" + btn("pinLockNow", "", "&#128274; LOCK NOW", "big sel") + "</div>";
+    return h;
+};
+function pinChoose(who, done) {
+    pinAsk("New PIN for " + esc(pName(who)), function(a) {
+        if (a === null) return renderXV();
+        pinAsk("Same PIN again", function(b) {
+            if (b === null) return renderXV();
+            if (a !== b) return pinChoose(who, done);
+            var P = pinsCfg(), s = HubCrypt.hex(HubCrypt.sha256(HubCrypt.utf8(String(Math.random()) + lockNow() + who))).substring(0, 16);
+            P[who] = { s: s, h: pinHash(s, a) }; cfgSave("pins", P);
+            LOCK.until[who] = lockNow() + P.mins * 60000;
+            done();
+        });
+    });
+}
+function pinCurrent(who, then) {        // a change or removal needs that person's current PIN
+    pinAsk(esc(pName(who)) + "'s current PIN", function(v) {
+        if (v === null) return renderXV();
+        if (!pinOk(who, v)) { if (++LOCK.fails >= 5) { LOCK.fails = 0; LOCK.waitUntil = lockNow() + 60000; } return renderXV(); }
+        if (LOCK.waitUntil > lockNow()) return renderXV();
+        LOCK.fails = 0; then();
+    });
+}
+XVA.pinNew = function(w) { pinChoose(w, function() { lockRefresh(); renderXV(); }); };
+XVA.pinChange = function(w) { pinCurrent(w, function() { pinChoose(w, function() { lockRefresh(); renderXV(); }); }); };
+XVA.pinRemove = function(w) { pinCurrent(w, function() { var P = pinsCfg(); delete P[w]; cfgSave("pins", P); lockRefresh(); renderXV(); }); };
+XVA.pinMins = function(m) { var P = pinsCfg(); P.mins = +m; cfgSave("pins", P); renderXV(); };
+XVA.pinLockNow = function() { lockAll(); lockRefresh(); renderXV(); };
+// relock on time (checked every 10 s) and at standby
+setInterval(function() { if (HUB.sleeping) lockAll(); lockRefresh(); }, 10000);
+lockRefresh();
+
+
+// =====================  10.4 THE OPEN-APPS RAIL (Windows 8 style)  =====================
+// A still column on the left: the time, HOME (your tiles) and the apps you've opened, newest first. Tap a tile
+// to open an app beside the rail; tap the rail to jump between open apps or back to the tiles. The rest of the
+// hub sits on a "stage" to the right of the rail: layout() takes the rail's width off W, so every screen lays
+// itself out in what's left, unchanged. Nothing on the rail moves (no animation: e-ink). HIDE turns it off;
+// APPS > Side rail brings it back.
+var RAIL_W = 0, RAIL = { open: [], sig: "", max: 6 };
+if (FEEL.rail === undefined) FEEL.rail = 1;
+var RAIL_VIEWS = {      // view -> [key, label, icon, how to open it again]
+    board: ["board", "Board", "board", function() { openBoard(); }], cook: ["rcp", "Recipes", "rcp", function() { openCook(null); }],
+    horo: ["horo", "Stars", "horo", function() { openHoro(); }], day: ["day", "Day", "cal", function() { openDay(todayKey()); }],
+    calfull: ["cal", "Calendar", "cal", function() { openCalFull(); }], weather: ["wx", "Weather", "wx", function() { openWeather(); }],
+    shop: ["shop", "Shopping", "shop", function() { openShop(); }], hub: ["hub", "Settings", "cog", function() { openHub(); }]
+};
+(function() {      // the stage: everything that was in #root, moved one level down; the rail beside it
+    var root = $("root"), st = document.createElement("div"), rl = document.createElement("div");
+    st.id = "stage"; st.style.cssText = "position:absolute;left:0;top:0;overflow:hidden";
+    while (root.firstChild) st.appendChild(root.firstChild);
+    rl.id = "rail";
+    root.appendChild(st); root.appendChild(rl);
+    var css = document.createElement("style");
+    css.textContent = "#rail { position: absolute; display: none; background: #fff; border-right: 4px double #000; box-sizing: border-box; overflow: hidden; font-family: Helvetica, Arial, sans-serif; text-align: center; }" +
+        "#rail .rl-time { font-family: Georgia, serif; font-weight: 900; font-size: 2.1em; line-height: 1; padding-top: .35em; }" +
+        "#rail .rl-day { font-size: .62em; font-weight: 900; letter-spacing: .16em; padding: .3em 0 .6em; border-bottom: 3px solid #000; }" +
+        "#rail .rl-h { font-size: .55em; font-weight: 900; letter-spacing: .2em; color: #444; padding: .9em 0 .3em; }" +
+        "#rail .rl-i { border-bottom: 1px solid #000; padding: .45em .2em .4em; font-size: .7em; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; word-wrap: break-word; }" +
+        "#rail .rl-i.sel { background: #000; color: #fff; }" +
+        "#rail .rl-ic { display: block; width: 2.6em; height: 2.6em; margin: 0 auto .25em; }" +
+        "#rail .rl-foot { position: absolute; left: 0; right: 0; bottom: 0; font-size: .55em; font-weight: 900; letter-spacing: .2em; padding: 1em 0; border-top: 1px solid #000; }" +
+        "body.asleep #rail .rl-open { display: none; }";
+    document.getElementsByTagName("head")[0].appendChild(css);
+})();
+function railLayout() {          // called from layout(), right after W and H are known
+    var st = $("stage"), rl = $("rail");
+    if (!st || !rl) { RAIL_W = 0; return; }
+    var rw = FEEL.rail !== 0 ? Math.round(clamp(W * 0.13, 120, 240)) : 0;
+    rl.style.display = rw ? "block" : "none";
+    if (rw) { rl.style.left = "0px"; rl.style.top = "0px"; rl.style.width = rw + "px"; rl.style.height = H + "px"; rl.style.fontSize = Math.round(clamp(rw / 7.2, 12, 30)) + "px"; }
+    st.style.left = rw + "px"; st.style.width = (W - rw) + "px"; st.style.height = H + "px";
+    RAIL_W = rw; W -= rw;
+    RAIL.sig = "";
+}
+function railIcon(name) { return ICONS[name] ? "<span class='rl-ic'>" + icon(name, "%fg", "%bg") + "</span>" : ""; }
+function railKey() {
+    if (currentView === "xv") return "xv:" + XV.mode;
+    return RAIL_VIEWS[currentView] ? RAIL_VIEWS[currentView][0] : (currentView === "main" ? "home" : "");
+}
+function railNote(v) {            // remember the app just opened (newest first)
+    var it = null;
+    if (v === "xv" && XV_TITLE[XV.mode]) { var m = XV.mode; it = { k: "xv:" + m, n: XV_TITLE[m], ic: m, fn: function() { openXV(m, 0); } }; }
+    else if (RAIL_VIEWS[v]) { var r = RAIL_VIEWS[v]; it = { k: r[0], n: r[1], ic: r[2], fn: r[3] }; }
+    if (!it) return;
+    for (var i = 0; i < RAIL.open.length; i++) if (RAIL.open[i].k === it.k) { RAIL.open.splice(i, 1); break; }
+    RAIL.open.unshift(it);
+    if (RAIL.open.length > RAIL.max) RAIL.open.length = RAIL.max;
+}
+function railItem(k, label, ic, sel) {
+    return "<div class='rl-i" + (sel ? " sel" : "") + "' data-k='" + k + "'>" + railIcon(ic).replace(/%fg/g, sel ? "#fff" : "#000").replace(/%bg/g, sel ? "#000" : "#fff") + esc(label) + "</div>";
+}
+function renderRail() {
+    var rl = $("rail");
+    if (!rl || !RAIL_W) return;
+    var n = getBCNow(), h12 = n.getUTCHours() % 12 || 12, cur = railKey(), i;
+    var h = "<div class='rl-time'>" + h12 + ":" + pad2(n.getUTCMinutes()) + "</div><div class='rl-day'>" + DAYS3[n.getUTCDay()].toUpperCase() + " " + n.getUTCDate() + "</div>" +
+        railItem("home", "Home", "apps", cur === "home") + "<div class='rl-open'>";
+    if (RAIL.open.length) h += "<div class='rl-h'>OPEN</div>";
+    for (i = 0; i < RAIL.open.length; i++) h += railItem(RAIL.open[i].k, RAIL.open[i].n, RAIL.open[i].ic, cur === RAIL.open[i].k);
+    h += "</div><div class='rl-foot' data-k='hide'>HIDE &lsaquo;</div>";
+    if (h === RAIL.sig) return;           // e-ink: repaint only when something changed
+    RAIL.sig = h; rl.innerHTML = h;
+    var its = rl.getElementsByTagName("div");
+    for (i = 0; i < its.length; i++) if (its[i].getAttribute("data-k")) (function(el) { bindTap(el, function() { railTap(el.getAttribute("data-k")); }); })(its[i]);
+}
+function railTap(k) {
+    if (k === "hide") { FEEL.rail = 0; saveFeel(); relayout(); return; }
+    if (k === railKey()) return;
+    var to = null;
+    for (var i = 0; i < RAIL.open.length; i++) if (RAIL.open[i].k === k) to = RAIL.open[i];
+    if ($("xv").style.display === "block") $("xv").style.display = "none";      // goHome() leaves the extra-apps view open
+    goHome();
+    if (to) to.fn();
+}
+// ---------- hooks ----------
+var __setView104 = setView;
+setView = function(v) { __setView104(v); railNote(v); renderRail(); };
+var __pagePoint104 = pagePoint;
+pagePoint = function(cx, cy) { var p = __pagePoint104(cx, cy); return [p[0] - RAIL_W, p[1]]; };      // touches in stage coordinates (the board's pen)
+var __layout104 = layout;
+layout = function() { __layout104(); renderRail(); };
+var __appList104r = appList;
+appList = function() {
+    var L = __appList104r();
+    if (FEEL.rail === 0) L.push(["rail", "Side rail", "show the open-apps rail", function() { FEEL.rail = 1; saveFeel(); goHome(); relayout(); }]);
+    return L;
+};
+ICONS.rail = "<rect x='10' y='14' width='22' height='72' fill='%c'/><rect x='40' y='14' width='50' height='32' fill='none' stroke='%c' stroke-width='7'/><rect x='40' y='54' width='50' height='32' fill='none' stroke='%c' stroke-width='7'/>";
+IC_LABEL.rail = "RAIL";
+setInterval(renderRail, 20000);      // the clock (only repaints when the minute changes)
+relayout();
 
 </script>
 </body>

@@ -14,7 +14,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.3"
+VERSION="10.4"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -556,7 +556,7 @@ notify_phone() {
         trap - EXIT INT TERM
         WAS=$(lipc-get-prop com.lab126.wifid cmState 2>/dev/null)
         if wifi_on; then
-            C=$($CURL_BIN -sk --connect-timeout 8 --max-time 20 -o /dev/null -w '%{http_code}' -H "Title: Kitchen Hub" -H "Tags: alarm_clock" -H "Priority: high" -d "$1" "https://ntfy.sh/$TOPIC" 2>/dev/null)
+            C=$(kcurl -s --connect-timeout 8 --max-time 20 -o /dev/null -w '%{http_code}' -H "Title: Kitchen Hub" -H "Tags: alarm_clock" -H "Priority: high" -d "$1" "https://ntfy.sh/$TOPIC" 2>/dev/null)
             log "phone alert sent ($C): $1"
         else log "phone alert: no Wi-Fi"; fi
         [ "$WAS" = "CONNECTED" ] || sync_running || wifi_off
@@ -576,6 +576,7 @@ write_cloud_js() {
     fi
 }
 CURL_BIN=/usr/bin/curl; [ -x "$CURL_BIN" ] || CURL_BIN=curl
+CURL="$CURL_BIN"; [ -f "$DIR/kcurl.sh" ] && . "$DIR/kcurl.sh"; command -v kcurl >/dev/null 2>&1 || kcurl() { "$CURL_BIN" -k "$@"; }     # 10.4: checked TLS when possible
 cloud_ready() { [ -f "$DIR/cloud.conf" ] && [ -f "$DIR/hub_cloud.sh" ]; }
 
 GOV_SAVED=""

@@ -71,12 +71,14 @@
   $("c-addch").addEventListener("click", choreForm);
 
   // ---------- meal plan + import ----------
+  // 10.4: the header note is its own line (it used to float inside the <h2>, and the list's top border ran through it),
+  // and the dinner text gets a real flex width with wrapping (word-break:break-word made it one letter wide on iPhone).
   window.renderPlanImport = function() {
-    var plan = {}, box = $("r-plan"), t = todayK(), h = '<h2>This week’s dinners <span style="float:right;font-weight:400">(the cloud brain fills empty days)</span></h2><ul>';
+    var plan = {}, box = $("r-plan"), t = todayK(), h = '<h2>This week’s dinners</h2><p class="sub" style="margin:0 0 6px;font-size:13px;color:var(--mute)">The cloud brain fills empty days.</p><ul>';
     itemsOf("plan").forEach(function(it) { if (it.state === "open" && !it.locked) plan[it.text.slice(0, 10)] = it; });
     for (var i = 0; i < 7; i++) {
       var k = addD(t, i), it = plan[k];
-      h += '<li data-k="' + k + '"><span class="k" style="width:92px;flex:none;font:800 12px/1.2 Arial;letter-spacing:.1em;text-transform:uppercase">' + (i === 0 ? "Tonight" : dayLabel(k)) + '</span><span class="txt">' + (it ? esc(it.text.split("|")[1]) : '<i style="color:var(--mute)">open</i>') + '</span>' + (it ? '<button class="del">&times;</button>' : "") + '</li>';
+      h += '<li data-k="' + k + '"><span class="k" style="width:92px;flex:none;font:800 12px/1.2 Arial;letter-spacing:.1em;text-transform:uppercase">' + (i === 0 ? "Tonight" : dayLabel(k)) + '</span><span class="txt" style="flex:1 1 auto;min-width:0;word-break:normal;overflow-wrap:anywhere">' + (it ? esc(it.text.split("|")[1]) : '<i style="color:var(--mute)">open</i>') + '</span>' + (it ? '<button class="del">&times;</button>' : "") + '</li>';
     }
     h += '</ul><p class="row"><button class="btn ghost" id="pl-roll">Re-roll the week</button><span class="wait">needs the GitHub kit</span></p>';
     box.innerHTML = h;
@@ -129,9 +131,9 @@
     var notes = itemsOf("msg").filter(function(m) { return !m.locked; }).sort(function(a, c) { return c.ts - a.ts; }).slice(0, 3);
     h += '<h2>Leave a note on the fridge</h2><div class="row"><input id="fn-t" maxlength="280" placeholder="Back at 6. Love you." style="flex:1;font-size:17px;padding:10px;border:2px solid var(--ink)"><button class="btn" id="fn-go">Pin</button></div>';
     notes.forEach(function(n) { h += '<div style="font-size:14px;margin-top:6px">' + (n.state === "open" ? "📌 " : "✓ read: ") + esc(n.text) + '</div>'; });
-    // remote
+    // remote  (10.4: every timer button says its length in minutes)
     h += '<h2>Remote control</h2><p style="font-size:13px;color:var(--mute);margin:0 0 8px">Runs on the fridge at its next wake (or right away if it is awake).</p><div class="rc">' +
-      '<button class="btn ghost" data-c="sync">Sync now</button><button class="btn ghost" data-c="timer|5">Timer 5</button><button class="btn ghost" data-c="timer|10">10</button><button class="btn ghost" data-c="timer|20">20</button><button class="btn ghost" data-c="timer|45">45 min</button>' +
+      '<button class="btn ghost" data-c="sync">Sync now</button><button class="btn ghost" data-c="timer|5">5 min</button><button class="btn ghost" data-c="timer|10">10 min</button><button class="btn ghost" data-c="timer|20">20 min</button><button class="btn ghost" data-c="timer|45">45 min</button>' +
       '<button class="btn ghost" data-c="update|check">Check update</button><button class="btn ghost" data-c="update|install">Install update</button><button class="btn ghost" data-c="update|rollback">Undo last update</button><button class="btn ghost" data-c="log">Send log</button>' +
       '<button class="btn ghost" data-c="screen|front">Front page</button><button class="btn ghost" data-c="screen|tiles">Tiles</button><button class="btn ghost" data-c="contrast|max">Max contrast</button><button class="btn ghost" data-c="contrast|normal">Normal</button><button class="btn ghost" data-c="reload">Reload page</button></div>';
     var cmds = itemsOf("cmd").filter(function(c) { return !c.locked; }).sort(function(a, c) { return c.ts - a.ts; }).slice(0, 3);

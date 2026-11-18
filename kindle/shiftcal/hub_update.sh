@@ -16,6 +16,7 @@ JS=$DIR/mesquite/update.js
 PAGES_URL=""
 [ -f "$DIR/cloud.conf" ] && . "$DIR/cloud.conf"
 CURL=/usr/bin/curl; [ -x "$CURL" ] || CURL=curl
+[ -f "$DIR/kcurl.sh" ] && . "$DIR/kcurl.sh"; command -v kcurl >/dev/null 2>&1 || kcurl() { "$CURL" -k "$@"; }     # 10.4: checked TLS when possible
 say() { echo "$(date '+%m-%d %H:%M:%S') [update] $*" >> "$LOG"; }
 state() {   # $1 state  $2 new version  $3 files to fetch  $4 message
     CUR=$(sed -n 's/^VERSION="\([^"]*\)".*/\1/p' "$DIR/power_loop.sh" | head -1)
@@ -56,7 +57,7 @@ if [ "$1" = "rollback" ]; then
     state rolledback "$PV" 0 "Went back to $PV (from $CUR)"; exit 0
 fi
 case "$BASE" in https://*|http://127.0.0.1*) ;; *) state error "" 0 "PAGES_URL is not set in cloud.conf"; exit 1 ;; esac
-C=$($CURL -sk --connect-timeout 8 --max-time 25 -o "$ST/manifest.txt" -w '%{http_code}' "$BASE/manifest.txt?t=$(date +%s)" 2>/dev/null)
+C=$(kcurl -s --connect-timeout 8 --max-time 25 -o "$ST/manifest.txt" -w '%{http_code}' "$BASE/manifest.txt?t=$(date +%s)" 2>/dev/null)
 [ "$C" = "200" ] && head -1 "$ST/manifest.txt" | grep -q '^version ' || { state error "" 0 "no manifest on your site ($C) - upload the kindle folder from the GitHub kit"; say "no manifest ($C)"; exit 1; }
 NV=$(sed -n '1s/^version //p' "$ST/manifest.txt" | tr -cd 'A-Za-z0-9.-')
 # which files differ from what is installed now
@@ -83,7 +84,7 @@ BAD=""
 while read -r S M Z F; do
     mkdir -p "$ST/files/$(dirname "$F")"
     U=$(printf '%s' "$F" | sed 's/ /%20/g')
-    C=$($CURL -sk --connect-timeout 8 --max-time 60 -o "$ST/files/$F" -w '%{http_code}' "$BASE/shiftcal/$U?t=$(date +%s)" 2>/dev/null)
+    C=$(kcurl -s --connect-timeout 8 --max-time 60 -o "$ST/files/$F" -w '%{http_code}' "$BASE/shiftcal/$U?t=$(date +%s)" 2>/dev/null)
     if [ "$C" != "200" ] || [ "$(hashof "$ST/files/$F")" != "$(want "$S" "$M")" ]; then BAD="$F ($C)"; break; fi
 done < "$ST/todo"
 if [ -n "$BAD" ]; then state error "$NV" "$N" "Download failed: $BAD - nothing was changed"; say "install aborted at $BAD"; rm -rf "$ST/files"; exit 1; fi

@@ -20,6 +20,7 @@ TAB=$(printf '\t')
 GIST_ID=""; GH_TOKEN=""; API="https://api.github.com"
 [ -f "$CONF" ] && . "$CONF"
 CURL=/usr/bin/curl; [ -x "$CURL" ] || CURL=curl
+[ -f "$DIR/kcurl.sh" ] && . "$DIR/kcurl.sh"; command -v kcurl >/dev/null 2>&1 || kcurl() { "$CURL" -k "$@"; }     # 10.4: checked TLS when possible
 mkdir -p "$T" "$DIR/mesquite"
 [ -f "$LOCAL" ] || echo "#hub v1" > "$LOCAL"
 
@@ -53,7 +54,7 @@ write_js() {
 # api METHOD URL [curl args] -> prints the http code; body in $T/b.$$, headers in $T/h.$$
 api() {
     M=$1; U=$2; shift 2
-    $CURL -s -k --connect-timeout 8 --max-time 25 -X "$M" \
+    kcurl -s --connect-timeout 8 --max-time 25 -X "$M" \
         -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
         -H "X-GitHub-Api-Version: 2022-11-28" -H "User-Agent: KitchenHub" \
         -D "$T/h.$$" -o "$T/b.$$" -w '%{http_code}' "$@" "$U" 2>/dev/null
@@ -61,7 +62,7 @@ api() {
 raw_url() { grep -o '"raw_url" *: *"[^"]*/hub\.tsv"' "$T/b.$$" | head -1 | sed 's/.*"\(http[^"]*\)"$/\1/'; }
 fetch_raw() {   # $1 raw url -> canonical copy in $T/r.$$
     [ -n "$1" ] || return 1
-    C=$($CURL -s -k --connect-timeout 8 --max-time 25 -H "User-Agent: KitchenHub" -o "$T/raw.$$" -w '%{http_code}' "$1" 2>/dev/null)
+    C=$(kcurl -s --connect-timeout 8 --max-time 25 -H "User-Agent: KitchenHub" -o "$T/raw.$$" -w '%{http_code}' "$1" 2>/dev/null)
     [ "$C" = "200" ] || return 1
     merge "$T/r.$$" "$T/raw.$$"      # canonical form: GitHub may store the text with other line endings
 }
@@ -125,7 +126,7 @@ take_inbox() {
     : > "$T/inbox_new.$$"
     for U in $(tr -d '\r' < "$T/b.$$" | grep -o '"raw_url" *: *"[^"]*/inbox[-_][A-Za-z0-9._-]*\.txt"' | sed 's/.*"\(http[^"]*\)"$/\1/'); do
         NAME=${U##*/}
-        C=$($CURL -s -k --connect-timeout 8 --max-time 20 -H "User-Agent: KitchenHub" -o "$T/in.$$" -w '%{http_code}' "$U" 2>/dev/null)
+        C=$(kcurl -s --connect-timeout 8 --max-time 20 -H "User-Agent: KitchenHub" -o "$T/in.$$" -w '%{http_code}' "$U" 2>/dev/null)
         [ "$C" = "200" ] || continue
         TSMS="$(date +%s)000"
         awk -v name="$NAME" -v ts="$TSMS" '

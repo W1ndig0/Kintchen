@@ -7,6 +7,7 @@
 DIR=${HUB_DIR:-/mnt/us/extensions/shiftcal}
 MESQ="$DIR/mesquite"; OUT="$MESQ/web.js"; T="$DIR/.web"
 CURL=/usr/bin/curl; [ -x "$CURL" ] || CURL=curl
+[ -f "$DIR/kcurl.sh" ] && . "$DIR/kcurl.sh"; command -v kcurl >/dev/null 2>&1 || kcurl() { "$CURL" -k "$@"; }     # 10.4: checked TLS when possible
 mkdir -p "$T"
 if [ "$1" = "save" ]; then      # 10.3: web_fetch.sh save "Name" -> the last page as text in the Kindle library
     LIB="${HUB_LIB:-/mnt/us/documents/Kitchen Hub}/Web pages"
@@ -31,7 +32,7 @@ case "$U" in
     *) U="https://$U" ;;
 esac
 ESCU=$(printf '%s' "$U" | sed 's/\\/\\\\/g; s/"/\\"/g' | cut -c1-600)
-CODE=$($CURL -skL --max-redirs 6 --connect-timeout 8 --max-time 25 -A "Mozilla/5.0 (X11; Linux armv7l) KitchenHub/10.3" \
+CODE=$(kcurl -sL --max-redirs 6 --connect-timeout 8 --max-time 25 -A "Mozilla/5.0 (X11; Linux armv7l) KitchenHub/10.3" \
        -H "Accept-Language: en-CA,en;q=0.8" -o "$T/page" -w '%{http_code} %{url_effective}' "$U" 2>/dev/null)
 FINAL=$(printf '%s' "$CODE" | cut -d' ' -f2- | sed 's/\\/\\\\/g; s/"/\\"/g' | cut -c1-600); CODE=$(printf '%s' "$CODE" | cut -d' ' -f1)
 ERR=""

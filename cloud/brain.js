@@ -5,6 +5,7 @@
  *   - turns Siri/Shortcut/PC "inbox" notes into locked list items, re-locks anything left plain
  *   - handles requests from the phone (import a recipe from a link, re-roll the meal plan, test push)
  *   - fills an empty week of dinners (meal plan), keeps repeating chores in the calendar
+ *   - 10.4: the pantry (food ticked off the list goes into the pantry, staples that run low go on the list)
  *   - phone pushes (ntfy): shift tomorrow / in an hour, events, chores, birthdays, holidays,
  *     a morning briefing, a Sunday week-ahead, weather warnings, "the Kindle went quiet", low battery
  *   - publishes to a second private gist: calendar.ics (subscribe on iPhone/PC), tv.json (locked, for
@@ -16,7 +17,7 @@
  */
 "use strict";
 const fs = require("fs"), path = require("path"), os = require("os"), cp = require("child_process");
-const HubData = require("./hubdata.js"), HubCrypt = HubData.HubCrypt, HubCal = HubData.HubCal;
+const HubData = require("./hubdata.js"), HubCrypt = HubData.HubCrypt, HubCal = HubData.HubCal, HubPantry = HubData.HubPantry;
 
 const API = process.env.GH_API || "https://api.github.com";
 const GIST = process.env.GIST_ID, TOKEN = process.env.GIST_TOKEN, PASS = process.env.HUB_PASS || "";
@@ -370,6 +371,11 @@ async function main() {
         await require("./books.js")({ gh, items, allItems, edit, newId, log, brain, NOW, TODAY, HubCal, fileText, get: bget, fetchBin: bbin, txt, decodeEnts });
     } catch (e) { log("books failed: " + String(e.message || e).slice(0, 80)); }
 
+    // 3c. 10.4: the pantry (ticked-off food -> pantry, staples that run low -> list); its settings go to the extras
+    let pantryCfg = HubPantry.cfg(null);
+    try { pantryCfg = require("./pantry.js")({ items, edit, newId, log, brain, TODAY, HubCal, HubPantry }).cfg; }
+    catch (e) { log("pantry failed: " + String(e.message || e).slice(0, 80)); }
+
     // 4. bundle + data for the TV and the meal plan
     let cloud = brain.cloudGist || process.env.CLOUD_GIST_ID || "";
     let cg = null;
@@ -429,7 +435,7 @@ async function main() {
         let exState = {}; try { exState = cg && cg.files && cg.files["extras_state.json"] ? JSON.parse(await fileText(cg.files["extras_state.json"])) : {}; } catch (e) {} if (!exState || typeof exState !== "object") exState = {};
         const xget = process.env.EXTRAS_BASE ? (u, ms, o) => get(process.env.EXTRAS_BASE + "/ext/" + encodeURIComponent(u), ms, o) : get;   // tests
         const before = JSON.stringify(exState);
-        EX = await require("./extras.js")({ items, push, sent, mark, NOW, TODAY, TOMORROW, HOUR, DOW, addK, get: xget, HubCal, decodeEnts, log, state: exState });
+        EX = await require("./extras.js")({ items, push, sent, mark, NOW, TODAY, TOMORROW, HOUR, DOW, addK, get: xget, HubCal, decodeEnts, log, state: exState, pantryCfg });
         if (JSON.stringify(exState) !== before) cloudFiles["extras_state.json"] = { content: JSON.stringify(exState) };
         const exHash = require("crypto").createHash("sha1").update(JSON.stringify({ ...EX, ts: 0 })).digest("hex");
         if (exHash !== brain.exHash || !(cg && cg.files && cg.files["extra.js"])) {
@@ -606,7 +612,7 @@ async function main() {
     if (Object.keys(cloudFiles).length) await gh("PATCH", "/gists/" + cloud, { files: cloudFiles });
     const links = "# written by the cloud brain - the Kindle reads this\nBUNDLE_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/bundle.txt\nCLOUD_GIST=" + cloud + "\nICS_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar.ics\n" + (p2name ? "ICS2_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar-p2.ics\n" : "") + "TV_REF=" + owner + "/" + cloud + "\nEXTRA_URL=https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/extra.js\n" + (brain.booksGist ? "BOOKS_URL=https://gist.githubusercontent.com/" + owner + "/" + brain.booksGist + "/raw/\n" : "");
     const before = JSON.stringify({ ...brainIn, lastRun: 0, pushes: 0 });
-    brain.v = "10.3";
+    brain.v = "10.4";
     brain.ics2 = p2name ? "https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar-p2.ics" : ""; brain.owner = owner; brain.pushes = pushes;
     brain.ics = "https://gist.githubusercontent.com/" + owner + "/" + cloud + "/raw/calendar.ics";
     brain.tv = owner + "/" + cloud;

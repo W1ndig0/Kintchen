@@ -21,12 +21,13 @@ echo "=== sync at $(date) ==="
 
 CURL="${CURL_BIN:-/usr/bin/curl}"
 [ -x "$CURL" ] || CURL="curl"
+[ -f "$DIR/kcurl.sh" ] && . "$DIR/kcurl.sh"; command -v kcurl >/dev/null 2>&1 || kcurl() { "$CURL" -k "$@"; }     # 10.4: checked TLS when possible
 mkdir -p "$IMG_DIR" 2>/dev/null
 
 # ---------- 10.0: deals, money, pantry and fun from the cloud brain (one small locked file; the page unlocks it)
 if [ "$1" != "search" ] && [ -z "$CLOUD_BUNDLE" ] && [ -s "$DIR/.cloud_links" ]; then
     XU=$(sed -n 's/^EXTRA_URL=\(https*:[^ ]*\)$/\1/p' "$DIR/.cloud_links" | head -1)
-    if [ -n "$XU" ] && $CURL -sk --connect-timeout 6 --max-time 25 -o "$MESQ/extra.js.part" "$XU?t=$(date +%s)" 2>/dev/null && head -c 26 "$MESQ/extra.js.part" | grep -q '^window.HUB_EXTRA_LOCKED'; then
+    if [ -n "$XU" ] && kcurl -s --connect-timeout 6 --max-time 25 -o "$MESQ/extra.js.part" "$XU?t=$(date +%s)" 2>/dev/null && head -c 26 "$MESQ/extra.js.part" | grep -q '^window.HUB_EXTRA_LOCKED'; then
         mv "$MESQ/extra.js.part" "$MESQ/extra.js"; echo "Extras: deals/money/fun updated"
     else rm -f "$MESQ/extra.js.part"; fi
 fi
@@ -37,7 +38,7 @@ fi
 if [ "$1" != "search" ] && [ -z "$CLOUD_BUNDLE" ] && [ "${USE_CLOUD_DATA:-1}" = "1" ] && [ -s "$DIR/.cloud_links" ]; then
     BU=$(sed -n 's/^BUNDLE_URL=\(https*:[^ ]*\)$/\1/p' "$DIR/.cloud_links" | head -1)
     BP="$DIR/.bundle.part"; rm -f "$BP"
-    if [ -n "$BU" ] && $CURL -sk --connect-timeout 6 --max-time 45 -o "$BP" "$BU?t=$(date +%s)" 2>/dev/null &&
+    if [ -n "$BU" ] && kcurl -s --connect-timeout 6 --max-time 45 -o "$BP" "$BU?t=$(date +%s)" 2>/dev/null &&
        head -1 "$BP" | grep -q '^@@KH-BUNDLE [0-9][0-9]*$' && tail -1 "$BP" | grep -q '^@@END$'; then
         BTS=$(head -1 "$BP" | cut -d' ' -f2); AGE=$(( $(date +%s) - BTS ))
         if [ "$AGE" -lt 7200 ] && [ "$AGE" -gt -900 ]; then
@@ -55,7 +56,7 @@ if [ "$1" != "search" ] && [ -z "$CLOUD_BUNDLE" ] && [ "${USE_CLOUD_DATA:-1}" = 
             grep '^@@IMG img/[0-9a-z]*\.\(jpg\|png\|gif\) http' "$BP" | while read -r X P U; do
                 [ -f "$MESQ/$P" ] && continue
                 [ "$NI" -ge 8 ] && break
-                $CURL -skL --connect-timeout 4 --max-time 10 -A "Mozilla/5.0" -o "$MESQ/$P.part" "$U" 2>/dev/null
+                kcurl -sL --connect-timeout 4 --max-time 10 -A "Mozilla/5.0" -o "$MESQ/$P.part" "$U" 2>/dev/null
                 SIG=$(od -An -tx1 -N4 "$MESQ/$P.part" 2>/dev/null | tr -d ' \n')
                 case "$SIG" in ffd8*|89504e47|47494638) mv "$MESQ/$P.part" "$MESQ/$P"; NI=$((NI + 1)) ;; *) rm -f "$MESQ/$P.part" ;; esac
             done
@@ -78,7 +79,7 @@ jesc() { sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 # ---------- Weather (raw Open-Meteo JSON embedded as-is) ----------
 WX_JSON="null"
 W_URL="https://api.open-meteo.com/v1/forecast?latitude=53.9171&longitude=-122.7497&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,cloud_cover&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,snowfall,weather_code,wind_gusts_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,snowfall_sum,precipitation_probability_max&timezone=Etc%2FGMT%2B7&forecast_days=5"
-W_RAW=""; [ "$1" = "search" ] || W_RAW=$($CURL -sk --connect-timeout 6 --max-time 12 "$W_URL" | tr '\r\n' '  ')
+W_RAW=""; [ "$1" = "search" ] || W_RAW=$(kcurl -s --connect-timeout 6 --max-time 12 "$W_URL" | tr '\r\n' '  ')
 case "$W_RAW" in
     "{"*'"hourly"'*'"daily"'*) WX_JSON="$W_RAW"; echo "Weather synced" ;;
     *) [ "$1" = "search" ] || echo "Weather fetch failed" ;;
@@ -122,7 +123,7 @@ img_ext() {
 }
 
 add_feed() {  # $1=url  $2=source tag  $3=max items
-    RAW=$($CURL -skL -A "Mozilla/5.0" --connect-timeout 6 --max-time 15 "$1")
+    RAW=$(kcurl -sL -A "Mozilla/5.0" --connect-timeout 6 --max-time 15 "$1")
     case "$RAW" in *"<item"*) ;; *) echo "No items from $2"; return ;; esac
     N=0; WITH_IMG=0
     ITEMS=$(printf '%s' "$RAW" | tr '\r\n\t' '   ' | sed 's#</item>#\
@@ -147,7 +148,7 @@ add_feed() {  # $1=url  $2=source tag  $3=max items
                 for E in jpg png gif; do [ -f "$IMG_DIR/$HASH.$E" ] && IMG_PATH="img/$HASH.$E"; done
                 if [ -z "$IMG_PATH" ] && [ "$IMGS_NEW" -lt "$MAX_NEW_IMAGES" ]; then
                     PART="$IMG_DIR/$HASH.part"
-                    $CURL -skL --connect-timeout 4 --max-time 10 -A "Mozilla/5.0" -o "$PART" "$IMG_URL" 2>/dev/null
+                    kcurl -sL --connect-timeout 4 --max-time 10 -A "Mozilla/5.0" -o "$PART" "$IMG_URL" 2>/dev/null
                     E=$(img_ext "$PART")
                     if [ -n "$E" ]; then mv "$PART" "$IMG_DIR/$HASH.$E"; IMG_PATH="img/$HASH.$E"; IMGS_NEW=$((IMGS_NEW+1))
                     else rm -f "$PART"; fi
@@ -174,7 +175,7 @@ fetch_cards() {
     for L in $(printf '%s' "$1" | grep -o '"l":"[^"]*"' | sed 's/^"l":"//; s/"$//'); do
         H=$(url_hash "$L")
         if [ ! -f "$MESQ/rcp/$H.js" ] && [ "$NEWLD" -lt "$2" ]; then
-            PG_HTML=$($CURL -skL --connect-timeout 5 --max-time 15 -A "Mozilla/5.0" "$L" | tr '\r\n\t' '   ')
+            PG_HTML=$(kcurl -sL --connect-timeout 5 --max-time 15 -A "Mozilla/5.0" "$L" | tr '\r\n\t' '   ')
             LD=$(printf '%s' "$PG_HTML" | sed 's#<script#\
 <script#g' | grep -i 'application/ld+json' | grep 'recipeIngredient' | head -1 | sed 's#^<script[^>]*>##; s#</script>.*##')
             [ -n "$LD" ] && { printf 'window.RCPLD=window.RCPLD||{};window.RCPLD["%s"]=%s;\n' "$H" "$LD" > "$MESQ/rcp/$H.js"; NEWLD=$((NEWLD + 1)); }
@@ -239,7 +240,7 @@ for PAIR in $SYMBOLS; do
     SYM=${PAIR%%:*}; LBL=${PAIR#*:}
     [ "$LBL" = "$PAIR" ] && LBL="$SYM"
     SYM_ENC=$(echo "$SYM" | sed -e 's/\^/%5E/g' -e 's/=/%3D/g')
-    RESP=$($CURL -sk --connect-timeout 4 --max-time 8 -A "Mozilla/5.0" "https://query1.finance.yahoo.com/v8/finance/chart/${SYM_ENC}?range=1d&interval=15m" | tr '\r\n' '  ')
+    RESP=$(kcurl -s --connect-timeout 4 --max-time 8 -A "Mozilla/5.0" "https://query1.finance.yahoo.com/v8/finance/chart/${SYM_ENC}?range=1d&interval=15m" | tr '\r\n' '  ')
     PRICE=$(printf '%s' "$RESP" | sed -n 's/.*"regularMarketPrice": *\([0-9.eE+-]*\).*/\1/p' | head -1)
     PREV=$(printf '%s' "$RESP" | sed -n 's/.*"chartPreviousClose": *\([0-9.eE+-]*\).*/\1/p' | head -1)
     [ -z "$PRICE" ] && { echo "Markets: no price for $SYM"; continue; }
@@ -257,7 +258,7 @@ done
 OTD_JSON="null"
 M=$(date +%m); D=$(date +%d)
 if [ -s "$DIR/.otd_$M$D" ]; then OTD_JSON=$(cat "$DIR/.otd_$M$D"); OTD_RAW="cached"; else
-OTD_RAW=$($CURL -sk --connect-timeout 4 --max-time 10 -A "KitchenHub/9.2" "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/$M/$D" | tr '\r\n' '  ')
+OTD_RAW=$(kcurl -s --connect-timeout 4 --max-time 10 -A "KitchenHub/9.2" "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/$M/$D" | tr '\r\n' '  ')
 case "$OTD_RAW" in
     *'"events"'*)
         EVENTS=$(printf '%s' "$OTD_RAW" | sed 's#{"text": *"#\
@@ -291,7 +292,7 @@ elif [ -f "$DIR/.whatson_cache" ]; then
 fi
 ALERTS=""
 # Environment Canada: the Prince George forecast feed carries any active warning as its own entry
-EC=$($CURL -sk --connect-timeout 5 --max-time 12 -A "KitchenHub/10.3" "https://weather.gc.ca/rss/weather/53.912_-122.776_e.xml" | tr '\r\n\t' '   ')
+EC=$(kcurl -s --connect-timeout 5 --max-time 12 -A "KitchenHub/10.3" "https://weather.gc.ca/rss/weather/53.912_-122.776_e.xml" | tr '\r\n\t' '   ')
 for T in $(printf '%s' "$EC" | sed 's#</entry>#\
 #g' | grep -i 'term="Warnings and Watches"' | sed -n 's#.*<title>\([^<]*\)</title>.*#\1#p' | sed 's/ /_SP_/g'); do
     T=$(printf '%s' "$T" | sed 's/_SP_/ /g' | jesc)
@@ -299,7 +300,7 @@ for T in $(printf '%s' "$EC" | sed 's#</entry>#\
     [ -n "$ALERTS" ] && ALERTS="$ALERTS,"; ALERTS="$ALERTS{\"s\":\"WEATHER\",\"t\":\"$T\"}"
 done
 # DriveBC (Open511): active major/moderate events on the roads around Prince George
-RD=$($CURL -sk --connect-timeout 5 --max-time 12 -A "KitchenHub/10.3" "https://api.open511.gov.bc.ca/events?format=json&status=ACTIVE&bbox=-124.0,53.4,-121.6,54.4&limit=40" | tr '\r\n\t' '   ')
+RD=$(kcurl -s --connect-timeout 5 --max-time 12 -A "KitchenHub/10.3" "https://api.open511.gov.bc.ca/events?format=json&status=ACTIVE&bbox=-124.0,53.4,-121.6,54.4&limit=40" | tr '\r\n\t' '   ')
 NR=0
 for EV in $(printf '%s' "$RD" | sed 's/"jurisdiction_url"/\
 @EV@/g' | grep '^@EV@' | sed 's/ /_SP_/g'); do
@@ -337,7 +338,7 @@ TODAY=$(date +%Y-%m-%d)
 if ! grep -q "date:\"$TODAY\"" "$HORO_JS" 2>/dev/null; then
     HS=""; HN=0
     for S in aries taurus gemini cancer leo virgo libra scorpio sagittarius capricorn aquarius pisces; do
-        R=$($CURL -sk --connect-timeout 4 --max-time 8 -A "KitchenHub/9.6" "https://ohmanda.com/api/horoscope/$S/" | tr '\r\n' '  ')
+        R=$(kcurl -s --connect-timeout 4 --max-time 8 -A "KitchenHub/9.6" "https://ohmanda.com/api/horoscope/$S/" | tr '\r\n' '  ')
         TX=$(printf '%s' "$R" | sed -n 's/.*"horoscope" *: *"\(\([^"\\]\|\\.\)*\)".*/\1/p')
         if [ -n "$TX" ]; then [ -n "$HS" ] && HS="$HS,"; HS="$HS\"$S\":\"$TX\""; HN=$((HN + 1)); fi
     done

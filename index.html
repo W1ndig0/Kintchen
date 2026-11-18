@@ -16,8 +16,11 @@ header { position: sticky; top: 0; background: var(--ink); color: #fff; padding:
 header h1 { margin: 0; font: 900 22px/1.1 Georgia, "Times New Roman", serif; letter-spacing: .14em; text-transform: uppercase; }
 #tabs { display: flex; margin-top: 10px; border: 2px solid #fff; }
 #tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-#tabs span { flex: none; text-align: center; padding: 9px 11px; font: 800 12px/1 -apple-system, Arial, sans-serif; letter-spacing: .06em; }
+#tabs::-webkit-scrollbar { display: none; }
+/* 10.4: taller tabs (a thumb needs about 44 px) */
+#tabs span { flex: none; text-align: center; padding: 15px 13px; font: 800 12px/1 -apple-system, Arial, sans-serif; letter-spacing: .06em; cursor: pointer; }
 .xl { list-style: none; padding: 0; margin: 0; } .xl li { border-bottom: 1px solid var(--rule); padding: 10px 0; display: block !important; min-height: 0 !important; }
+.xl .row { flex-wrap: wrap; justify-content: flex-start; }      /* 10.4: four buttons in a row no longer run off a narrow phone */
 .sub { color: var(--mute); font-size: 14px; margin-top: 3px; line-height: 1.35; }
 .tg { display: inline-block; background: var(--ink); color: #fff; font: 800 10px/16px -apple-system, Arial, sans-serif; padding: 0 5px; letter-spacing: .06em; vertical-align: 2px; }
 .tg.o { background: #fff; color: var(--ink); border: 1.5px solid var(--ink); }
@@ -31,6 +34,7 @@ header h1 { margin: 0; font: 900 22px/1.1 Georgia, "Times New Roman", serif; let
 #status { margin-top: 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
 #status.warn::before { content: "\25CF  "; }
 main { padding: 0 16px 120px; max-width: 640px; margin: 0 auto; }
+main { padding: 0 max(16px, env(safe-area-inset-right)) 120px max(16px, env(safe-area-inset-left)); }      /* 10.4: clear of the notch in landscape */
 h2 { font: 700 13px/1 -apple-system, Arial, sans-serif; letter-spacing: .2em; text-transform: uppercase; color: var(--mute); margin: 22px 0 6px; }
 ul { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--ink); }
 li { display: flex; align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--rule); font-size: 18px; }
@@ -45,6 +49,7 @@ form { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; p
 form input { flex: 1; font-size: 18px; padding: 12px; border: 2px solid var(--ink); border-radius: 0; background: #fff; }
 form button, .btn { font: 800 14px/1 -apple-system, Arial, sans-serif; letter-spacing: .12em; text-transform: uppercase; background: var(--ink); color: #fff; border: 0; padding: 0 18px; min-height: 48px; }
 .btn.ghost { background: none; color: var(--ink); border: 2px solid var(--ink); }
+.btn.ghost.sel { background: var(--ink); color: #fff; }      /* 10.4: the board's chosen tool (Pen / Marker / Eraser) can be seen */
 .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .fl { display: block; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; margin: 8px 0; }
 .fl input, .fl select { display: block; width: 100%; font-size: 17px; padding: 9px; border: 2px solid var(--ink); border-radius: 0; background: #fff; margin-top: 4px; text-transform: none; letter-spacing: 0; font-weight: 400; }
@@ -97,6 +102,7 @@ body.store #open .box { width: 30px; height: 30px; }
     <h2>Coming up</h2>
     <ul id="soon"></ul>
     <p class="row" style="margin-top:28px"><button class="btn ghost" id="copy">Copy pairing link</button><span id="copied"></span></p>
+    <p class="sub">The link carries your passphrase, so only open it on your own devices.</p>
   </section>
   <section id="app-c" hidden>
     <div id="c-pay"></div>
@@ -184,8 +190,17 @@ var AISLES = [["Produce", /\b(apple|banana|orange|lemon|lime|grape|berr|lettuce|
   ["Meat & fish", /\b(chicken|beef|pork|bacon|sausage|ham|turkey|steak|ground|fish|salmon|tuna|shrimp|deli)/i], ["Dairy & eggs", /\b(milk|cheese|butter|yogurt|cream|egg)/i],
   ["Bakery", /\b(bread|bun|bagel|tortilla|wrap|pita|muffin)/i], ["Frozen", /\b(frozen|ice cream|pizza|fries|waffle)/i],
   ["Pantry", /\b(rice|pasta|noodle|flour|sugar|oil|sauce|salsa|soup|bean|cereal|oat|coffee|tea|spice|salt|honey|jam|peanut|chip|cracker|cookie|snack|canned|broth|ketchup|mustard|mayo|juice|pop|soda)/i],
-  ["Household", /\b(paper|towel|toilet|tissue|soap|detergent|laundry|dish|garbage|bag|foil|cleaner|bleach|sponge|batter|shampoo|toothpaste)/i]];
-function aisleOf(n) { for (var i = 0; i < AISLES.length; i++) if (AISLES[i][1].test(n)) return i; return AISLES.length; }
+  ["Household", /\b(paper|towel|toilet|tissue|soap|detergent|laundry|dish|garbage|bag|foil|cleaner|bleach|sponge|batter(y|ies)|shampoo|toothpaste)/i]];
+// 10.4: look-alikes that the plain word list files in the wrong aisle (peanut butter is not dairy, eggplant is not eggs,
+// frozen chicken is frozen, hamburger buns are bread, pizza sauce is a sauce). The first match wins; numbers are AISLES positions.
+var AISLE_FIX = [[5, /\b(peanut|almond|nut) butter|\b(pasta|pizza|tomato|bbq) sauce|\bground (coffee|cinnamon|cumin|pepper)|\btomato paste/i],
+  [4, /\b(frozen|ice cream|pizza|fries|waffle)/i], [0, /\beggplant/i], [3, /\bbuns?\b/i]];
+function aisleOf(n) {
+  var i;
+  for (i = 0; i < AISLE_FIX.length; i++) if (AISLE_FIX[i][1].test(n)) return AISLE_FIX[i][0];
+  for (i = 0; i < AISLES.length; i++) if (AISLES[i][1].test(n)) return i;
+  return AISLES.length;
+}
 function itemsOf(kind) {
   return HubData.items(store, kind).map(function(it) {
     var t = HubCrypt.unlock(it.text, pk());
@@ -209,9 +224,12 @@ function readPair(text) {
   var c = readPair(location.hash);
   if (c) { cfg = c; ls.set(K.cfg, JSON.stringify(cfg)); history.replaceState(null, "", location.pathname); }
 })();
+// 10.4: the copied link now carries the passphrase (&k=) and whose phone it is (&who=). Without them a Home Screen copy of the app
+// could not unlock a single item ("(locked)" everywhere) and thought it was always person one.
 function pairLink() {
   return location.origin + location.pathname + "#pair=" + cfg.gist + "." + cfg.token +
-    (cfg.api !== "https://api.github.com" ? "&api=" + encodeURIComponent(cfg.api) : "");
+    (cfg.api !== "https://api.github.com" ? "&api=" + encodeURIComponent(cfg.api) : "") +
+    (cfg.k ? "&k=" + encodeURIComponent(cfg.k) : "") + (cfg.who === "p2" ? "&who=p2" : "");
 }
 
 function edit(id, state, text) {
@@ -224,20 +242,66 @@ function pendingIds() {
   for (i = 0; i < mine.length; i++) if (theirs[mine[i].id] !== mine[i].line) r[mine[i].id] = 1;
   return r;
 }
+
+// ---------- 10.4: background redraws must not eat what you are doing ----------
+// The app redraws the open tab after every sync (every 20 s, and when you come back to it). That used to rebuild the tab's
+// inputs, so a half-typed note, amount or web address vanished, the keyboard dropped, a half-open settings panel closed, and a
+// file picked from the phone could land on a button that no longer existed. Now a background redraw (BG) leaves a section alone
+// while you are in one of its fields (or choosing a file), and otherwise puts back whatever you had typed.
+var BG = false, PICK = 0, SECS = ["app-c", "app-r", "app-f", "app-d", "app-h", "app-k", "app-p"];
+function typingIn(id) {
+  var a = document.activeElement, s = $(id);
+  return !!(a && s && s !== a && s.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+}
+function skipBG(id) { return BG && (typingIn(id) || (id === "app-k" && Date.now() - PICK < 60000)); }
+function isDirty(e) {
+  var i;
+  if (e.tagName === "SELECT") { for (i = 0; i < e.options.length; i++) if (e.options[i].defaultSelected) return e.selectedIndex !== i; return e.selectedIndex > 0; }
+  return e.type === "checkbox" || e.type === "radio" ? e.checked !== e.defaultChecked : e.value !== e.defaultValue;
+}
+function holdForm(id) {
+  var s = $(id), o = { f: [], d: [] };
+  if (!s) return o;
+  [].forEach.call(s.querySelectorAll("input[id],select[id],textarea[id]"), function(e) {
+    if (e.type === "file" || e.type === "button" || e.type === "submit" || !isDirty(e)) return;
+    o.f.push([e.id, e.type === "checkbox" || e.type === "radio" ? e.checked : e.value]);
+  });
+  [].forEach.call(s.querySelectorAll("details"), function(e) { o.d.push(e.open); });
+  return o;
+}
+function restoreForm(id, o) {
+  var s = $(id);
+  if (!s || !o) return;
+  o.f.forEach(function(p) {
+    var e = $(p[0]); if (!e || !s.contains(e)) return;
+    if (e.type === "checkbox" || e.type === "radio") e.checked = p[1]; else e.value = p[1];
+  });
+  [].forEach.call(s.querySelectorAll("details"), function(e, i) { if (o.d[i]) e.open = true; });
+}
+function bgRender() {
+  var held = {};
+  SECS.forEach(function(id) { held[id] = holdForm(id); });
+  BG = true;
+  try { render(); } finally { BG = false; }
+  SECS.forEach(function(id) { restoreForm(id, held[id]); });
+}
+document.addEventListener("click", function(e) { if (e.target && e.target.type === "file") PICK = Date.now(); }, true);
+document.addEventListener("change", function(e) { if (e.target && e.target.type === "file") PICK = 0; }, true);
+
 function render() {
   $("app").hidden = !(TAB === "list"); $("add").hidden = !cfg || TAB !== "list";
   $("app-r").hidden = TAB !== "recipes"; $("app-b").hidden = TAB !== "board"; $("app-c").hidden = TAB !== "cal";
   if (TAB === "cal") renderCal();
   if (TAB === "list") renderSoon();
   if (TAB === "recipes") renderRecipes();
-  if (TAB === "board") renderBoardTab();
+  if (TAB === "board" && !B.drawing) renderBoardTab();
   $("app-f").hidden = TAB !== "fridge";
   $("app-d").hidden = TAB !== "deals"; $("app-h").hidden = TAB !== "home"; $("app-k").hidden = TAB !== "books";
-  if (TAB === "books" && window.renderBooks) renderBooks();
-  if (TAB === "deals" && window.renderDeals) renderDeals();
-  if (TAB === "home" && window.renderHome) renderHome();
-  if (TAB === "fridge" && window.renderFridge) renderFridge();
-  if (TAB === "recipes" && window.renderPlanImport) renderPlanImport();
+  if (TAB === "books" && window.renderBooks && !skipBG("app-k")) renderBooks();
+  if (TAB === "deals" && window.renderDeals && !skipBG("app-d")) renderDeals();
+  if (TAB === "home" && window.renderHome && !skipBG("app-h")) renderHome();
+  if (TAB === "fridge" && window.renderFridge && !skipBG("app-f")) renderFridge();
+  if (TAB === "recipes" && window.renderPlanImport && !skipBG("app-r")) renderPlanImport();
   var all = itemsOf("shop"), pend = pendingIds(), open = [], done = [];
   all.forEach(function(it) { (it.state === "done" ? done : open).push(it); });
   loadPeople();
@@ -325,7 +389,7 @@ function sync() {
     lastErr = ""; ls.set(K.synced, String(Date.now()));
   }, function(e) { lastErr = e.message; }).then(function() {
     ls.set(K.store, store); ls.set(K.remote, remote);
-    busy = false; render();
+    busy = false; bgRender();
     if (again) { again = false; syncSoon(100); }
   });
 }
@@ -381,7 +445,7 @@ function renderCal() {
       row.querySelector(".t").textContent = e.time ? HubCal.fmtTime(e.time) : "ALL DAY";
       row.querySelector(".w").textContent = e.title + (e.note ? " — " + e.note : "");
       if (e.who && hasP2()) row.querySelector(".t").insertAdjacentHTML("afterbegin", badge(e.who) + " ");
-      if (e.rep) { row.querySelector(".x").hidden = true; row.querySelector(".w").textContent = "\u21bb " + e.title; }
+      if (e.rep) { row.querySelector(".x").hidden = true; row.querySelector(".w").textContent = "↻ " + e.title; }
       row.querySelector(".x").addEventListener("click", function() {
         if (!confirm("Delete " + e.title + "?")) return;
         store = lockEdit(store, e.id, "event", "del", e.raw); ls.set(K.store, store); render(); syncSoon(400);
@@ -481,7 +545,10 @@ $("r-del").addEventListener("click", function() {
 });
 
 // ---------- the board ----------
-var B = { tool: "pen", drawing: false, pts: [] };
+// 10.4: the stroke you are drawing is one polyline that grows as you move (it used to decrypt and redraw every saved stroke on
+// every touch move, which stuttered on a busy board), the eraser rubs out as you drag, and a touch the system takes over
+// (pointercancel) throws the half stroke away instead of saving a stray line.
+var B = { tool: "pen", drawing: false, erasing: false, pts: [], live: null, cache: null };
 function strokePts(text) {
   var bar = text.indexOf("|"), w = parseInt(text.substring(1, bar), 10) || 6;
   var pts = text.substring(bar + 1).split(";").map(function(p) { return p.split(",").map(Number); }).filter(function(p) { return !isNaN(p[0]) && !isNaN(p[1]); });
@@ -502,38 +569,66 @@ function bXY(e) {
   var r = $("b-svg").getBoundingClientRect();
   return [Math.round((e.clientX - r.left) / r.width * 1000), Math.round((e.clientY - r.top) / r.height * 640)];
 }
+function drawLive() {
+  if (!B.live) return;
+  var d = B.pts.map(function(q) { return q[0] + "," + q[1]; }).join(" ");
+  if (B.pts.length === 1) d += " " + (B.pts[0][0] + 1) + "," + (B.pts[0][1] + 1);
+  B.live.setAttribute("points", d);
+}
+function eraseAt(p) {
+  var best = -1, bd = 1600, i, j, q, dd;
+  for (i = 0; i < B.cache.length; i++) {
+    for (j = 0; j < B.cache[i].pts.length; j++) {
+      q = B.cache[i].pts[j]; dd = (q[0] - p[0]) * (q[0] - p[0]) + (q[1] - p[1]) * (q[1] - p[1]);
+      if (dd < bd) { bd = dd; best = i; }
+    }
+  }
+  if (best < 0) return;
+  var it = B.cache.splice(best, 1)[0].it;
+  [].forEach.call($("b-svg").querySelectorAll("polyline"), function(el) { if (el.getAttribute("data-id") === it.id && el.parentNode) el.parentNode.removeChild(el); });
+  store = lockEdit(store, it.id, "sketch", "del", it.text);
+  ls.set(K.store, store); syncSoon(800);
+}
+function endStroke(save) {
+  if (!B.drawing) return;
+  B.drawing = false;
+  if (B.erasing) { B.erasing = false; B.cache = null; render(); return; }
+  var live = B.live; B.live = null;
+  if (live && live.parentNode) live.parentNode.removeChild(live);
+  if (!save || !B.pts.length) return;
+  var pts = B.pts, n;
+  if (pts.length > 400) { n = Math.ceil(pts.length / 400); var last = pts[pts.length - 1]; pts = pts.filter(function(_, i) { return i % n === 0; }); pts.push(last); }
+  var d = pts.map(function(q) { return q[0] + "," + q[1]; }).join(";");
+  store = lockEdit(store, HubData.newId("p"), "sketch", "open", "w" + (B.tool === "mark" ? 16 : 6) + "|" + d);
+  ls.set(K.store, store); render(); syncSoon(800);
+}
 $("b-svg").addEventListener("pointerdown", function(e) {
-  e.preventDefault(); $("b-svg").setPointerCapture && $("b-svg").setPointerCapture(e.pointerId);
+  e.preventDefault();
+  if ($("b-svg").setPointerCapture) { try { $("b-svg").setPointerCapture(e.pointerId); } catch (x) {} }
   var p = bXY(e);
+  B.drawing = true;
   if (B.tool === "erase") {
-    var best = null, bd = 1e9;
-    itemsOf("sketch").forEach(function(it) {
-      strokePts(it.text).pts.forEach(function(q) {
-        var dd = (q[0] - p[0]) * (q[0] - p[0]) + (q[1] - p[1]) * (q[1] - p[1]);
-        if (dd < bd) { bd = dd; best = it; }
-      });
-    });
-    if (best && bd < 1600) { store = lockEdit(store, best.id, "sketch", "del", best.text); ls.set(K.store, store); render(); syncSoon(600); }
+    B.erasing = true;
+    B.cache = itemsOf("sketch").map(function(it) { return { it: it, pts: strokePts(it.text).pts }; });
+    eraseAt(p);
     return;
   }
-  B.drawing = true; B.pts = [p];
+  B.erasing = false; B.pts = [p];
+  B.live = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  B.live.setAttribute("fill", "none"); B.live.setAttribute("stroke", "#111"); B.live.setAttribute("stroke-linecap", "round"); B.live.setAttribute("stroke-linejoin", "round");
+  B.live.setAttribute("stroke-width", B.tool === "mark" ? 16 : 6);
+  $("b-svg").appendChild(B.live); drawLive();
 });
 $("b-svg").addEventListener("pointermove", function(e) {
   if (!B.drawing) return;
-  var p = bXY(e), l = B.pts[B.pts.length - 1];
+  var p = bXY(e);
+  if (B.erasing) { eraseAt(p); return; }
+  var l = B.pts[B.pts.length - 1];
   if ((p[0] - l[0]) * (p[0] - l[0]) + (p[1] - l[1]) * (p[1] - l[1]) < 25) return;
-  B.pts.push(p); renderBoardTab();
-  var d = B.pts.map(function(q) { return q[0] + "," + q[1]; }).join(" ");
-  $("b-svg").innerHTML += '<polyline points="' + d + '" fill="none" stroke="#111" stroke-width="' + (B.tool === "mark" ? 16 : 6) + '" stroke-linecap="round" stroke-linejoin="round"/>';
+  B.pts.push(p); drawLive();
 });
-window.addEventListener("pointerup", function() {
-  if (!B.drawing) return;
-  B.drawing = false;
-  if (B.pts.length > 400) B.pts = B.pts.filter(function(_, i) { return i % Math.ceil(B.pts.length / 400) === 0; });
-  var d = B.pts.map(function(q) { return q[0] + "," + q[1]; }).join(";");
-  store = lockEdit(store, HubData.newId("p"), "sketch", "open", "w" + (B.tool === "mark" ? 16 : 6) + "|" + d);
-  ls.set(K.store, store); render(); syncSoon(800);
-});
+window.addEventListener("pointerup", function() { endStroke(true); });
+window.addEventListener("pointercancel", function() { endStroke(false); });
 Array.prototype.forEach.call(document.querySelectorAll(".b-t"), function(b) {
   b.addEventListener("click", function() {
     B.tool = b.getAttribute("data-t");
@@ -546,10 +641,12 @@ $("b-clear").addEventListener("click", function() {
   ls.set(K.store, store); render(); syncSoon(400);
 });
 
+function showTab(el) { try { el.scrollIntoView({ block: "nearest", inline: "center" }); } catch (e) {} }      // 10.4: with nine tabs the chosen one can be off screen
 Array.prototype.forEach.call(document.querySelectorAll("#tabs span"), function(t) {
   t.addEventListener("click", function() {
     TAB = t.getAttribute("data-tab");
     document.querySelectorAll("#tabs span").forEach(function(x) { x.className = x === t ? "sel" : ""; });
+    showTab(t);
     render();
   });
 });
@@ -577,15 +674,17 @@ $("copy").addEventListener("click", function() {
   else prompt("Copy this link", link);
 });
 var WAKE = null;
+function keepAwake() { if (navigator.wakeLock) navigator.wakeLock.request("screen").then(function(w) { WAKE = w; }, function() {}); }
 $("storemode").addEventListener("click", function() {
   var on = !document.body.classList.contains("store");
   document.body.classList.toggle("store", on);
   $("storemode").textContent = on ? "Store mode: ON" : "Store mode";
-  if (on && navigator.wakeLock) navigator.wakeLock.request("screen").then(function(w) { WAKE = w; }, function() {});
+  if (on) keepAwake();
   if (!on && WAKE) { WAKE.release(); WAKE = null; }
 });
 window.addEventListener("online", function() { syncSoon(100); });
-document.addEventListener("visibilitychange", function() { if (!document.hidden) syncSoon(100); });
+// 10.4: the screen lock is let go whenever the page is hidden, so store mode asks for it again when you come back
+document.addEventListener("visibilitychange", function() { if (!document.hidden) { syncSoon(100); if (document.body.classList.contains("store")) keepAwake(); } });
 setInterval(function() { if (!document.hidden) sync(); }, 20000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function() {});
 

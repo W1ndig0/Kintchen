@@ -1,6 +1,8 @@
 // Kitchen Hub phone app 10.3: BOOKS - your book cloud. Upload books you own (EPUB, PDF, MOBI, AZW3, TXT);
 // mark which ones belong on the Kindle (they download into its library at the next sync); download any of them
 // back to this phone; add free classics from Project Gutenberg.
+// 10.4: every upload is locked with your passphrase on this phone before it goes to GitHub (AES-256-CTR, the same
+// format as cloud/books.js and the Kindle's hub_books.sh), and unlocked again on DOWNLOAD. No DRM check.
 (function() {
   "use strict";
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function(c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -11,18 +13,38 @@
   function size(n) { n = +n || 0; return n >= 1048576 ? (Math.round(n / 104857.6) / 10) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB"; }
   function today() { return todayK(); }
   var EXTS = ["epub", "pdf", "mobi", "azw3", "azw", "txt", "prc"], MAX = 30 * 1048576, PART = 2000000;
-  var UP = { busy: false, msg: "" }, GUT = { q: "", res: null, msg: "" }, HAVE = null;
+  var UP = { busy: false, msg: "" }, GUT = { q: "", res: null, msg: "" };
   function kindleHas() { try { var k = JSON.parse(ls.get("kh_extras") || "null"); return (k && k.kindle && k.kindle.books) || null; } catch (e) { return null; } }
+
+  // ---------- 10.4: the book lock ----------
+  var BK = {};
+  function bookKeyBytes() {
+    var p = pk(); if (!p) return null;
+    if (BK[p]) return BK[p];
+    var k = HubCrypt.utf8("kitchenhub|" + p);
+    for (var i = 0; i < 1000; i++) k = HubCrypt.sha256(k);
+    return (BK[p] = new Uint8Array(HubCrypt.sha256(k.concat(HubCrypt.utf8("books")))));
+  }
+  function aes(iv, data, how) {
+    var kb = bookKeyBytes();
+    return crypto.subtle.importKey("raw", kb, { name: "AES-CTR" }, false, [how]).then(function(k) {
+      return crypto.subtle[how]({ name: "AES-CTR", counter: iv, length: 128 }, k, data);
+    }).then(function(r) { return new Uint8Array(r); });
+  }
+  function hex(u8) { return [].map.call(u8, function(x) { return ("0" + x.toString(16)).slice(-2); }).join(""); }
+  function unhex(s) { var o = new Uint8Array(s.length / 2); for (var i = 0; i < o.length; i++) o[i] = parseInt(s.substr(i * 2, 2), 16); return o; }
+  function toB64(u8) { var bin = "", i; for (i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(bin).replace(/(.{76})/g, "$1\n"); }
 
   function render2() {
     var box = $("app-k"); if (!box) return;
     var bs = books().sort(function(a, c) { return (c.added || "") < (a.added || "") ? -1 : 1; }), b = brainX(), h = "";
     h += "<h2>Your book cloud</h2>";
-    if (!b.booksGist) h += '<p class="empty">The book cloud is made by the cloud brain on its next run (10.3). Open this tab again in a few minutes.</p>';
-    h += '<div class="card"><label class="fl">Upload a book you own (EPUB, PDF, MOBI, AZW3, TXT; up to 30 MB)<input type="file" id="bk-f" accept=".epub,.pdf,.mobi,.azw3,.azw,.txt,.prc"' + (UP.busy || !b.booksGist ? " disabled" : "") + '></label>' +
+    if (!b.booksGist) h += '<p class="empty">The book cloud is made by the cloud brain on its next run. Open this tab again in a few minutes.</p>';
+    h += '<div class="card"><label class="fl">Upload a book (EPUB, PDF, MOBI, AZW3, TXT; up to 30 MB)<input type="file" id="bk-f" accept=".epub,.pdf,.mobi,.azw3,.azw,.txt,.prc"' + (UP.busy || !b.booksGist ? " disabled" : "") + '></label>' +
          '<label style="font-size:15px"><input type="checkbox" id="bk-k" checked> Put it on the Kindle</label>' +
          (UP.msg ? '<p class="sub" id="bk-msg">' + esc(UP.msg) + "</p>" : "") +
-         '<p class="sub">EPUBs are turned into Kindle format by the cloud (a few minutes). Books with DRM (most store-bought Kindle books) can\'t be used.</p></div>';
+         '<p class="sub">' + (pk() ? "Books are locked with your passphrase on this phone before they go to GitHub." : "<b>No passphrase set</b> - books are stored unlocked. Set PASSPHRASE on the fridge and pair again to lock them.") +
+         " EPUBs are turned into Kindle format by the cloud (a few minutes).</p></div>";
     h += '<ul class="xl">';
     if (!bs.length) h += '<li class="empty">No books yet.</li>';
     bs.forEach(function(x) {
@@ -56,15 +78,20 @@
     if (EXTS.indexOf(ext) < 0) return say("That kind of file can't go on a Kindle (EPUB, PDF, MOBI, AZW3, TXT).");
     if (file.size > MAX) return say("That book is over 30 MB.");
     var b = brainX(); if (!b.booksGist) return say("No book cloud yet - wait for the cloud brain's next run.");
+    if (!window.crypto || !crypto.subtle) return say("This browser can't lock or check the file (needs HTTPS).");
     UP.busy = true; say("Reading " + file.name + "…");
     var rd = new FileReader();
     rd.onerror = function() { UP.busy = false; say("Couldn't read that file."); };
     rd.onload = function() {
-      var buf = new Uint8Array(rd.result);
+      var buf = new Uint8Array(rd.result), sha = "", lock = "";
       crypto.subtle.digest("SHA-256", buf).then(function(d) {
-        var sha = [].map.call(new Uint8Array(d), function(x) { return ("0" + x.toString(16)).slice(-2); }).join("");
-        var bin = "", i; for (i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-        var b64 = btoa(bin).replace(/(.{76})/g, "$1\n"), n = Math.max(1, Math.ceil(b64.length / PART)), id = HubData.newId("b").replace(/[^A-Za-z0-9]/g, "");
+        sha = hex(new Uint8Array(d));
+        if (!bookKeyBytes()) return buf;
+        var iv = crypto.getRandomValues(new Uint8Array(16));
+        lock = " a1 " + hex(iv); say("Locking " + file.name + "…");
+        return aes(iv, buf, "encrypt");
+      }).then(function(body) {
+        var b64 = toB64(body), n = Math.max(1, Math.ceil(b64.length / PART)), id = HubData.newId("b").replace(/[^A-Za-z0-9]/g, "");
         var title = file.name.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").replace(/\s+/g, " ").trim(), author = "";
         var m = /^(.+?)\s+-\s+(.+)$/.exec(title); if (m) { title = m[1]; author = m[2]; }
         put("book", HubCal.recText("book", { title: title, author: author, ext: ext, size: buf.length, want: onKindle ? "kindle" : "cloud", src: "upload", added: today(), conv: "" }), id);
@@ -75,10 +102,10 @@
             var files = {}; files["bk_" + id + ".p" + i2] = { content: b64.slice(i2 * PART, (i2 + 1) * PART) };
             return gist(b.booksGist, files).then(function() { i2++; next(); }, fail);
           }
-          var mf = {}; mf["bk_" + id + ".meta"] = { content: ext + " " + buf.length + " " + sha + " " + n + "\n" };
-          gist(b.booksGist, mf).then(function() { UP.busy = false; say("✓ " + title + " is in your book cloud" + (onKindle ? " - on the Kindle after its next sync." : ".")); render2(); }, fail);
+          var mf = {}; mf["bk_" + id + ".meta"] = { content: ext + " " + buf.length + " " + sha + " " + n + lock + "\n" };
+          gist(b.booksGist, mf).then(function() { UP.busy = false; say("✓ " + title + " is in your book cloud" + (lock ? " (locked)" : "") + (onKindle ? " - on the Kindle after its next sync." : ".")); render2(); }, fail);
         })();
-      }, function() { UP.busy = false; say("This browser can't check the file (needs HTTPS)."); });
+      }).catch(function(e) { UP.busy = false; say("Couldn't prepare the book: " + (e && e.message || e)); });
     };
     rd.readAsArrayBuffer(file);
   }
@@ -87,22 +114,28 @@
     return timed(cfg.api + "/gists/" + gid, { method: "PATCH", headers: { Authorization: "Bearer " + cfg.token, Accept: "application/vnd.github+json", "Content-Type": "application/json" }, body: JSON.stringify({ files: files }) }, 120000)
       .then(function(r) { if (!r.ok) throw new Error("GitHub said " + r.status); return r.json(); });
   }
-  // ---------- download a book back to this phone ----------
+  // ---------- download a book back to this phone (unlocked here) ----------
   function download(id, el) {
     var base = rawBase(), x = books().filter(function(q) { return q.id === id; })[0]; if (!base || !x) return;
     el.textContent = "Downloading…";
-    fetch(base + "bk_" + id + ".meta", { cache: "no-store" }).then(function(r) { return r.text(); }).then(function(t) {
-      var m = t.trim().split(/\s+/), n = +m[3], parts = [], i = 0;
+    var m;
+    fetch(base + "bk_" + id + ".meta", { cache: "no-store" }).then(function(r) { if (!r.ok) throw new Error("not in the cloud yet"); return r.text(); }).then(function(t) {
+      m = t.trim().split(/\s+/); var n = +m[3], parts = [], i = 0;
       if (!n) throw new Error("not uploaded completely");
+      if (m[4] === "a1" && !bookKeyBytes()) throw new Error("this book is locked and this phone has no passphrase");
       return (function next() {
         if (i >= n) return parts.join("");
         return fetch(base + "bk_" + id + ".p" + i, { cache: "no-store" }).then(function(r) { if (!r.ok) throw new Error("part " + i + " missing"); return r.text(); }).then(function(p) { parts.push(p); i++; return next(); });
-      })().then(function(b64) {
-        var bin = atob(b64.replace(/\s/g, "")), u8 = new Uint8Array(bin.length);
-        for (var k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k);
-        var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([u8])); a.download = (x.title || "book") + "." + m[0];
-        document.body.appendChild(a); a.click(); setTimeout(function() { a.remove(); }, 1000); el.textContent = "Downloaded";
-      });
+      })();
+    }).then(function(b64) {
+      var bin = atob(b64.replace(/\s/g, "")), u8 = new Uint8Array(bin.length);
+      for (var k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k);
+      return m[4] === "a1" ? aes(unhex(m[5] || ""), u8, "decrypt") : u8;
+    }).then(function(u8) {
+      return crypto.subtle.digest("SHA-256", u8).then(function(d) { if (hex(new Uint8Array(d)) !== m[2]) throw new Error("the book didn't check out (wrong passphrase?)"); return u8; });
+    }).then(function(u8) {
+      var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([u8])); a.download = (x.title || "book") + "." + m[0];
+      document.body.appendChild(a); a.click(); setTimeout(function() { a.remove(); }, 1000); el.textContent = "Downloaded";
     }).catch(function(e) { el.textContent = "Failed: " + e.message; });
   }
   var ACT = {

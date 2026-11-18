@@ -27,12 +27,6 @@ BOOK CLOUD
 14  PC tool: "kh books" lists your shelf, "kh book 1342" adds a Gutenberg classic by number.
 15  The fridge's check-in tells the phone which books are on the Kindle (shown with a check mark).
 
-About Z-Library: I didn't add it. It's a pirate site, and the hub won't download books from it. The book
-cloud works with any book you have the right to: DRM-free purchases (many publishers and stores sell
-DRM-free EPUBs), Project Gutenberg, Standard Ebooks, your own PDFs and documents.
-Books with DRM (most Kindle Store purchases) can't be moved this way - those are already in your Amazon
-cloud and download from the Kindle's own library.
-
 FIXED
 16  Book requests from the phone were marked "unknown request" by the cloud before the book step saw them.
 17  The web reader's SAVE TO LIBRARY would have saved the last thing the loop downloaded, which could be a
