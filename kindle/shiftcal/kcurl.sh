@@ -1,48 +1,42 @@
-# Kitchen Hub 10.4: kcurl - curl that checks the server's certificate whenever this Kindle can.
-# Sourced by the hub's shell scripts. Use it like curl, without -k.
+# Kitchen Hub kcurl - curl that checks the server's certificate. Sourced by the hub's shell scripts.
+# Use it like curl, without -k.
 #
-# Older Kindle firmware ships an old list of trusted certificate authorities, so before 10.4 every
-# download used -k (no certificate check). That works, but it means anyone on your Wi-Fi path could
-# pretend to be GitHub and read your token or push a fake update. Now:
-#   1. Every request first tries a normal, checked connection.
-#   2. If that works once, the Kindle is marked "ok" in .tls and NEVER falls back to -k after that,
-#      so a fake certificate later is refused instead of silently accepted.
-#   3. Only if the checked connection fails because of the certificate AND it has never worked here
-#      (an old CA list) is the request repeated with -k. It retries the checked way once a day.
-#   4. Safety valve: if checked connections were fine but then fail for 3 days in a row (e.g. a site
-#      moved to a new certificate authority your firmware doesn't know), it falls back so the hub
-#      keeps working and can still update, and says so loudly in the log. Delete .tls to start over.
+# 10.5: the kit ships its own list of trusted certificate authorities (cacert.pem, from Mozilla via
+# certifi), so a checked connection works even on Kindle firmware with an old built-in list. Order:
+#   1. checked against cacert.pem (when the file is there)
+#   2. checked against the Kindle's own list
+#   3. ONLY for plain data (weather, news, pictures) and only if neither list works: unchecked (-k),
+#      logged once a day. Scripts that download code or send your GitHub token set KC_STRICT=1 first;
+#      for them step 3 never happens - the request fails instead.
+# Before 10.5 the unchecked fallback applied to everything, including updates and the gist token.
 KC_DIR="${DIR:-${HUB_DIR:-/mnt/us/extensions/shiftcal}}"
 KC_F="$KC_DIR/.tls"
+KC_CA="$KC_DIR/cacert.pem"
 KC_BIN="${CURL:-${CURL_BIN:-/usr/bin/curl}}"; [ -x "$KC_BIN" ] || KC_BIN=curl
 kc_log() { echo "$(date '+%m-%d %H:%M:%S') [tls] $*" >> "$KC_DIR/power.log" 2>/dev/null; }
+kc_cert_err() { case "$1" in 35|51|53|54|58|59|60|77|80|82|83|90|91) return 0 ;; esac; return 1; }
 kcurl() {
-    KC_M=""; KC_A=0
-    [ -f "$KC_F" ] && read -r KC_M KC_A < "$KC_F" 2>/dev/null
-    case "$KC_A" in ''|*[!0-9]*) KC_A=0 ;; esac
-    KC_NOW=$(date +%s)
-    # known old CA list, checked again less than a day ago: straight to -k
-    if [ "$KC_M" = "old" ] && [ $((KC_NOW - KC_A)) -lt 86400 ]; then "$KC_BIN" -k "$@"; return $?; fi
-    KC_T=$(mktemp 2>/dev/null) || KC_T="/tmp/kc.$$.$KC_NOW"
-    "$KC_BIN" "$@" > "$KC_T"; KC_RC=$?
-    case "$KC_RC" in
-        60|77|83|51)                                    # certificate problem
-            rm -f "$KC_T"
-            if [ "$KC_M" = "ok" ] || [ "$KC_M" = "okfail" ]; then
-                if [ "$KC_M" = "ok" ]; then echo "okfail $KC_NOW" > "$KC_F"; KC_A=$KC_NOW
-                    kc_log "certificate check FAILED (curl $KC_RC) on a Kindle where it used to work - request refused. If this keeps happening, someone may be intercepting your Wi-Fi."
-                fi
-                if [ $((KC_NOW - KC_A)) -lt 259200 ]; then return "$KC_RC"; fi
-                kc_log "certificate check failing for 3 days - falling back to unchecked connections (delete .tls to start over)"
-            else
-                [ "$KC_M" = "old" ] || kc_log "this Kindle's certificate list is too old for a checked connection - using unchecked ones, retrying daily"
-            fi
-            echo "old $KC_NOW" > "$KC_F"
-            "$KC_BIN" -k "$@"; return $? ;;
-        0)
-            [ "$KC_M" = "ok" ] || { echo "ok $KC_NOW" > "$KC_F"; [ -n "$KC_M" ] && kc_log "checked connections work again"; }
-            cat "$KC_T"; rm -f "$KC_T"; return 0 ;;
-        *)                                              # no Wi-Fi, timeout, HTTP error with -f ...: not a certificate question
-            cat "$KC_T"; rm -f "$KC_T"; return "$KC_RC" ;;
-    esac
+    KC_T=$(mktemp 2>/dev/null) || KC_T="/tmp/kc.$$.$(date +%s)"
+    KC_RC=60
+    if [ -s "$KC_CA" ]; then
+        "$KC_BIN" --cacert "$KC_CA" "$@" > "$KC_T"; KC_RC=$?
+        kc_cert_err "$KC_RC" || { cat "$KC_T"; rm -f "$KC_T"; return "$KC_RC"; }
+    fi
+    "$KC_BIN" "$@" > "$KC_T"; KC_RC2=$?
+    if ! kc_cert_err "$KC_RC2"; then
+        [ -s "$KC_CA" ] && [ "$KC_RC2" = "0" ] && kc_once ca "the hub's certificate list was refused (curl $KC_RC) but the Kindle's own list works"
+        cat "$KC_T"; rm -f "$KC_T"; return "$KC_RC2"
+    fi
+    rm -f "$KC_T"
+    if [ "${KC_STRICT:-0}" = "1" ]; then
+        kc_once strict "certificate check failed (curl $KC_RC2) - request refused (updates, lists and books are never fetched unchecked)"
+        return "$KC_RC2"
+    fi
+    kc_once data "certificate check failed (curl $KC_RC2) - fetching plain data (weather, news, pictures) unchecked"
+    "$KC_BIN" -k "$@"
+}
+kc_once() {    # $1 kind  $2 message: logged at most once a day per kind
+    KC_K="$KC_F.$1"; KC_NOW=$(date +%s); KC_L=$(cat "$KC_K" 2>/dev/null | tr -cd '0-9')
+    [ -n "$KC_L" ] && [ $((KC_NOW - KC_L)) -lt 86400 ] && return 0
+    echo "$KC_NOW" > "$KC_K" 2>/dev/null; kc_log "$2"
 }

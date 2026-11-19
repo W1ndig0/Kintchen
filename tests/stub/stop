@@ -1,0 +1,2 @@
+#!/bin/sh
+echo "stop $*" >> "$KT/sys.log"; exit 0

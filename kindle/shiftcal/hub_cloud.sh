@@ -20,21 +20,28 @@ TAB=$(printf '\t')
 GIST_ID=""; GH_TOKEN=""; API="https://api.github.com"
 [ -f "$CONF" ] && . "$CONF"
 CURL=/usr/bin/curl; [ -x "$CURL" ] || CURL=curl
+KC_STRICT=1      # 10.5: your token and your books never go over an unchecked connection
+[ -f "$DIR/kcurl.sh" ] && . "$DIR/kcurl.sh"; command -v kcurl >/dev/null 2>&1 || kcurl() { "$CURL" "$@"; }     # 10.5: never unchecked when kcurl.sh is missing
 mkdir -p "$T" "$DIR/mesquite"
 [ -f "$LOCAL" ] || echo "#hub v1" > "$LOCAL"
 
 merge() { sh "$DIR/hub_merge.sh" "$@"; }
 say() { echo "$(date '+%m-%d %H:%M:%S') [cloud] $*" >> "$LOG"; }
-urldecode() { printf '%b' "$(echo "$1" | sed -e 's/+/ /g' -e 's/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')"; }
+urldecode() { printf '%b' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/+/ /g' -e 's/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')"; }     # 10.5: a typed backslash stays a backslash
 
 # hub.tsv is changed by "add" (from the page) while a sync may be running: every read-modify-write
 # of it happens inside this short lock
-llock() {
+llock() {     # 10.5: the lock is only broken when its owner is gone (or after 60 s), not after 8 s of waiting
     N=0
     while ! mkdir "$T/llock" 2>/dev/null; do
-        N=$((N + 1)); [ $N -ge 8 ] && { rm -rf "$T/llock"; N=0; }    # stale lock from a killed run
+        N=$((N + 1))
+        LP=$(cat "$T/llock/pid" 2>/dev/null | tr -cd '0-9')
+        if { [ $N -ge 3 ] && [ -n "$LP" ] && ! kill -0 "$LP" 2>/dev/null; } || { [ $N -ge 3 ] && [ -z "$LP" ]; } || [ $N -ge 60 ]; then
+            rm -rf "$T/llock"; N=0                                    # stale lock from a killed run
+        fi
         sleep 1
     done
+    echo $$ > "$T/llock/pid"
 }
 lunlock() { rm -rf "$T/llock"; }
 merge_local() { llock; merge "$LOCAL" "$LOCAL" "$@"; lunlock; }
@@ -51,17 +58,27 @@ write_js() {
 }
 
 # api METHOD URL [curl args] -> prints the http code; body in $T/b.$$, headers in $T/h.$$
+# 10.5: the token goes to curl from a private file in RAM (curl -H @file), not on the command line where
+# any process list (ps, the diagnostics snapshot) could show it.
+HDRF=""
+hdr_file() {
+    [ -n "$HDRF" ] && [ -s "$HDRF" ] && return 0
+    HDRF="/tmp/khh.$$"; rm -f "$HDRF"
+    ( umask 077; printf 'Authorization: Bearer %s\n' "$GH_TOKEN" > "$HDRF" )
+}
+trap 'rm -f "/tmp/khh.$$"' EXIT
 api() {
     M=$1; U=$2; shift 2
-    $CURL -s -k --connect-timeout 8 --max-time 25 -X "$M" \
-        -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+    hdr_file
+    kcurl -s --connect-timeout 8 --max-time 25 -X "$M" \
+        -H "@$HDRF" -H "Accept: application/vnd.github+json" \
         -H "X-GitHub-Api-Version: 2022-11-28" -H "User-Agent: KitchenHub" \
         -D "$T/h.$$" -o "$T/b.$$" -w '%{http_code}' "$@" "$U" 2>/dev/null
 }
 raw_url() { grep -o '"raw_url" *: *"[^"]*/hub\.tsv"' "$T/b.$$" | head -1 | sed 's/.*"\(http[^"]*\)"$/\1/'; }
 fetch_raw() {   # $1 raw url -> canonical copy in $T/r.$$
     [ -n "$1" ] || return 1
-    C=$($CURL -s -k --connect-timeout 8 --max-time 25 -H "User-Agent: KitchenHub" -o "$T/raw.$$" -w '%{http_code}' "$1" 2>/dev/null)
+    C=$(kcurl -s --connect-timeout 8 --max-time 25 -H "User-Agent: KitchenHub" -o "$T/raw.$$" -w '%{http_code}' "$1" 2>/dev/null)
     [ "$C" = "200" ] || return 1
     merge "$T/r.$$" "$T/raw.$$"      # canonical form: GitHub may store the text with other line endings
 }
@@ -113,7 +130,7 @@ push() {
 # ---------- 9.8.5 ----------
 # kindle.conf in the list gist (written by the cloud brain): where the bundle / cloud gist live
 save_links() {
-    { tr -d '\r' < "$T/b.$$" | grep -o '\(BUNDLE_URL\|CLOUD_GIST\|ICS_URL\|ICS2_URL\|TV_REF\|EXTRA_URL\)=[^\\" ]*'
+    { tr -d '\r' < "$T/b.$$" | grep -o '\(BUNDLE_URL\|CLOUD_GIST\|ICS_URL\|ICS2_URL\|TV_REF\|EXTRA_URL\|BOOKS_URL\)=[^\\" ]*'
       tr -d '\r' < "$T/b.$$" | grep -o 'lastRun\\*"*: *[0-9]\{13\}' | head -1 | sed 's/.*\([0-9]\{10\}\)[0-9]\{3\}$/BRAIN_AT=\1/'; } | sort -u > "$T/links.$$"
     if [ -s "$T/links.$$" ]; then cmp -s "$T/links.$$" "$DIR/.cloud_links" || { mv "$T/links.$$" "$DIR/.cloud_links"; say "cloud brain links saved"; }
     else rm -f "$T/links.$$"; fi
@@ -125,7 +142,10 @@ take_inbox() {
     : > "$T/inbox_new.$$"
     for U in $(tr -d '\r' < "$T/b.$$" | grep -o '"raw_url" *: *"[^"]*/inbox[-_][A-Za-z0-9._-]*\.txt"' | sed 's/.*"\(http[^"]*\)"$/\1/'); do
         NAME=${U##*/}
-        C=$($CURL -s -k --connect-timeout 8 --max-time 20 -H "User-Agent: KitchenHub" -o "$T/in.$$" -w '%{http_code}' "$U" 2>/dev/null)
+        # 10.5: a file taken before (its deletion from the gist didn't happen yet) is only deleted again. Merging
+        # it a second time stamped its lines with a newer time, which re-opened items you had already ticked off.
+        if grep -qxF "$NAME" "$DIR/.inbox_seen" 2>/dev/null; then echo "$NAME" >> "$T/inbox_done"; continue; fi
+        C=$(kcurl -s --connect-timeout 8 --max-time 20 -H "User-Agent: KitchenHub" -o "$T/in.$$" -w '%{http_code}' "$U" 2>/dev/null)
         [ "$C" = "200" ] || continue
         TSMS="$(date +%s)000"
         awk -v name="$NAME" -v ts="$TSMS" '
@@ -140,8 +160,9 @@ take_inbox() {
             tolower($0) ~ /^(timer|note) *:/ { next }
             { t = $0; if (tolower(t) ~ /^(shop|buy|list) *:/) sub(/^[^:]*: */, "", t)
               k = split(t, parts, / *, */); for (i = 1; i <= k; i++) if (parts[i] != "") { p = parts[i]; gsub(/\|/, "/", p); add("shop", substr(p, 1, 80)) } }
-            END { if (!bad) printf "%s", out; else exit 3 }' "$T/in.$$" >> "$T/inbox_new.$$" && echo "$NAME" >> "$T/inbox_done"
+            END { if (!bad) printf "%s", out; else exit 3 }' "$T/in.$$" >> "$T/inbox_new.$$" && { echo "$NAME" >> "$T/inbox_done"; echo "$NAME" >> "$DIR/.inbox_seen"; }
     done
+    [ -f "$DIR/.inbox_seen" ] && [ "$(grep -c . "$DIR/.inbox_seen")" -gt 300 ] && { tail -n 200 "$DIR/.inbox_seen" > "$DIR/.inbox_seen.tmp" && mv "$DIR/.inbox_seen.tmp" "$DIR/.inbox_seen"; }
     if [ -s "$T/inbox_new.$$" ]; then merge_local "$T/inbox_new.$$"; say "inbox: $(grep -c . "$T/inbox_new.$$") items from Siri/PC"; fi
     rm -f "$T/inbox_new.$$" "$T/in.$$"
 }
@@ -160,8 +181,13 @@ do_status() {
     # the cloud brain fetches the news and markets for the fridge: it needs your choices from Settings
     NEWS=$(grep '^http' "$DIR/news.conf" 2>/dev/null | tr -d '"\\\r' | tr '\n' ';')
     STK=$(grep -v '^[[:space:]]*#' "$DIR/stocks.conf" 2>/dev/null | tr -d '"\\\r' | tr '\n' ' ')
-    printf '{"ts":%s,"v":"%s","pct":%s,"charging":%s,"rate7":%s,"left7":%s,"interval":%s,"lastSync":%s,"cloudData":%s,"reminded":%s,"wake":"%s","items":%s,"news":"%s","stocks":"%s"}' \
-        "$(date +%s)" "$V" "${PCT:-0}" "${CH:-0}" "${R7:-0}" "${L7:-0}" "${INT:-60}" "${LS:-0}" "${CD:-0}" "$REM" "$WR" "$(grep -c -v '^#' "$LOCAL")" "$NEWS" "$STK" > "$T/st.$$"
+    # 10.2: what the updater did last (installed / healthy / rolledback), the auto-update setting, a waiting version
+    UEV=$(cat "$DIR/.update/event" 2>/dev/null | head -1 | tr -cd 'A-Za-z0-9 .-' | cut -c1-80)
+    AUP=$(sed -n 's/^AUTO_UPDATE=\([0-2]\)$/\1/p' "$DIR/eco.conf" 2>/dev/null | head -1)
+    BKS=$(cut -f1 "$DIR/.books_have" 2>/dev/null | tr -cd 'A-Za-z0-9\n' | awk 'NF { printf "%s\"%s\"", (n++ ? "," : ""), $0 }')      # 10.3: books on this Kindle
+    UAV=$(grep -o 'state:"available",cur:"[^"]*",nv:"[^"]*"' "$DIR/mesquite/update.js" 2>/dev/null | sed 's/.*nv:"\([^"]*\)"/\1/' | tr -cd 'A-Za-z0-9.-')
+    printf '{"ts":%s,"v":"%s","pct":%s,"charging":%s,"rate7":%s,"left7":%s,"interval":%s,"lastSync":%s,"cloudData":%s,"reminded":%s,"wake":"%s","items":%s,"news":"%s","stocks":"%s","upd":"%s","auto":%s,"avail":"%s","books":[%s]}' \
+        "$(date +%s)" "$V" "${PCT:-0}" "${CH:-0}" "${R7:-0}" "${L7:-0}" "${INT:-60}" "${LS:-0}" "${CD:-0}" "$REM" "$WR" "$(grep -c -v '^#' "$LOCAL")" "$NEWS" "$STK" "$UEV" "${AUP:-2}" "$UAV" "$BKS" > "$T/st.$$"
     { printf '{"files":{"kindle.json":{"content":"'; jstr < "$T/st.$$" | sed 's/\\n$//'; printf '"}}}'; } > "$T/p.$$"
     CODE=$(api PATCH "$API/gists/$GIST_ID" -H "Content-Type: application/json" --data-binary "@$T/p.$$")
     [ "$CODE" = "200" ] && { date +%s > "$DIR/.status_at"; rm -f "$ETAGF"; } || say "status upload refused ($CODE)"
@@ -188,7 +214,7 @@ do_sync() {
         rm -rf "$T/slock"; mkdir "$T/slock" || exit 0
     fi
     echo $$ > "$T/slock/pid"
-    trap 'rm -rf "$T/slock"; rm -f "$T"/*.$$' EXIT
+    trap 'rm -rf "$T/slock"; rm -f "$T"/*.$$ "/tmp/khh.$$"' EXIT
     ROUND=0; PUSHED=0; SAME=0
     while [ $ROUND -lt 4 ]; do
         ROUND=$((ROUND + 1))

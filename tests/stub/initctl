@@ -1,0 +1,2 @@
+#!/bin/sh
+echo "initctl $*" >> "$KT/sys.log"; exit 0

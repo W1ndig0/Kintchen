@@ -1,0 +1,2 @@
+#!/bin/sh
+case "$1" in pillow) echo "pillow start/running, process 1" ;; *) echo "$1 stop/waiting" ;; esac

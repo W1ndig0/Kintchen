@@ -1,0 +1,10 @@
+#!/bin/sh
+echo "$(date +%s) set $*" >> "$KT/lipc.log"
+case "$*" in
+  "com.lab126.appmgrd start app://com.custom.kitchenhub")
+    for d in /proc/[0-9]*; do [ "$(cat $d/comm 2>/dev/null)" = mesquite ] && { echo "$(date +%s) DOUBLE_START (page already running: ${d#/proc/})" >> "$KT/lipc.log"; exit 0; }; done
+    ( sleep "${FAKE_PAGE_DELAY:-1}"; setsid "$STUB/mesquite" -l com.custom.kitchenhub -c file:///x/ -j >/dev/null 2>&1 < /dev/null & ) & ;;
+  "com.lab126.appmgrd stop app://com.custom.kitchenhub")
+    for d in /proc/[0-9]*; do [ "$(cat $d/comm 2>/dev/null)" = mesquite ] && kill ${d#/proc/}; done ;;
+esac
+exit 0

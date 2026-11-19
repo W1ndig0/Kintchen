@@ -91,9 +91,8 @@ var HubCrypt = (function() {
         m.push(0x80);
         while (m.length % 64 !== 56) m.push(0);
         var bits = l * 8;
-        m.push(0, 0, 0, Math.floor(bits / 4294967296) & 255, (bits >>> 24) & 255, (bits >>> 16) & 255, (bits >>> 8) & 255, bits & 255);
-        m.splice(m.length - 8, 4); m.splice(m.length - 4, 0, 0, 0, 0, 0);
-        m = m.slice(0, m.length - 4).concat([(bits >>> 24) & 255, (bits >>> 16) & 255, (bits >>> 8) & 255, bits & 255]);
+        // 64-bit big-endian message length (high word is 0 for anything under 512 MB)
+        m.push(0, 0, 0, 0, (bits >>> 24) & 255, (bits >>> 16) & 255, (bits >>> 8) & 255, bits & 255);
         var w = new Array(64);
         for (i = 0; i < m.length; i += 64) {
             for (j = 0; j < 16; j++) w[j] = (m[i + 4 * j] << 24) | (m[i + 4 * j + 1] << 16) | (m[i + 4 * j + 2] << 8) | m[i + 4 * j + 3];
@@ -159,7 +158,10 @@ var HubCrypt = (function() {
     function lock(text, pass) {
         if (!pass) return text;
         var key = keyOf(pass), pt = utf8(text), iv = [], i;
-        for (i = 0; i < 8; i++) iv.push(Math.floor(Math.random() * 256));
+        // 10.5: the IV comes from the system's secure random source when there is one (Math.random only as a fallback)
+        var rnd = null;
+        try { var cr = typeof crypto !== "undefined" ? crypto : (typeof window !== "undefined" ? window.crypto || window.msCrypto : null); if (cr && cr.getRandomValues) { rnd = new Uint8Array(8); cr.getRandomValues(rnd); } } catch (e) { rnd = null; }
+        for (i = 0; i < 8; i++) iv.push(rnd ? rnd[i] : Math.floor(Math.random() * 256));
         var ks = stream(key, iv, pt.length), ct = [];
         for (i = 0; i < pt.length; i++) ct.push(pt[i] ^ ks[i]);
         return "~" + b64(iv.concat(tag(key, iv, ct), ct));
@@ -290,14 +292,16 @@ var HubCal = (function() {
     /* 10.0 records, all "|"-separated (no pipes inside fields):
      *   wish    name|target|query                      bill   name|amount|rule|who|autopay
      *   spend   date|amount|category|who|split|note     goal   name|target|saved|by (10.1.1)
-     *   pantry  name|expires|qty|where                  pkg    name|carrier|tracking|expected      */
+     *   pantry  name|expires|qty|where|opened|low|unit  (10.4 added opened, low = keep at least this many, unit)
+     *   pkg     name|carrier|tracking|expected                                                       */
     var REC = { wish: ["name", "target", "query"], bill: ["name", "amount", "rule", "who", "autopay"], spend: ["date", "amount", "cat", "who", "split", "note"],
-                goal: ["name", "target", "saved", "by"], pantry: ["name", "expires", "qty", "where"], pkg: ["name", "carrier", "tracking", "expected"] };
+                goal: ["name", "target", "saved", "by"], pantry: ["name", "expires", "qty", "where", "opened", "low", "unit"], pkg: ["name", "carrier", "tracking", "expected"],
+                book: ["title", "author", "ext", "size", "want", "src", "added", "conv"] };      // 10.3: the book cloud (want = kindle | cloud)
     function parseRec(kind, text) {
         var f = String(text || "").split("|"), o = {}, ks = REC[kind] || [];
         for (var i = 0; i < ks.length; i++) o[ks[i]] = f[i] === undefined ? "" : f[i];
-        ["target", "amount", "saved", "qty"].forEach(function(n) { if (o[n] !== undefined) o[n] = o[n] === "" ? 0 : +o[n] || 0; });
-        ["date", "expires", "expected", "by"].forEach(function(n) {          // 10.1.2: a broken date reads as "no date" (was "undefined NaN" on screen)
+        ["target", "amount", "saved", "qty", "size", "low"].forEach(function(n) { if (o[n] !== undefined) o[n] = o[n] === "" ? 0 : +o[n] || 0; });
+        ["date", "expires", "expected", "by", "added", "opened"].forEach(function(n) {          // 10.1.2: a broken date reads as "no date" (was "undefined NaN" on screen)
             if (o[n] && !(/^\d{4}-\d\d-\d\d$/.test(o[n]) && +o[n].substring(5, 7) >= 1 && +o[n].substring(5, 7) <= 12 && +o[n].substring(8, 10) >= 1 && +o[n].substring(8, 10) <= 31)) o[n] = "";
         });
         if (o.split !== undefined) o.split = o.split === "1";
@@ -306,7 +310,13 @@ var HubCal = (function() {
     }
     function recText(kind, o) {
         var ks = REC[kind] || [], out = [];
-        for (var i = 0; i < ks.length; i++) { var v = o[ks[i]]; if (v === true) v = "1"; if (v === false || v === undefined || v === null) v = ""; out.push(String(v).replace(/[|\t\n]/g, " ")); }
+        for (var i = 0; i < ks.length; i++) {
+            var v = o[ks[i]];
+            if (v === true) v = "1";
+            if (v === false || v === undefined || v === null || (kind === "pantry" && ks[i] === "low" && !(+v > 0))) v = "";      // 10.4: "keep at least 0" is the same as not set
+            out.push(String(v).replace(/[|\t\n]/g, " "));
+        }
+        if (kind === "pantry") while (out.length > 4 && out[out.length - 1] === "") out.pop();      // 10.4: lines without the new fields look exactly like 10.3's
         return out.join("|");
     }
     function money2(x) { var s = (Math.round((+x || 0) * 100) / 100).toFixed(2), p = s.split("."); return (s.charAt(0) === "-" ? "-$" + p[0].substring(1) : "$" + p[0]).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + p[1]; }
@@ -410,4 +420,99 @@ var HubCal = (function() {
              periodOf: periodOf, payFor: payFor, payPeriod: payPeriod, rotWho: rotWho, dayNum: dayNum, keyN: keyN,
              parseRec: parseRec, recText: recText, money: money2 };
 })();
-if (typeof module !== "undefined") { module.exports.HubCrypt = HubCrypt; module.exports.HubCal = HubCal; }
+
+/* ---------------- HubPantry (10.4): the pantry rules every device shares ----------------
+ * Settings live in the list as cfg item "pantry" (JSON):
+ *   { locs: ["Fridge", "Freezer", "Pantry"],          where food can be (up to 8)
+ *     days: { Fridge: 5, Freezer: 90, Pantry: 60 },   shelf life when nothing better is known
+ *     on: { board, tile, remind, fromList, restock, cook } }   each feature on (1) or off (0)
+ * Pantry items: HubCal "pantry" records (name|expires|qty|where|opened|low|unit).
+ *   low = keep at least this many: when qty drops below it (or the item is used up) it goes on the list.  */
+var HubPantry = (function() {
+    var FEATURES = ["board", "tile", "remind", "fromList", "restock", "cook"];
+    var DEF = { locs: ["Fridge", "Freezer", "Pantry"], days: { Fridge: 5, Freezer: 90, Pantry: 60 } };
+    // [what it matches, days unopened, where it usually lives, days once opened (0 = no change)]
+    var SHELF = [      // 10.5: specific items first (the first match wins), whole words for short names
+        [/ice cream|frozen|freezer/, 180, "Freezer", 0],
+        [/leftover/, 3, "Fridge", 0],
+        [/black pepper|white pepper|peppercorn|pepper flakes|chil[ei] flakes|cinnamon|paprika|cumin|oregano|nutmeg|turmeric|\bspices?\b|seasoning|\bsalt\b|baking (soda|powder)|vanilla/, 365, "Pantry", 0],
+        [/broth|\bstock\b|bouillon|\bsoups?\b|\bcann?ed\b|\btinned\b|fish sauce|soy sauce|vinegar/, 365, "Pantry", 0],
+        [/coffee|\btea\b/, 365, "Pantry", 0],
+        [/peanut butter|almond butter|nut butter/, 180, "Pantry", 90],
+        [/coconut milk|evaporated milk|condensed milk/, 365, "Pantry", 4],
+        [/cream cheese/, 30, "Fridge", 14],
+        [/yogh?urt|kefir|sour cream|cottage/, 14, "Fridge", 5],
+        [/\bmilk\b|\bcream\b|half and half/, 10, "Fridge", 7],
+        [/cheese/, 30, "Fridge", 21],
+        [/butter|margarine/, 60, "Fridge", 30],
+        [/\beggs?\b/, 28, "Fridge", 0],
+        [/chicken|turkey|pork|beef|steak|ground (beef|pork|turkey|chicken|meat)|\bmince\b|sausage|\bfish\b|salmon|\bcod\b|tilapia|shrimp|prawn|\blamb\b/, 2, "Fridge", 0],
+        [/\bdeli\b|\bham\b|bacon|salami|hot dog|wiener/, 7, "Fridge", 4],
+        [/juice/, 10, "Fridge", 7],
+        [/lettuce|greens|spinach|salad|\bkale\b|arugula|\bherbs?\b|cilantro|parsley|basil/, 5, "Fridge", 0],
+        [/berr|\bgrapes?\b/, 5, "Fridge", 0],
+        [/mushroom/, 5, "Fridge", 0],
+        [/carrot|celery|\bpeppers?\b|cucumber|broccoli|cauliflower|zucchini|cabbage/, 10, "Fridge", 0],
+        [/\bapples?\b|\boranges?\b|\blemons?\b|\blimes?\b|\bpears?\b/, 21, "Fridge", 0],
+        [/banana|avocado|tomato/, 5, "Pantry", 0],
+        [/potato|onion|garlic|squash/, 30, "Pantry", 0],
+        [/bread|\bbuns?\b|bagel|tortilla|\bwraps?\b|\bpitas?\b|muffin/, 6, "Pantry", 0],
+        [/salsa|pesto|hummus|\bdips?\b/, 14, "Fridge", 7],
+        [/ketchup|mustard|\bmayo|\bjam\b|sauce|dressing/, 180, "Pantry", 60],
+        [/\brice\b|pasta|noodle|flour|sugar|cereal|\boats?\b|oatmeal|barley|\bbeans?\b|lentil|\boil\b|honey|peanuts?\b/, 365, "Pantry", 0]
+    ];
+    var NOT_FOOD = /paper|towel|toilet|tissue|soap|detergent|laundry|dish ?wash|garbage|bags?\b|foil|wrap film|cleaner|bleach|sponge|batter(y|ies)|shampoo|conditioner|toothpaste|razor|diaper|wipes|deodorant|lotion|light ?bulb|cat litter|dog food/;
+
+    function cfg(text) {
+        var o = {}; try { o = text ? JSON.parse(text) : {}; } catch (e) { o = {}; }
+        if (!o || typeof o !== "object") o = {};
+        var locs = [], i;
+        if (Array.isArray(o.locs)) for (i = 0; i < o.locs.length && locs.length < 8; i++) { var l = String(o.locs[i] || "").replace(/[|\t\n]/g, " ").replace(/^\s+|\s+$/g, "").substring(0, 20); if (l && locs.indexOf(l) < 0) locs.push(l); }
+        if (!locs.length) locs = DEF.locs.slice();
+        var days = {};
+        for (i = 0; i < locs.length; i++) { var d = o.days && +o.days[locs[i]]; days[locs[i]] = d >= 1 && d <= 730 ? Math.round(d) : (DEF.days[locs[i]] || 7); }
+        var on = {};
+        for (i = 0; i < FEATURES.length; i++) on[FEATURES[i]] = !(o.on && (o.on[FEATURES[i]] === 0 || o.on[FEATURES[i]] === false));
+        return { locs: locs, days: days, on: on };
+    }
+    function cfgText(c) {
+        var on = {}; for (var i = 0; i < FEATURES.length; i++) on[FEATURES[i]] = c.on[FEATURES[i]] ? 1 : 0;
+        return JSON.stringify({ locs: c.locs, days: c.days, on: on });
+    }
+    // best guess for something new: how long it keeps, where it goes, how long once opened
+    function guess(name, c) {
+        c = c || cfg(null);
+        var n = String(name || "").toLowerCase();
+        for (var i = 0; i < SHELF.length; i++) if (SHELF[i][0].test(n)) {
+            var w = c.locs.indexOf(SHELF[i][2]) >= 0 ? SHELF[i][2] : c.locs[0];
+            return { days: SHELF[i][1], where: w, open: SHELF[i][3] };
+        }
+        return { days: c.days[c.locs[0]] || 7, where: c.locs[0], open: 0 };
+    }
+    function isFood(name) { return !NOT_FOOD.test(String(name || "").toLowerCase()); }
+    function daysLeft(p, today) { return p && p.expires ? HubCal.dayNum(p.expires) - HubCal.dayNum(today) : null; }
+    // expired | today | soon (1-2 days) | week (3-7) | ok | none (no date)
+    function status(p, today) {
+        var d = daysLeft(p, today);
+        return d === null ? "none" : d < 0 ? "expired" : d === 0 ? "today" : d <= 2 ? "soon" : d <= 7 ? "week" : "ok";
+    }
+    // opening something can shorten how long it keeps (milk: 7 days once open)
+    function opened(p, today, c) {
+        var g = guess(p.name, c), o = {}, k;
+        for (k in p) if (p.hasOwnProperty(k)) o[k] = p[k];
+        o.opened = today;
+        if (g.open > 0) { var lim = HubCal.keyN(HubCal.dayNum(today) + g.open); if (!o.expires || o.expires > lim) o.expires = lim; }
+        return o;
+    }
+    function sameName(a, b) { var f = function(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/s\b/g, "").replace(/\s+/g, " ").replace(/^\s|\s$/g, ""); }; return f(a) === f(b) && f(a) !== ""; }
+    function needsRestock(p) { return p.low > 0 && (+p.qty || 0) < p.low; }
+    // which of your places an item is in: the fridge saved "fridge" before 10.4, the phone "Fridge"; unknown -> first place
+    function place(where, c) {
+        c = c || cfg(null);
+        var w = String(where || "").toLowerCase();
+        for (var i = 0; i < c.locs.length; i++) if (c.locs[i].toLowerCase() === w) return c.locs[i];
+        return w ? String(where) : c.locs[0];
+    }
+    return { FEATURES: FEATURES, cfg: cfg, cfgText: cfgText, guess: guess, isFood: isFood, daysLeft: daysLeft, status: status, opened: opened, sameName: sameName, needsRestock: needsRestock, place: place };
+})();
+if (typeof module !== "undefined") { module.exports.HubCrypt = HubCrypt; module.exports.HubCal = HubCal; module.exports.HubPantry = HubPantry; }

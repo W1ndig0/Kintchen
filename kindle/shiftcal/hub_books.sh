@@ -9,7 +9,8 @@
 DIR=${HUB_DIR:-/mnt/us/extensions/shiftcal}
 LIB=${HUB_LIB:-/mnt/us/documents/Kitchen Hub}
 CURL=/usr/bin/curl; [ -x "$CURL" ] || CURL=curl
-[ -f "$DIR/kcurl.sh" ] && . "$DIR/kcurl.sh"; command -v kcurl >/dev/null 2>&1 || kcurl() { "$CURL" -k "$@"; }     # 10.4: checked TLS when possible
+KC_STRICT=1      # 10.5: your token and your books never go over an unchecked connection
+[ -f "$DIR/kcurl.sh" ] && . "$DIR/kcurl.sh"; command -v kcurl >/dev/null 2>&1 || kcurl() { "$CURL" "$@"; }     # 10.5: never unchecked when kcurl.sh is missing
 LOG="$DIR/sync.log"; T="$DIR/.books"; WANT="$DIR/.books_want"; HAVE="$DIR/.books_have"; OUT="$DIR/mesquite/books.js"
 say() { echo "$(date '+%m-%d %H:%M:%S') [books] $*" >> "$LOG"; }
 mkdir -p "$T"; touch "$WANT" "$HAVE"

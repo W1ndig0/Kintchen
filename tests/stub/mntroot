@@ -1,0 +1,2 @@
+#!/bin/sh
+echo "mntroot $*" >> "$KT/sys.log"; exit 0

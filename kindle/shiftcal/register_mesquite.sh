@@ -1,15 +1,16 @@
 #!/bin/sh
 # Registers the hub as a WAF app. v9.2: when PILLOW_DISABLE=1 in eco.conf the app is registered
 # without the default status bar, so the hub window can use the whole screen.
-DB="/var/local/appreg.db"
+DB="${HUB_APPREG:-/var/local/appreg.db}"
 APP_ID="com.custom.kitchenhub"
-DIR="/mnt/us/extensions/shiftcal"
+DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 LOG="$DIR/hub.log"
 PILLOW_DISABLE=2
 [ -f "$DIR/eco.conf" ] && . "$DIR/eco.conf"
 
-command -v sqlite3 >/dev/null 2>&1 || exit 0
-[ -f "$DB" ] || exit 0
+# 10.5: without sqlite3 or the app list the Kindle can't start the hub - say so instead of "success"
+command -v sqlite3 >/dev/null 2>&1 || { echo "$(date '+%m-%d %H:%M:%S') register_mesquite: sqlite3 not found" >> "$LOG"; exit 1; }
+[ -f "$DB" ] || { echo "$(date '+%m-%d %H:%M:%S') register_mesquite: $DB not found" >> "$LOG"; exit 1; }
 
 if [ "$PILLOW_DISABLE" != "0" ]; then
     PILLOW_SQL="DELETE FROM properties WHERE handlerId='$APP_ID' AND name='pillowId';"

@@ -1,0 +1,84 @@
+KITCHEN HUB 10.5 - STARTS RELIABLY, STOPS CLEANLY
+A bug-fix release. No new features: everything here makes the hub start, restart, update and stop
+without locking up the Kindle.
+
+INSTALL
+ Because the fridge may still be running an older mix of files, copy this version over USB once:
+ 1  Tap "Kitchen Hub Reset" in the Kindle library (or restart the Kindle), then plug it into the PC.
+ 2  Copy everything in kindle/shiftcal over extensions/shiftcal on the Kindle. Your cloud.conf, lists
+    and settings are not in the kit, so they are kept. (eco.conf in the kit holds the defaults; skip it
+    if you changed settings by hand.)
+ 3  Copy the five files in kindle/documents to the Kindle's documents folder (the library buttons).
+ 4  Unplug, tap "Kitchen Hub Display". From 10.5 on, updates arrive by themselves again.
+ GitHub: upload the whole kit as before. The build check now also refuses an upload where the page and
+ the scripts are different versions, a script has Windows line endings, or a needed file is missing.
+
+"THE APPLICATION COULD NOT BE STARTED"
+ 1  The hub page was started twice: the launcher opened it, and the background loop sent a second
+    "start" a few seconds later, while the page was still loading - and again on every wake. The page is
+    now started in exactly one place, and never while it is already running.
+ 2  If the Kindle was slow to open the page, the launcher started a second copy of it behind the Kindle's
+    back after 10 seconds. That is gone; the launcher waits up to 30 seconds for the one copy.
+ 3  Two taps on Kitchen Hub Display started two launchers that fought each other. The second one now
+    steps aside.
+ 4  The hub recognises its own page by the exact process it started, so the Kindle's browser (or another
+    app) is never mistaken for the hub, and the hub never closes another app's window.
+
+THE RESTART LOOP
+ 5  "Install update" when there was nothing new still said "update installed - restarting the hub". A
+    second tap on INSTALL restarted the hub over and over. Now only a real install restarts it, once.
+ 6  A tap the page re-sends right after a restart is recognised and not run a second time.
+ 7  If the hub page closes on its own 3 times in 15 minutes, the hub stops cleanly (and says why on the
+    next launch) instead of reopening it forever.
+
+STOPPING AND CLEAN-UP
+ 8  One stop script (stop_hub.sh) for everything: the launcher, Reset, Soft Reset, Kill Background and
+    the hub's own exit all use it. Before 10.5 five scripts each had their own list of what to stop.
+ 9  Stopping asks nicely first and only forces programs that don't listen. After a forced stop it puts
+    back what the hub changes while it runs (the paused power manager, the wake alarm, the CPU setting).
+10  A sync that runs too long is stopped together with everything it started, and Wi-Fi goes off.
+    Before, its downloads kept running and Wi-Fi could stay on through the night.
+11  A page that never talks to the hub is stopped after 90 seconds as before - and the page now says
+    "I'm up" every 10 seconds until the hub hears it, so a working page is no longer stopped by mistake.
+12  Scripts saved on Windows (CR LF line endings) are fixed during the launch instead of stopping it.
+
+UPDATES
+13  Updates are checked on every download (certificate check), and so are your lists and books. The
+    kit carries its own up-to-date list of trusted certificates (cacert.pem). Only weather, news and
+    pictures may still be fetched unchecked, and only if a checked connection is impossible.
+14  If moving a new file into place fails halfway, the files already moved are put back.
+15  New default: "Tell me" - the fridge checks each night and shows "update ready"; you tap to install.
+    (Settings > Phone > Updates still offers "At night".)
+
+LISTS, PHONE AND PC
+16  A Siri or PC note picked up twice no longer re-opens items you had already ticked off.
+17  Your GitHub token no longer shows in the Kindle's process list (or in Reset's diag.txt).
+18  Two list edits at the same moment can no longer overwrite each other (the lock is only broken
+    when the program that held it is gone).
+19  A backslash typed in an item stays a backslash.
+20  PC: "kh add milk, eggs" adds two items. "kh done milk" ticks Milk but not Buttermilk; when more than
+    one item matches, it lists them and asks for the full name.
+21  Locked items get their random part from the system's secure random source.
+
+DATA
+22  When the weather or every news feed fails, the last forecast and stories are kept instead of an
+    empty tile. A slow network can't stretch a sync past 4 minutes: the extras wait for the next one.
+23  A news.conf saved on Windows works; a source name with quotes no longer breaks the news.
+24  On This Day: an event with quotes in its text no longer blanks the whole data file.
+25  Horoscopes: when only a few signs arrive, the next sync tries again instead of waiting a day.
+26  Photos over 3 MB are skipped, photos in use are never trimmed, and web pages over 3 MB are refused.
+27  Pantry: ground coffee, ground cinnamon, chicken broth, fish sauce, black pepper, pearl barley,
+    canned tomatoes, peanut butter, coconut milk, sour cream and cream cheese get the right shelf life.
+28  Cook ideas match whole words ("egg" no longer matches eggplant). Bill reminders still arrive when
+    the cloud brain missed the exact day.
+
+DIAGNOSTICS (library buttons)
+29  Kitchen Hub Stats: memory, storage, the busiest processes, which app each page process belongs to,
+    and the Kindle's own launch and error messages.
+30  Kitchen Hub Kill Background: stops every part of the hub and repairs what it changes.
+31  Kitchen Hub Soft Reset: snapshot, stop, reboot.
+32  For testing the freeze right after waking: FREEZE_POWERD=0 in eco.conf lets the Kindle's power
+    manager run while it sleeps (the default, 1, is the same as 10.4).
+
+NOT CHANGED
+ The time zone stays fixed at UTC-7: British Columbia stays on Pacific time all year since March 2026.

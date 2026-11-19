@@ -1,0 +1,2 @@
+#!/bin/sh
+echo REBOOT >> "$KT/sys.log"

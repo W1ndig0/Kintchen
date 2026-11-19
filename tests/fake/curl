@@ -1,0 +1,15 @@
+#!/bin/sh
+# fake curl: canned answers by URL; supports -o FILE and -w '%{http_code}'
+OUT=""; W=""; URL=""
+while [ $# -gt 0 ]; do case "$1" in -o) OUT=$2; shift ;; -w) W=$2; shift ;; -A|-H|--connect-timeout|--max-time|--max-filesize|--cacert|--max-redirs|-X|-d|--data-binary) shift ;; http*) URL=$1 ;; esac; shift; done
+echo "$URL" >> "$FAKEDIR/urls.log"
+body() { case "$URL" in
+  *open-meteo*) echo '{"current":{"temperature_2m":-3},"hourly":{"t":[1]},"daily":{"d":[1]}}' ;;
+  *feed1*) printf '<rss><channel><item><title>Big "storm" hits Prince George today</title><link>https://x.example/a?b=1&amp;c=2</link><pubDate>Wed</pubDate><description>Body with \\ backslash and <b>bold</b></description><enclosure url="http://img.example/p.jpg" type="image/jpeg"/></item></channel></rss>' ;;
+  *img.example*) printf '\377\330\377\340JFIFxxxxxxxxxxxxxxxxxxxx' ;;
+  *onthisday*) printf '{"events":[{"text": "A \\"quoted\\" event happened", "pages": [], "year": 1999}]}' ;;
+  *) return 22 ;;
+esac; }
+if [ -n "$OUT" ]; then body > "$OUT"; RC=$?; else body; RC=$?; fi
+[ -n "$W" ] && { [ $RC = 0 ] && printf 200 || printf 404; }
+exit 0

@@ -625,6 +625,11 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
 .wf-card { border: 6px double #000; padding: 1em; display: table; }
 .xr.qa .opt-btn { display: inline-block; min-width: 40%; margin: .3em; text-align: left; }
 .wf-big svg { display: block; }
+.web-b { font-size: 1.25em; line-height: 1.4; padding: .25em 0; }
+.web-b.web-h1, .web-b.web-h2 { font-size: 1.6em; font-weight: 900; }
+.web-b.web-h3, .web-b.web-h4 { font-size: 1.35em; font-weight: 900; }
+.wl { text-decoration: underline; font-weight: bold; }
+.wl sup { font-size: .6em; padding: 0 .15em; }
 .wf-qr { display: table-cell; width: 12em; height: 12em; vertical-align: middle; }
 .wf-t { display: table-cell; vertical-align: middle; padding-left: 1.2em; font-size: 1.4em; }
 .tl-r { margin-top: .3em; line-height: 1.25; }
@@ -961,7 +966,7 @@ var WMO = {
 // ===================== HELPERS =====================
 function $(id) { return document.getElementById(id); }
 function pad2(n) { return (n < 10 ? "0" : "") + n; }
-function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }     // 10.5: quotes too (esc() output also goes inside attributes)
 
 function nthSunday(y, m, n) {
     var dow = new Date(Date.UTC(y, m, 1)).getUTCDay();
@@ -1525,7 +1530,7 @@ function exitHub() {
 // =====================================================================
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.1.2";
+var VERSION = "10.5";
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
 var EDIT = false;
@@ -1870,6 +1875,7 @@ function layout() {
     root.style.webkitTransformOrigin = "0 0"; root.style.transformOrigin = "0 0";
     root.style.webkitTransform = tf; root.style.transform = tf;
 
+    railLayout();          // 10.4: the open-apps rail takes its width off the left (W is the stage from here on)
     PORTRAIT = H > W;
     FS = Math.max(10, Math.min(W, H) / 48 * uiScale());
     document.documentElement.style.fontSize = FS + "px";
@@ -2590,6 +2596,7 @@ function renderSysbarContext() {
     var mid = $("sb-mid"), right = $("sb-right");
     mid.innerHTML = ""; right.innerHTML = "";
     if (EDIT) { renderTray(mid); addTextBtn(right, "DONE", exitEdit, true); return; }
+    mid.style.whiteSpace = "";
     var list = ctxList();
     for (var j = 0; j < list.length; j++) addIconBtn(mid, list[j][0], list[j][1], false);
     if (currentView !== "hub") addIconBtn(right, "cog", function() { if (!HUB_OPEN) openHub(); }, true);
@@ -2767,6 +2774,7 @@ function renderEditOverlays() {
 }
 function renderTray(mid) {
     var l = LAYOUT[orientKey()], any = false;
+    mid.style.whiteSpace = "normal";   // 10.4: the chips wrap instead of running off the right edge
     var lbl = document.createElement("span"); lbl.className = "tray-lbl"; lbl.innerHTML = "ADD:"; mid.appendChild(lbl);
     for (var i = 0; i < l.length; i++) {
         var p = PLACED[l[i].id];
@@ -3398,7 +3406,10 @@ var HubCrypt = (function() {
     function lock(text, pass) {
         if (!pass) return text;
         var key = keyOf(pass), pt = utf8(text), iv = [], i;
-        for (i = 0; i < 8; i++) iv.push(Math.floor(Math.random() * 256));
+        // 10.5: the IV comes from the system's secure random source when there is one (Math.random only as a fallback)
+        var rnd = null;
+        try { var cr = typeof crypto !== "undefined" ? crypto : (typeof window !== "undefined" ? window.crypto || window.msCrypto : null); if (cr && cr.getRandomValues) { rnd = new Uint8Array(8); cr.getRandomValues(rnd); } } catch (e) { rnd = null; }
+        for (i = 0; i < 8; i++) iv.push(rnd ? rnd[i] : Math.floor(Math.random() * 256));
         var ks = stream(key, iv, pt.length), ct = [];
         for (i = 0; i < pt.length; i++) ct.push(pt[i] ^ ks[i]);
         return "~" + b64(iv.concat(tag(key, iv, ct), ct));
@@ -3529,14 +3540,16 @@ var HubCal = (function() {
     /* 10.0 records, all "|"-separated (no pipes inside fields):
      *   wish    name|target|query                      bill   name|amount|rule|who|autopay
      *   spend   date|amount|category|who|split|note     goal   name|target|saved|by (10.1.1)
-     *   pantry  name|expires|qty|where                  pkg    name|carrier|tracking|expected      */
+     *   pantry  name|expires|qty|where|opened|low|unit  (10.4 added opened, low = keep at least this many, unit)
+     *   pkg     name|carrier|tracking|expected                                                       */
     var REC = { wish: ["name", "target", "query"], bill: ["name", "amount", "rule", "who", "autopay"], spend: ["date", "amount", "cat", "who", "split", "note"],
-                goal: ["name", "target", "saved", "by"], pantry: ["name", "expires", "qty", "where"], pkg: ["name", "carrier", "tracking", "expected"] };
+                goal: ["name", "target", "saved", "by"], pantry: ["name", "expires", "qty", "where", "opened", "low", "unit"], pkg: ["name", "carrier", "tracking", "expected"],
+                book: ["title", "author", "ext", "size", "want", "src", "added", "conv"] };      // 10.3: the book cloud (want = kindle | cloud)
     function parseRec(kind, text) {
         var f = String(text || "").split("|"), o = {}, ks = REC[kind] || [];
         for (var i = 0; i < ks.length; i++) o[ks[i]] = f[i] === undefined ? "" : f[i];
-        ["target", "amount", "saved", "qty"].forEach(function(n) { if (o[n] !== undefined) o[n] = o[n] === "" ? 0 : +o[n] || 0; });
-        ["date", "expires", "expected", "by"].forEach(function(n) {          // 10.1.2: a broken date reads as "no date" (was "undefined NaN" on screen)
+        ["target", "amount", "saved", "qty", "size", "low"].forEach(function(n) { if (o[n] !== undefined) o[n] = o[n] === "" ? 0 : +o[n] || 0; });
+        ["date", "expires", "expected", "by", "added", "opened"].forEach(function(n) {          // 10.1.2: a broken date reads as "no date" (was "undefined NaN" on screen)
             if (o[n] && !(/^\d{4}-\d\d-\d\d$/.test(o[n]) && +o[n].substring(5, 7) >= 1 && +o[n].substring(5, 7) <= 12 && +o[n].substring(8, 10) >= 1 && +o[n].substring(8, 10) <= 31)) o[n] = "";
         });
         if (o.split !== undefined) o.split = o.split === "1";
@@ -3545,7 +3558,13 @@ var HubCal = (function() {
     }
     function recText(kind, o) {
         var ks = REC[kind] || [], out = [];
-        for (var i = 0; i < ks.length; i++) { var v = o[ks[i]]; if (v === true) v = "1"; if (v === false || v === undefined || v === null) v = ""; out.push(String(v).replace(/[|\t\n]/g, " ")); }
+        for (var i = 0; i < ks.length; i++) {
+            var v = o[ks[i]];
+            if (v === true) v = "1";
+            if (v === false || v === undefined || v === null || (kind === "pantry" && ks[i] === "low" && !(+v > 0))) v = "";      // 10.4: "keep at least 0" is the same as not set
+            out.push(String(v).replace(/[|\t\n]/g, " "));
+        }
+        if (kind === "pantry") while (out.length > 4 && out[out.length - 1] === "") out.pop();      // 10.4: lines without the new fields look exactly like 10.3's
         return out.join("|");
     }
     function money2(x) { var s = (Math.round((+x || 0) * 100) / 100).toFixed(2), p = s.split("."); return (s.charAt(0) === "-" ? "-$" + p[0].substring(1) : "$" + p[0]).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + p[1]; }
@@ -4997,7 +5016,7 @@ function openHoro() {
     HORO.view = HORO.view === undefined ? HORO.mine : HORO.view;
     $("horo-view").style.display = "block";
     setView("horo");
-    renderHoroView();
+    layoutV96();          // 10.4: place the reading and the sign list first (they were left stacked at the top-left, so the sign list covered the sign's name); layoutV96 also renders
 }
 function closeHoro() { $("horo-view").style.display = "none"; setView("main"); goHome(); }
 function renderHoroView() {
@@ -5848,7 +5867,7 @@ function runCommands() {
         if (now - c.ts > 36 * 3600000 && c.ts > 1e12) ok = "stale";             // asleep for days: don't fire old timers
         else if (f[0] === "timer" && +f[1] > 0) { var left = Math.min(240, +f[1]) - (c.ts > 1e12 ? (now - c.ts) / 60000 : 0); if (left >= 1) timerStart(Math.round(left)); else ok = "stale"; }   // 10.1.2: a timer sent while the hub slept runs only what's left of it
         else if (f[0] === "sync") sendPower("sync=1");
-        else if (f[0] === "update") sendPower("job=update-" + (f[1] === "install" ? "install" : "check"));
+        else if (f[0] === "update") sendPower("job=update-" + (f[1] === "install" ? "install" : f[1] === "rollback" ? "rollback" : "check"));
         else if (f[0] === "log") sendPower("job=logup");
         else if (f[0] === "screen") { FEEL.front = f[1] === "tiles" ? 0 : 1; saveFeel(); }
         else if (f[0] === "contrast" && /^(normal|strong|max)$/.test(f[1])) { FEEL8.contrast = f[1]; saveFeel8(); applyLook(); }
@@ -6899,8 +6918,11 @@ function renderXV() {
     var rows = body.getElementsByClassName("xr"), cut = 0, room = body.clientHeight - FS * 3.4, shown = 0;
     for (i = 0; i < rows.length; i++) {
         if (i < XV.page) { rows[i].style.display = "none"; continue; }
-        if (rows[i].offsetTop + rows[i].offsetHeight > room) { rows[i].style.display = "none"; cut++; } else shown++;
+        if (shown > 0 && rows[i].offsetTop + rows[i].offsetHeight > room) { rows[i].style.display = "none"; cut++; } else shown++;      // 10.2: a row taller than the page is shown (clipped), not skipped forever
     }
+    // 10.4: a heading whose first item is on another page is hidden too
+    var hl = body.getElementsByClassName("hv-lbl");
+    for (i = 0; i < hl.length; i++) { var nx = hl[i].nextElementSibling; if (nx && nx.className.indexOf("xr") >= 0 && nx.style.display === "none") hl[i].style.display = "none"; }
     var mb = $("xv-more");
     if (cut || XV.page) { mb.style.display = "inline-block"; mb.innerHTML = cut ? "MORE &middot; " + cut + " &#9662;" : "BACK TO THE TOP &#9652;"; mb.__next = cut ? XV.page + Math.max(1, shown) : 0; }
     else mb.style.display = "none";
@@ -7270,7 +7292,7 @@ function layoutV100() {
         var m = xv.getElementsByClassName("ov-mast")[0].offsetHeight, tb = $("xv-tabs");
         place(tb, 0, m, W, Math.round(FS * 2.6));
         place($("xv-body"), Math.round(FS * 0.8), m + Math.round(FS * 2.9), W - Math.round(FS * 1.6), xv.clientHeight - m - Math.round(FS * 3.1));
-        place($("xv-more"), W - Math.round(FS * 12), xv.clientHeight - Math.round(FS * 2.6), Math.round(FS * 11), Math.round(FS * 2.2));
+        place($("xv-more"), W - Math.round(FS * 17), xv.clientHeight - Math.round(FS * 2.6), Math.round(FS * 16), Math.round(FS * 2.2));
     }
 }
 // morning/front page + coming up: bills due and food to use
@@ -7521,8 +7543,8 @@ function cdId(rid, k) { return "cd" + rid + k.replace(/-/g, ""); }
 var __xvHome101 = XVR.home;
 XVR.home = function(tab) {
     if (tab === 2 && XV.wbig) {
-        var wf = cfgJSON("wifi"), sz = Math.max(FS * 8, Math.round(Math.min($("xv-body").clientWidth * 0.8, $("xv-body").clientHeight - FS * 9)));     // 10.1.2: leave room for the name + password under it
-        return "<div class='xv-bar'>" + btn("wifiBig", "0", "&lsaquo; SMALL", "big sel") + "</div><div style='text-align:center'><div style='display:inline-block;width:" + sz + "px;height:" + sz + "px' class='wf-big'>" + qrSvg("WIFI:T:" + (wf.sec || "WPA") + ";S:" + String(wf.ssid || "").replace(/([\\;,:"])/g, "\\$1") + ";P:" + String(wf.pass || "").replace(/([\\;,:"])/g, "\\$1") + ";;") + "</div><div class='fun-q'>" + esc(wf.ssid || "") + " &middot; " + esc(wf.pass || "") + "</div></div>";
+        var wf = cfgJSON("wifi"), sz = Math.max(FS * 8, Math.round(Math.min($("xv-body").clientWidth * 0.8, $("xv-body").clientHeight - FS * 11)));     // 10.1.2: leave room for the name + password under it
+        return "<div class='xv-bar'>" + btn("wifiBig", "0", "&lsaquo; SMALL", "big sel") + "</div><div style='text-align:center'><div style='display:inline-block;width:" + sz + "px;height:" + sz + "px' class='wf-big'>" + qrSvg("WIFI:T:" + (wf.sec || "WPA") + ";S:" + String(wf.ssid || "").replace(/([\\;,:"])/g, "\\$1") + ";P:" + String(wf.pass || "").replace(/([\\;,:"])/g, "\\$1") + ";;") + "</div><div class='fun-q' style='font-size:1.3em'>" + esc(String(wf.ssid || "").substring(0, 40)) + " &middot; " + esc(String(wf.pass || "").substring(0, 64)) + "</div></div>";
     }
     if (tab !== 0) { var o = __xvHome101(tab); return tab === 2 && cfgJSON("wifi").ssid ? o.replace("</div>", " " + btn("wifiBig", "1", "BIG CODE") + "</div>") : o; }
     var h = "<div class='xv-bar'>" + btn("choreAdd", "", "+ CHORE", "big sel") + "</div>", i, k = todayKey(), dm = choreDoneMap();
@@ -7728,6 +7750,371 @@ layoutItems = function() {
     for (var i = 0; i < ks.length; i++) { var k = ks[i].getAttribute("data-k"); if (k === "SYM" || k === "CASE" || k === "CLR") ks[i].style.fontSize = Math.round(ks[i].offsetWidth * 0.3) + "px"; }
 };
 
+// =====================  10.2: AUTO-UPDATE + ROLLBACK, WEB READER  =====================
+// ---------- the page tells the loop it started fine (keeps a fresh update; silence = automatic rollback) ----------
+setTimeout(function() { sendPower("health=" + encodeURIComponent(VERSION)); }, 20000);
+// 10.5: a steady "I'm up" until the loop confirms it heard the page (state.js booted:1). Before 10.5 the page
+// only spoke at 4 s and 20 s; if the loop was busy both times, a working hub was stopped after 90 s.
+(function() {
+    var n = 0, t = setInterval(function() {
+        var S = window.HUB_STATE || {};
+        if (S.booted === 1 || ++n > 30) { clearInterval(t); return; }
+        sendPower("boot=" + encodeURIComponent(VERSION));
+    }, 10000);
+})();
+(function() {      // and again on every wake while an update is on probation
+    var last = 0;
+    setInterval(function() { var S = window.HUB_STATE || {}; if (S.updPending && new Date().getTime() - last > 60000) { last = new Date().getTime(); sendPower("health=" + encodeURIComponent(VERSION)); } }, 15000);
+})();
+
+// ---------- Settings > Phone: update center ----------
+var __ghPane102 = gitHubPane;
+gitHubPane = function() {
+    __ghPane102();
+    var box = $("ph-gh"), S = window.HUB_STATE || {};
+    if (!box || !$("gh-msg")) return;
+    var d = document.createElement("div");
+    d.innerHTML = "<div style='margin:.4em 0'><span class='hv-lbl' style='margin-right:.5em'>Updates</span><span id='opt-autoupd'></span></div>" +
+        "<div class='hv-hint'>&ldquo;At night&rdquo; installs new versions from your GitHub site after 2 am. If a new version doesn't start properly it is undone by itself, and that version is skipped from then on.</div>" +
+        "<div style='margin:.3em 0'><span class='opt-btn' id='gh-rb'>GO BACK TO THE PREVIOUS VERSION</span> <span class='opt-btn' id='gh-new'>WHAT'S NEW</span></div>";
+    $("gh-msg").parentNode.insertBefore(d, $("gh-msg").nextSibling);
+    chipRow("opt-autoupd", [0, 1, 2], ["Only when I tap", "Tell me", "At night"], S.autoUpd === undefined ? 1 : +S.autoUpd, function(v) { S.autoUpd = v; sendPower("autoupd=" + v); });
+    bindTap($("gh-rb"), function() {
+        var el = $("gh-rb");
+        if (!el.__sure) { el.__sure = 1; el.innerHTML = "SURE? TAP AGAIN TO GO BACK"; return; }
+        sendPower("job=update-rollback"); $("gh-msg").innerHTML = "Going back to the previous version&hellip; the hub restarts by itself.";
+    });
+    bindTap($("gh-new"), function() { closeHub(); openXV("news102", 0); });
+};
+var __updText102 = updText;
+updText = function() {
+    var u = UPD;
+    if (u && u.state === "rolledback") return "<b>Went back to " + esc(u.nv) + "</b> &mdash; " + esc(u.msg) + ". That version won't be installed again by itself.";
+    if (u && u.state === "installed" && /running fine/.test(u.msg || "")) return "Up to date: <b>" + esc(u.nv) + "</b> is running fine.";
+    return __updText102();
+};
+// what's new: the notes for this version ship as whatsnew.js; shown once after an update
+XV_TABS.news102 = ["WHAT'S NEW"]; XV_TITLE.news102 = "WHAT'S NEW";
+XVR.news102 = function() {
+    var w = window.HUB_WHATSNEW;
+    if (!w || !w.lines) return "<div class='sv-empty'>The notes for this version aren't here.</div>";
+    var h = "<div class='hv-hint'>Version " + esc(w.v) + "</div>";
+    for (var i = 0; i < w.lines.length; i++) { var L = w.lines[i]; h += /^[A-Z][A-Z0-9 +&\/,.'-]{3,}$/.test(L) ? "<div class='hv-lbl' style='margin-top:.5em'>" + esc(L) + "</div>" : "<div class='xr'><div class='xr-s'>" + esc(L) + "</div></div>"; }
+    return h;
+};
+loadScript("whatsnew.js", function(ok) {
+    var w = window.HUB_WHATSNEW, seen = "";
+    try { seen = window.localStorage.getItem("pg_seen_ver") || ""; } catch (e) {}
+    if (ok && w && w.v === VERSION && seen && seen !== VERSION) setTimeout(function() { if (currentView === "main" && !EDIT) openXV("news102", 0); }, 4000);
+    try { window.localStorage.setItem("pg_seen_ver", VERSION); } catch (e) {}
+});
+
+// =====================  WEB READER  =====================
+// The Kindle fetches the page (web_fetch.sh); here it becomes plain text with numbered links. The site's own
+// scripts never run and its pictures never load, so even heavy sites read fine on e-ink.
+var WEB = { cur: null, back: [], want: "", wantAt: 0, err: "" };
+var WEB_SAVED_DEFAULT = [["text.npr.org", "NPR (text only)"], ["lite.cnn.com", "CNN Lite"], ["https://www.cbc.ca/lite/news", "CBC Lite"], ["en.m.wikipedia.org", "Wikipedia"],
+                         ["https://weather.gc.ca/en/location/index.html?coords=53.913,-122.749", "Prince George weather (Env. Canada)"], ["news.ycombinator.com", "Hacker News"]];
+function webStore() { var o = {}; try { o = JSON.parse(window.localStorage.getItem("pg_web") || "{}") || {}; } catch (e) {} o.saved = o.saved || WEB_SAVED_DEFAULT.slice(); o.hist = o.hist || []; return o; }
+function webSave(o) { try { window.localStorage.setItem("pg_web", JSON.stringify(o)); } catch (e) {} }
+function webAbs(href, base) {
+    href = String(href || "").replace(/^\s+|\s+$/g, "");
+    if (!href || /^(javascript|mailto|tel|data):/i.test(href) || href.charAt(0) === "#") return "";
+    if (/^https?:\/\//i.test(href)) return href;
+    var m = /^(https?:)\/\/([^\/?#]+)([^?#]*)/i.exec(base || ""); if (!m) return "";
+    if (href.substring(0, 2) === "//") return m[1] + href;
+    if (href.charAt(0) === "/") return m[1] + "//" + m[2] + href;
+    var dir = m[3].replace(/[^\/]*$/, "") || "/", p = (dir + href).split("/"), out = [];
+    for (var i = 0; i < p.length; i++) { if (p[i] === "..") out.pop(); else if (p[i] !== ".") out.push(p[i]); }
+    return m[1] + "//" + m[2] + (out.join("/").charAt(0) === "/" ? "" : "/") + out.join("/");
+}
+function webUnwrap(u) {     // search-result redirects -> the real address
+    var m = /[?&]uddg=([^&]+)/.exec(u); if (m) { try { return decodeURIComponent(m[1]); } catch (e) {} }
+    return u;
+}
+function webParse(html, base) {
+    var doc = document.implementation.createHTMLDocument("r"), out = { title: "", blocks: [], links: [], cut: html.length >= 699000 };
+    doc.documentElement.innerHTML = String(html || "").replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "");
+    out.title = (doc.title || "").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
+    var kill = ["script", "style", "noscript", "iframe", "svg", "form", "button", "select", "input", "textarea", "nav", "footer", "aside", "header", "figure", "img", "video", "audio", "canvas"], i, j;
+    for (i = 0; i < kill.length; i++) { var ks = doc.getElementsByTagName(kill[i]); for (j = ks.length - 1; j >= 0; j--) if (ks[j].parentNode) ks[j].parentNode.removeChild(ks[j]); }
+    var root = doc.getElementsByTagName("article")[0] || doc.getElementsByTagName("main")[0] || doc.body;
+    if (!root) return out;
+    var BLOCK = /^(P|DIV|LI|H1|H2|H3|H4|H5|H6|BLOCKQUOTE|PRE|TR|DT|DD|SECTION|TABLE|UL|OL|BR|HR)$/, cur = null;
+    function flush() {
+        if (cur && cur.segs.length) {
+            var t = "", k, part = { h: cur.h, segs: [] }, n = 0;
+            for (k = 0; k < cur.segs.length; k++) t += cur.segs[k].t;
+            if (t.replace(/\s/g, "").length) {
+                // a very long paragraph becomes several, so a page of the reader never has to cut one off
+                for (k = 0; k < cur.segs.length; k++) {
+                    var sg = cur.segs[k], pieces = !sg.l && sg.t.length > 500 ? sg.t.match(/[^.!?]+[.!?]*\s*/g) || [sg.t] : [sg.t];
+                    for (var q = 0; q < pieces.length; q++) {
+                        if (n > 450 && part.segs.length) { out.blocks.push(part); part = { h: 0, segs: [] }; n = 0; }
+                        part.segs.push(sg.l ? { t: pieces[q], l: sg.l } : { t: pieces[q] }); n += pieces[q].length;
+                    }
+                }
+                if (part.segs.length) out.blocks.push(part);
+            }
+        }
+        cur = null;
+    }
+    function add(t, link) {
+        t = t.replace(/\s+/g, " "); if (!t) return;
+        if (!cur) cur = { h: 0, segs: [] };
+        if (!cur.segs.length) t = t.replace(/^\s+/, "");
+        if (t) cur.segs.push(link ? { t: t, l: link } : { t: t });
+    }
+    function walk(n, inLink) {
+        if (out.blocks.length > 900) return;
+        if (n.nodeType === 3) { add(n.nodeValue, inLink); return; }
+        if (n.nodeType !== 1) return;
+        var tag = n.tagName.toUpperCase(), isBlock = BLOCK.test(tag), link = inLink;
+        if (isBlock) { flush(); if (/^H[1-4]$/.test(tag)) cur = { h: +tag.charAt(1), segs: [] }; }
+        if (tag === "A" && !inLink) {
+            var u = webUnwrap(webAbs(n.getAttribute("href"), base));
+            if (u) { out.links.push(u); link = out.links.length; }
+        }
+        for (var c = n.firstChild; c; c = c.nextSibling) walk(c, link);
+        if (isBlock) flush();
+    }
+    walk(root, 0); flush();
+    return out;
+}
+function webLooksUrl(t) { return !/\s/.test(t) && /\.[a-z]{2,}(\/|$|\?|:)/i.test(t); }
+function webGo(u, noBack) {
+    u = String(u || "").replace(/^\s+|\s+$/g, ""); if (!u) return;
+    if (!/^(q:|https?:\/\/)/i.test(u)) u = webLooksUrl(u) ? "https://" + u : "q:" + u;
+    if (WEB.cur && !noBack) WEB.back.push(WEB.cur.url);
+    if (WEB.back.length > 30) WEB.back.shift();
+    var id = "w" + new Date().getTime().toString(36);
+    WEB.want = id; WEB.wantAt = new Date().getTime(); WEB.err = ""; WEB.asked = u;
+    sendPower("web=" + encodeURIComponent(u) + "&wid=" + id);
+    if (currentView !== "xv" || XV.mode !== "web") openXV("web", 0); else { XV.tab = 0; XV.page = 0; renderXV(); }
+    webPoll(id, 0);
+}
+function webPoll(id, n) {
+    if (WEB.want !== id) return;
+    loadScript("web.js", function(ok) {
+        if (WEB.want !== id) return;
+        var w = window.HUB_WEB;
+        if (ok && w && w.id === id) {
+            WEB.want = "";
+            if (w.err && !w.html) { WEB.err = w.err; }
+            else {
+                var p = webParse(w.html, w.final || w.url);
+                WEB.cur = { url: w.final || w.url, asked: WEB.asked, title: p.title || (w.final || w.url), blocks: p.blocks, links: p.links, cut: p.cut, code: w.code };
+                if (!/^q:/.test(WEB.asked)) { var o = webStore(); o.hist.unshift([WEB.cur.url, WEB.cur.title.substring(0, 80), todayKey()]); o.hist = o.hist.slice(0, 40); webSave(o); }
+                window.HUB_WEB = null;      // the page text can be large: let it go
+            }
+            XV.page = 0; if (currentView === "xv" && XV.mode === "web") renderXV();
+            return;
+        }
+        if (n < 25) setTimeout(function() { webPoll(id, n + 1); }, 3000);
+        else { WEB.want = ""; WEB.err = "The page didn't arrive (the hub may have gone to sleep). Try again."; if (currentView === "xv" && XV.mode === "web") renderXV(); }
+    });
+}
+XV_TABS.web = ["PAGE", "SAVED", "HISTORY"]; XV_TITLE.web = "WEB";
+XVR.web = function(tab) {
+    var h = "<div class='xv-bar'>" + btn("webAsk", "", "GO TO / SEARCH&hellip;", "big sel") + " " + (WEB.back.length ? btn("webBack", "", "&lsaquo; BACK") : "") + (WEB.cur ? btn("webReload", "", "RELOAD") + btn("webSaveCur", "", "&#9733; SAVE") : "") + btn("webKindle", "", "KINDLE BROWSER") + "</div>", i, o = webStore();
+    if (tab === 1) {
+        for (i = 0; i < o.saved.length; i++) h += "<div class='xr'><div class='xr-t'>" + btn("webOpen", o.saved[i][0], esc(o.saved[i][1])) + " " + btn("webUnsave", String(i), "&times;") + "</div><div class='xr-s'>" + esc(o.saved[i][0]) + "</div></div>";
+        return h;
+    }
+    if (tab === 2) {
+        if (!o.hist.length) h += "<div class='sv-empty'>Pages you open show up here.</div>";
+        for (i = 0; i < o.hist.length; i++) h += "<div class='xr'><div class='xr-t'>" + btn("webOpen", o.hist[i][0], esc(o.hist[i][1] || o.hist[i][0])) + "</div><div class='xr-s'>" + esc(o.hist[i][2] || "") + " &middot; " + esc(String(o.hist[i][0]).replace(/^https?:\/\//, "").substring(0, 60)) + "</div></div>";
+        if (o.hist.length) h += "<div class='xr'>" + btn("webClearHist", "", "CLEAR HISTORY") + "</div>";
+        return h;
+    }
+    if (WEB.want) return h + "<div class='sv-empty'>Getting " + esc(/^q:/.test(WEB.asked) ? "results for \u201c" + WEB.asked.substring(2) + "\u201d" : WEB.asked.replace(/^https?:\/\//, "")) + "&hellip;<br>(Wi-Fi turns on for a moment; about 10-20 seconds.)</div>";
+    if (WEB.err) h += "<div class='sv-empty'>" + esc(WEB.err) + "</div>";
+    var c = WEB.cur;
+    if (!c) return h + "<div class='sv-empty'>Type a web address or some search words. Pages show as clean text: tap a <u>link [3]</u> to follow it. SAVED has a few sites that read well on e-ink.</div>";
+    h += "<div class='hv-lbl'>" + esc(c.title.substring(0, 120)) + "</div><div class='hv-hint'>" + esc(c.url.replace(/^https?:\/\//, "").substring(0, 90)) + (c.cut ? " &middot; long page, the end was cut" : "") + "</div>";
+    if (!c.blocks.length) h += "<div class='sv-empty'>This page has no readable text (it may need its own scripts to show anything). Try KINDLE BROWSER.</div>";
+    for (i = 0; i < c.blocks.length; i++) {
+        var b = c.blocks[i], t = "";
+        for (var k = 0; k < b.segs.length; k++) { var s = b.segs[k]; t += s.l ? "<span class='wl' data-a='webLink' data-v='" + s.l + "'>" + esc(s.t) + "<sup>" + s.l + "</sup></span>" : esc(s.t); }
+        h += "<div class='xr web-b" + (b.h ? " web-h" + b.h : "") + "'>" + t + "</div>";
+    }
+    return h;
+};
+XVA.webAsk = function() { kbOpen("Web address or search words", "", function(t) { if (t) webGo(t); else renderXV(); }); };
+XVA.webOpen = function(u) { webGo(u); };
+XVA.webLink = function(n) { var u = WEB.cur && WEB.cur.links[+n - 1]; if (u) webGo(u); };
+XVA.webBack = function() { var u = WEB.back.pop(); if (u) webGo(u, true); };
+XVA.webReload = function() { if (WEB.cur) webGo(WEB.cur.url, true); };
+XVA.webSaveCur = function() { var o = webStore(); if (WEB.cur) { o.saved.unshift([WEB.cur.url, WEB.cur.title.substring(0, 60)]); o.saved = o.saved.slice(0, 30); webSave(o); XV.tab = 1; renderXV(); } };
+XVA.webUnsave = function(i) { var o = webStore(); o.saved.splice(+i, 1); webSave(o); renderXV(); };
+XVA.webClearHist = function() { var o = webStore(); o.hist = []; webSave(o); renderXV(); };
+XVA.webKindle = function() { sendPower("kbrowser=1"); };
+
+// apps + the phone/PC can send a page to the fridge ("web|https://...")
+var __appList102 = appList;
+appList = function() {
+    var L = __appList102();
+    for (var i = 0; i < L.length; i++) if (L[i][0] === "add") { L.splice(i + 1, 0, ["web", "Web", WEB.cur ? esc(WEB.cur.title.substring(0, 40)) : "read a web page, search", function() { openXV("web", 0); }]); break; }
+    return L;
+};
+ICONS.web = "<circle cx='50' cy='50' r='40' fill='none' stroke='%c' stroke-width='7'/><path d='M10 50 H90 M50 10 Q24 50 50 90 M50 10 Q76 50 50 90' fill='none' stroke='%c' stroke-width='6'/>";
+IC_LABEL.web = "WEB";
+var __runCmd102 = runCommands;
+runCommands = function() {
+    var cs = itemsOf("cmd");
+    for (var i = 0; i < cs.length; i++) {
+        var c = cs[i];
+        if (c.state !== "open" || !c.text || CMD_DONE[c.id] || c.text.split("|")[0] !== "web") continue;
+        CMD_DONE[c.id] = 1;
+        var u = c.text.substring(4);
+        itemEdit(c.id, "cmd", "done", c.text + "|ok");
+        if (/^(q:|https?:\/\/)/i.test(u)) webGo(u);
+    }
+    __runCmd102();
+};
+
+// web reader: send the page you're reading to your phone (a push with the link)
+var __xvWeb102 = XVR.web;
+XVR.web = function(tab) {
+    var h = __xvWeb102(tab);
+    if (tab === 0 && WEB.cur && !WEB.want && window.HUB_CLOUD && window.HUB_CLOUD.ntfy) h = h.replace(btn("webKindle", "", "KINDLE BROWSER"), btn("webPhone", "", "SEND TO PHONE") + btn("webKindle", "", "KINDLE BROWSER"));
+    return h;
+};
+XVA.webPhone = function() { if (WEB.cur) { sendPower("notify=" + encodeURIComponent(WEB.cur.title.substring(0, 80) + " " + WEB.cur.url)); var b = document.querySelector("#xv-body [data-a=webPhone]"); if (b) b.innerHTML = "SENT &#10003;"; } };
+
+// the bulletin strip mentions a waiting update when you chose "Tell me"
+var __bull102 = bulletinItem;
+bulletinItem = function() {
+    var S = window.HUB_STATE || {};
+    if (!TIMER.done && UPD && UPD.state === "available" && +S.autoUpd === 1 && !openNote()) return { t: "UPDATE " + UPD.nv + " IS READY  —  tap to install", a: function() { sendPower("job=update-install"); UPD.state = "downloading"; checkBulletin(); } };
+    return __bull102();
+};
+
+// =====================  10.3: BOOK CLOUD, SAVE PAGES TO THE LIBRARY  =====================
+// Your books live in your private book cloud (a secret gist). Each one is a "book" line in the list:
+// title|author|ext|size|want|src|added|conv. "want = kindle" ones are downloaded into the Kindle's library
+// ("Kitchen Hub" collection folder) by the loop at the next sync; "cloud" ones are only kept online.
+var BOOKS_ST = null, BOOKS_SIG = "";
+function bookName(b) {
+    var t = (b.title || "Untitled").replace(/[^A-Za-z0-9 ._()'-]/g, "").replace(/\s+/g, " ").replace(/^[\s.]+|\s+$/g, "").substring(0, 70) || "Book";
+    var a = (b.author || "").replace(/[^A-Za-z0-9 .'-]/g, "").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "").substring(0, 30);
+    return (a ? t + " - " + a : t).replace(/'/g, "") + "." + (/^(azw3|azw|mobi|pdf|txt|epub|prc|kfx)$/.test(b.ext) ? b.ext : "pdf");
+}
+function booksSync(force) {          // tell the loop which books belong on the Kindle (only when that changed)
+    var bs = recs("book"), lines = [];
+    for (var i = 0; i < bs.length; i++) if (bs[i].want === "kindle" && /^[A-Za-z0-9]+$/.test(bs[i].id)) lines.push(bs[i].id + "\t" + bookName(bs[i]));
+    var sig = lines.join("\n");
+    if (!force && sig === BOOKS_SIG) return;
+    BOOKS_SIG = sig;
+    sendPower("books=" + encodeURIComponent(sig || "-\t-"));
+}
+function booksLoad(cb) { loadScript("books.js", function(ok) { if (ok && window.HUB_BOOKS) BOOKS_ST = window.HUB_BOOKS; if (cb) cb(); }); }
+var __itemsUI103 = renderItemsUI;
+renderItemsUI = function() { __itemsUI103(); try { booksSync(false); } catch (e) {} };
+setTimeout(function() { try { booksSync(true); } catch (e) {} }, 8000);
+function fmtSize(n) { n = +n || 0; return n >= 1048576 ? (Math.round(n / 104857.6) / 10) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB"; }
+
+XV_TABS.books = ["MY BOOKS", "FREE BOOKS"]; XV_TITLE.books = "BOOKS";
+var FREEB = { q: "", res: null, want: "", err: "" };
+XVR.books = function(tab) {
+    var h = "", i, st = BOOKS_ST || { have: [], fail: {} }, have = {};
+    for (i = 0; i < (st.have || []).length; i++) have[st.have[i]] = 1;
+    if (tab === 1) {
+        h += "<div class='xv-bar'>" + btn("bookSearch", "", "SEARCH PROJECT GUTENBERG&hellip;", "big sel") + " <span class='hv-hint'>70,000 free classics. ADD sends one to your book cloud; it's on the Kindle after the next sync or two.</span></div>";
+        if (FREEB.want) return h + "<div class='sv-empty'>Searching for &ldquo;" + esc(FREEB.q) + "&rdquo;&hellip;</div>";
+        if (FREEB.err) h += "<div class='sv-empty'>" + esc(FREEB.err) + "</div>";
+        var reqd = {}, rq = itemsOf("req");
+        for (i = 0; i < rq.length; i++) { var m = /^book\|gut\|(\d+)/.exec(rq[i].text || ""); if (m) reqd[m[1]] = rq[i].state === "open" ? "asked" : /\|ok\|/.test(rq[i].text) ? "done" : "fail"; }
+        var res = FREEB.res || [];
+        if (!FREEB.res && !FREEB.err) h += "<div class='sv-empty'>Try &ldquo;Austen&rdquo;, &ldquo;Sherlock Holmes&rdquo;, &ldquo;Jack London&rdquo;&hellip;</div>";
+        else if (!res.length && !FREEB.err) h += "<div class='sv-empty'>Nothing found.</div>";
+        for (i = 0; i < res.length; i++) {
+            var r = res[i], on = reqd[r.id] || (recs("book").filter(function(b) { return b.id === "g" + r.id; }).length ? "done" : "");
+            h += "<div class='xr'><div class='xr-t'>" + esc(r.title) + "</div><div class='xr-s'>" + esc(r.author) + (r.dl ? " &middot; " + r.dl + " downloads" : "") + " " +
+                 (on === "done" ? "<b class='tag o'>ON YOUR SHELF</b>" : on === "asked" ? "<b class='tag o'>ASKED - THE CLOUD FETCHES IT</b>" : btn("bookAdd", r.id + "|" + r.title.substring(0, 60), "+ ADD")) + "</div></div>";
+        }
+        return h;
+    }
+    var bs = recs("book").sort(function(a, b) { return (b.added || "") < (a.added || "") ? -1 : 1; }), onK = 0, size = 0;
+    for (i = 0; i < bs.length; i++) if (bs[i].want === "kindle") { onK++; if (have[bs[i].id]) size += bs[i].size; }
+    h += "<div class='hv-hint'>" + plural(bs.length, "book") + " in your cloud &middot; " + onK + " on this Kindle" + (st.free ? " &middot; " + fmtSize(st.free * 1024) + " free here" : "") + ". Add your own books from the phone app (BOOKS tab).</div>";
+    if (!bs.length) h += "<div class='sv-empty'>Your book cloud is empty. Upload EPUB, PDF, MOBI or AZW3 files you own from the phone app, or add free classics on the FREE BOOKS tab.</div>";
+    for (i = 0; i < bs.length; i++) {
+        var b = bs[i], s;
+        if (b.want !== "kindle") s = "<b class='tag o'>IN THE CLOUD</b>";
+        else if (have[b.id]) s = "<b class='tag'>&#10003; ON THE KINDLE</b>";
+        else if (st.fail && st.fail[b.id]) s = "<b class='tag o'>" + esc(String(st.fail[b.id]).toUpperCase()) + "</b>";
+        else s = "<b class='tag o'>DOWNLOADS AT THE NEXT SYNC</b>";
+        h += "<div class='xr'><div class='xr-t'>" + esc(b.title || "Untitled") + (b.author ? " <span class='hv-hint'>" + esc(b.author) + "</span>" : "") + " " + s + "</div>" +
+             "<div class='xr-s'>" + esc(String(b.ext).toUpperCase()) + " &middot; " + fmtSize(b.size) + (b.conv === "epub" ? " &middot; converted from EPUB" : b.conv === "fail" && b.ext === "epub" ? " &middot; EPUB (needs KOReader to read)" : "") + (b.src === "gutenberg" ? " &middot; Project Gutenberg" : "") + " " +
+             (b.want === "kindle" ? btn("bookWant", b.id + "|cloud", "MOVE TO CLOUD ONLY") : btn("bookWant", b.id + "|kindle", "PUT ON THE KINDLE")) + btn("bookDel", b.id, "DELETE") + "</div></div>";
+    }
+    return h;
+};
+XVA.bookWant = function(v) {
+    var p = v.split("|"), b = recs("book").filter(function(x) { return x.id === p[0]; })[0]; if (!b) return;
+    b.want = p[1] === "kindle" ? "kindle" : "cloud";
+    itemEdit(b.id, "book", "open", HubCal.recText("book", b)); booksSync(false); renderXV();
+};
+XVA.bookDel = function(id, el) {
+    if (el && !el.__sure) { el.__sure = 1; el.innerHTML = "SURE? TAP AGAIN"; return; }
+    var its = itemsOf("book"); for (var i = 0; i < its.length; i++) if (its[i].id === id) itemEdit(id, "book", "del", its[i].text);
+    booksSync(false); renderXV();
+};
+XVA.bookAdd = function(v) { var p = v.split("|"); itemEdit(newId(), "req", "open", "book|gut|" + p[0].replace(/\D/g, "") + "|" + (p[1] || "").replace(/\|/g, "/")); renderXV(); };
+XVA.bookSearch = function() {
+    kbOpen("Search free books (title or author)", FREEB.q, function(t) {
+        if (!t) return renderXV();
+        FREEB.q = t; FREEB.res = null; FREEB.err = "";
+        rawFetch("https://gutendex.com/books/?search=" + encodeURIComponent(t), function(html, err) {
+            FREEB.want = "";
+            var j = null; try { j = JSON.parse(html); } catch (e) {}
+            if (!j || !(j.results instanceof Array)) FREEB.err = err || "Project Gutenberg's search didn't answer. Try again in a bit.";
+            else FREEB.res = j.results.slice(0, 32).map(function(r) { var a = r.authors && r.authors[0] ? String(r.authors[0].name || "") : ""; return { id: String(r.id), title: String(r.title || "").substring(0, 120), author: a.replace(/^([^,]+), (.+)$/, "$2 $1"), dl: r.download_count || 0 }; });
+            if (currentView === "xv" && XV.mode === "books") renderXV();
+        });
+        FREEB.want = "1"; renderXV();
+    });
+};
+// one raw download through the loop (the web reader's pipe), for things that aren't pages: JSON from an API
+function rawFetch(url, cb) {
+    var id = "r" + new Date().getTime().toString(36), n = 0;
+    sendPower("web=" + encodeURIComponent(url) + "&wid=" + id);
+    (function poll() {
+        loadScript("web.js", function(ok) {
+            var w = window.HUB_WEB;
+            if (ok && w && w.id === id) { window.HUB_WEB = null; return cb(w.html || "", w.err || ""); }
+            if (++n < 25) setTimeout(poll, 3000); else cb("", "No answer (the hub may have gone to sleep).");
+        });
+    })();
+}
+var __openXV103 = openXV;
+openXV = function(mode, tab) { __openXV103(mode, tab); if (mode === "books") booksLoad(function() { if (currentView === "xv" && XV.mode === "books") renderXV(); }); };
+
+// apps + icon
+var __appList103 = appList;
+appList = function() {
+    var L = __appList103(), bs = recs("book"), k = 0;
+    for (var j = 0; j < bs.length; j++) if (bs[j].want === "kindle") k++;
+    for (var i = 0; i < L.length; i++) if (L[i][0] === "web") { L.splice(i + 1, 0, ["books", "Books", bs.length ? plural(bs.length, "book") + " in your cloud &middot; " + k + " here" : "your book cloud, free classics", function() { openXV("books", 0); }]); break; }
+    return L;
+};
+ICONS.books = "<rect x='14' y='14' width='22' height='72' fill='none' stroke='%c' stroke-width='7'/><rect x='40' y='14' width='22' height='72' fill='none' stroke='%c' stroke-width='7'/><path d='M68 20 L86 16 L94 82 L76 86 Z' fill='none' stroke='%c' stroke-width='7' stroke-linejoin='round'/>";
+IC_LABEL.books = "BOOKS";
+
+// web reader: keep the page you're reading in the Kindle library (as text)
+var __xvWeb103 = XVR.web;
+XVR.web = function(tab) {
+    var h = __xvWeb103(tab);
+    if (tab === 0 && WEB.cur && !WEB.want) h = h.replace(btn("webKindle", "", "KINDLE BROWSER"), btn("webKeep", "", "SAVE TO LIBRARY") + btn("webKindle", "", "KINDLE BROWSER"));
+    return h;
+};
+XVA.webKeep = function() {
+    if (!WEB.cur) return;
+    sendPower("savepage=" + encodeURIComponent(WEB.cur.title.replace(/[^A-Za-z0-9 ._()-]/g, "").substring(0, 70) || "Web page"));
+    var b = document.querySelector("#xv-body [data-a=webKeep]"); if (b) b.innerHTML = "SAVED &#10003; (Kitchen Hub / Web pages)";
+};
+
 // =====================  BIND + BOOT  ==================================
 // =====================================================================
 bindTap($("t-wx"), function() { tileTap("wx", openWeather); });
@@ -7799,6 +8186,527 @@ function tick() {
     }
 }
 setInterval(tick, 4000);
+
+/* ---------------- HubPantry (10.4): the pantry rules every device shares ----------------
+ * Settings live in the list as cfg item "pantry" (JSON):
+ *   { locs: ["Fridge", "Freezer", "Pantry"],          where food can be (up to 8)
+ *     days: { Fridge: 5, Freezer: 90, Pantry: 60 },   shelf life when nothing better is known
+ *     on: { board, tile, remind, fromList, restock, cook } }   each feature on (1) or off (0)
+ * Pantry items: HubCal "pantry" records (name|expires|qty|where|opened|low|unit).
+ *   low = keep at least this many: when qty drops below it (or the item is used up) it goes on the list.  */
+var HubPantry = (function() {
+    var FEATURES = ["board", "tile", "remind", "fromList", "restock", "cook"];
+    var DEF = { locs: ["Fridge", "Freezer", "Pantry"], days: { Fridge: 5, Freezer: 90, Pantry: 60 } };
+    // [what it matches, days unopened, where it usually lives, days once opened (0 = no change)]
+    var SHELF = [      // 10.5: specific items first (the first match wins), whole words for short names
+        [/ice cream|frozen|freezer/, 180, "Freezer", 0],
+        [/leftover/, 3, "Fridge", 0],
+        [/black pepper|white pepper|peppercorn|pepper flakes|chil[ei] flakes|cinnamon|paprika|cumin|oregano|nutmeg|turmeric|\bspices?\b|seasoning|\bsalt\b|baking (soda|powder)|vanilla/, 365, "Pantry", 0],
+        [/broth|\bstock\b|bouillon|\bsoups?\b|\bcann?ed\b|\btinned\b|fish sauce|soy sauce|vinegar/, 365, "Pantry", 0],
+        [/coffee|\btea\b/, 365, "Pantry", 0],
+        [/peanut butter|almond butter|nut butter/, 180, "Pantry", 90],
+        [/coconut milk|evaporated milk|condensed milk/, 365, "Pantry", 4],
+        [/cream cheese/, 30, "Fridge", 14],
+        [/yogh?urt|kefir|sour cream|cottage/, 14, "Fridge", 5],
+        [/\bmilk\b|\bcream\b|half and half/, 10, "Fridge", 7],
+        [/cheese/, 30, "Fridge", 21],
+        [/butter|margarine/, 60, "Fridge", 30],
+        [/\beggs?\b/, 28, "Fridge", 0],
+        [/chicken|turkey|pork|beef|steak|ground (beef|pork|turkey|chicken|meat)|\bmince\b|sausage|\bfish\b|salmon|\bcod\b|tilapia|shrimp|prawn|\blamb\b/, 2, "Fridge", 0],
+        [/\bdeli\b|\bham\b|bacon|salami|hot dog|wiener/, 7, "Fridge", 4],
+        [/juice/, 10, "Fridge", 7],
+        [/lettuce|greens|spinach|salad|\bkale\b|arugula|\bherbs?\b|cilantro|parsley|basil/, 5, "Fridge", 0],
+        [/berr|\bgrapes?\b/, 5, "Fridge", 0],
+        [/mushroom/, 5, "Fridge", 0],
+        [/carrot|celery|\bpeppers?\b|cucumber|broccoli|cauliflower|zucchini|cabbage/, 10, "Fridge", 0],
+        [/\bapples?\b|\boranges?\b|\blemons?\b|\blimes?\b|\bpears?\b/, 21, "Fridge", 0],
+        [/banana|avocado|tomato/, 5, "Pantry", 0],
+        [/potato|onion|garlic|squash/, 30, "Pantry", 0],
+        [/bread|\bbuns?\b|bagel|tortilla|\bwraps?\b|\bpitas?\b|muffin/, 6, "Pantry", 0],
+        [/salsa|pesto|hummus|\bdips?\b/, 14, "Fridge", 7],
+        [/ketchup|mustard|\bmayo|\bjam\b|sauce|dressing/, 180, "Pantry", 60],
+        [/\brice\b|pasta|noodle|flour|sugar|cereal|\boats?\b|oatmeal|barley|\bbeans?\b|lentil|\boil\b|honey|peanuts?\b/, 365, "Pantry", 0]
+    ];
+    var NOT_FOOD = /paper|towel|toilet|tissue|soap|detergent|laundry|dish ?wash|garbage|bags?\b|foil|wrap film|cleaner|bleach|sponge|batter(y|ies)|shampoo|conditioner|toothpaste|razor|diaper|wipes|deodorant|lotion|light ?bulb|cat litter|dog food/;
+
+    function cfg(text) {
+        var o = {}; try { o = text ? JSON.parse(text) : {}; } catch (e) { o = {}; }
+        if (!o || typeof o !== "object") o = {};
+        var locs = [], i;
+        if (Array.isArray(o.locs)) for (i = 0; i < o.locs.length && locs.length < 8; i++) { var l = String(o.locs[i] || "").replace(/[|\t\n]/g, " ").replace(/^\s+|\s+$/g, "").substring(0, 20); if (l && locs.indexOf(l) < 0) locs.push(l); }
+        if (!locs.length) locs = DEF.locs.slice();
+        var days = {};
+        for (i = 0; i < locs.length; i++) { var d = o.days && +o.days[locs[i]]; days[locs[i]] = d >= 1 && d <= 730 ? Math.round(d) : (DEF.days[locs[i]] || 7); }
+        var on = {};
+        for (i = 0; i < FEATURES.length; i++) on[FEATURES[i]] = !(o.on && (o.on[FEATURES[i]] === 0 || o.on[FEATURES[i]] === false));
+        return { locs: locs, days: days, on: on };
+    }
+    function cfgText(c) {
+        var on = {}; for (var i = 0; i < FEATURES.length; i++) on[FEATURES[i]] = c.on[FEATURES[i]] ? 1 : 0;
+        return JSON.stringify({ locs: c.locs, days: c.days, on: on });
+    }
+    // best guess for something new: how long it keeps, where it goes, how long once opened
+    function guess(name, c) {
+        c = c || cfg(null);
+        var n = String(name || "").toLowerCase();
+        for (var i = 0; i < SHELF.length; i++) if (SHELF[i][0].test(n)) {
+            var w = c.locs.indexOf(SHELF[i][2]) >= 0 ? SHELF[i][2] : c.locs[0];
+            return { days: SHELF[i][1], where: w, open: SHELF[i][3] };
+        }
+        return { days: c.days[c.locs[0]] || 7, where: c.locs[0], open: 0 };
+    }
+    function isFood(name) { return !NOT_FOOD.test(String(name || "").toLowerCase()); }
+    function daysLeft(p, today) { return p && p.expires ? HubCal.dayNum(p.expires) - HubCal.dayNum(today) : null; }
+    // expired | today | soon (1-2 days) | week (3-7) | ok | none (no date)
+    function status(p, today) {
+        var d = daysLeft(p, today);
+        return d === null ? "none" : d < 0 ? "expired" : d === 0 ? "today" : d <= 2 ? "soon" : d <= 7 ? "week" : "ok";
+    }
+    // opening something can shorten how long it keeps (milk: 7 days once open)
+    function opened(p, today, c) {
+        var g = guess(p.name, c), o = {}, k;
+        for (k in p) if (p.hasOwnProperty(k)) o[k] = p[k];
+        o.opened = today;
+        if (g.open > 0) { var lim = HubCal.keyN(HubCal.dayNum(today) + g.open); if (!o.expires || o.expires > lim) o.expires = lim; }
+        return o;
+    }
+    function sameName(a, b) { var f = function(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/s\b/g, "").replace(/\s+/g, " ").replace(/^\s|\s$/g, ""); }; return f(a) === f(b) && f(a) !== ""; }
+    function needsRestock(p) { return p.low > 0 && (+p.qty || 0) < p.low; }
+    // which of your places an item is in: the fridge saved "fridge" before 10.4, the phone "Fridge"; unknown -> first place
+    function place(where, c) {
+        c = c || cfg(null);
+        var w = String(where || "").toLowerCase();
+        for (var i = 0; i < c.locs.length; i++) if (c.locs[i].toLowerCase() === w) return c.locs[i];
+        return w ? String(where) : c.locs[0];
+    }
+    return { FEATURES: FEATURES, cfg: cfg, cfgText: cfgText, guess: guess, isFood: isFood, daysLeft: daysLeft, status: status, opened: opened, sameName: sameName, needsRestock: needsRestock, place: place };
+})();
+
+// =====================  10.4 PANTRY APP  =====================
+// The Pantry app: USE FIRST (the expiry board), EVERYTHING (by place), COOK (your saved recipes that use what's
+// about to expire, then ideas) and SETTINGS. Same rules as the phone and the cloud (HubPantry, above).
+// It takes over the 10.0/10.1 pantry screens and the Pantry tile; the ticking-off-the-list part runs in the cloud.
+XV_TABS.food = ["USE FIRST", "EVERYTHING", "COOK", "SETTINGS"]; XV_TITLE.food = "PANTRY";
+var PAN = { loc: "" };
+var PAN_FEAT = { board: "Use-first board (this app's first page)", tile: "Use-it-up list on the Pantry tile", remind: "Evening \"use it up\" push to the phone", fromList: "Food ticked off the list goes into the pantry", restock: "Staples that run low go back on the list", cook: "Cook-from-pantry suggestions" };
+var PAN_GROUPS = [["expired", "PAST ITS DATE"], ["today", "USE TODAY"], ["soon", "IN THE NEXT 2 DAYS"], ["week", "THIS WEEK"], ["ok", "LATER"], ["none", "NO DATE"]];
+var PAN_QUICK = ["Milk", "Eggs", "Bread", "Chicken", "Ground beef", "Yogurt", "Cheese", "Butter", "Deli meat", "Salad greens", "Bananas", "Leftovers"];
+function panCfg() { var cs = itemsOf("cfg"); for (var i = 0; i < cs.length; i++) if (cs[i].id === "pantry" && !cs[i].locked) return HubPantry.cfg(cs[i].text); return HubPantry.cfg(null); }
+function panCfgSave(C) { itemEdit("pantry", "cfg", "open", HubPantry.cfgText(C)); }
+function panItems(C) { var ps = recs("pantry"); for (var i = 0; i < ps.length; i++) ps[i].where = HubPantry.place(ps[i].where, C); return ps; }
+function panGet(id) { var ps = panItems(panCfg()); for (var i = 0; i < ps.length; i++) if (ps[i].id === id) return ps[i]; return null; }
+function panSave(p, state) { itemEdit(p.id, "pantry", state || "open", HubCal.recText("pantry", p)); }
+function panWhen(p) { var d = HubPantry.daysLeft(p, todayKey()); return d === null ? "no date" : d < 0 ? (d === -1 ? "yesterday" : (-d) + " days ago") : d === 0 ? "today" : d === 1 ? "tomorrow" : d + " days"; }
+function panSort(a, b) { var x = a.expires || "9999", y = b.expires || "9999"; return x < y ? -1 : x > y ? 1 : (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); }
+function panDone() { renderXV(); renderTileById("food"); }
+// add food: more of something you have (same name and place) adds to it; otherwise a new item
+function panAdd(name, qty, where, expires) {
+    var C = panCfg(), ps = panItems(C), i;
+    for (i = 0; i < ps.length; i++) if (HubPantry.sameName(ps[i].name, name) && ps[i].where === where) {
+        ps[i].qty = (+ps[i].qty || 0) + qty;
+        if (expires && (!ps[i].expires || ps[i].expires < expires)) ps[i].expires = expires;
+        return panSave(ps[i]);
+    }
+    panSave({ id: newId(), name: name, expires: expires, qty: qty, where: where, opened: "", low: 0, unit: "" });
+}
+function panRow(p, full) {
+    var st = HubPantry.status(p, todayKey());
+    var tag = st === "expired" ? " <b class='tag'>PAST DATE</b>" : st === "today" ? " <b class='tag'>TODAY</b>" : st === "soon" ? " <b class='tag o'>" + panWhen(p).toUpperCase() + "</b>" : "";
+    return "<div class='xr'><div class='xr-t'>" + esc(p.name) + (p.qty > 1 ? " &times;" + p.qty + (p.unit ? " " + esc(p.unit) : "") : "") + tag + "</div>" +
+        "<div class='xr-s'>" + esc(p.where) + " &middot; " + panWhen(p) + (p.opened ? " &middot; opened " + shortK(p.opened) : "") + (p.low > 0 ? " &middot; keep " + p.low : "") + "</div>" +
+        "<div class='xr-b'>" + (p.qty > 1 ? btn("pnMinus", p.id, "&minus;1") : "") + btn("pnUsed", p.id, "&#10003; USED UP") + (p.opened ? "" : btn("pnOpen", p.id, "OPENED")) + btn("pnToss", p.id, "TOSSED") +
+        (full ? btn("pnPlus", p.id, "+1") + btn("pnMove", p.id, "MOVE") + btn("pnDate", p.id, "DATE") + btn("pnKeep", p.id, "KEEP " + (p.low || 0)) : "") + btn("toList", p.id, "+ LIST") + "</div></div>";
+}
+function panGroups(list, from, to, full) {
+    var h = "", g, i;
+    for (g = from; g <= to; g++) {
+        var sub = [];
+        for (i = 0; i < list.length; i++) if (HubPantry.status(list[i], todayKey()) === PAN_GROUPS[g][0]) sub.push(list[i]);
+        if (!sub.length) continue;
+        h += "<div class='hv-lbl' style='margin-top:.4em'>" + PAN_GROUPS[g][1] + " (" + sub.length + ")</div>";
+        for (i = 0; i < sub.length; i++) h += panRow(sub[i], full);
+    }
+    return h;
+}
+XVR.food = function(tab) {
+    var C = panCfg(), all = panItems(C).sort(panSort), h = "", i;
+    var bar = "<div class='xv-bar'>" + btn("pnAdd", "", "+ ADD FOOD", "big sel") + " " + btn("leftAdd", "", "+ LEFTOVERS", "big") + "</div>";
+    if (tab === 0) {
+        if (!C.on.board) return "<div class='sv-empty'>The use-first board is off (SETTINGS). Everything is on the EVERYTHING page.</div>";
+        h += bar;
+        var urgent = panGroups(all, 0, 3, false);
+        h += urgent || "<div class='sv-empty'>" + (all.length ? "Nothing needs using up this week. " + all.length + " thing" + (all.length > 1 ? "s" : "") + " in the pantry: see EVERYTHING." : "The pantry is empty. Add food above" + (C.on.fromList ? ", or tick food off the shopping list" : "") + ".") + "</div>";
+        return h;
+    }
+    if (tab === 1) {
+        h += bar + "<div class='xv-bar'>" + btn("pnLoc", "", "ALL (" + all.length + ")", PAN.loc ? "" : "sel");
+        for (i = 0; i < C.locs.length; i++) { var n = 0; for (var j = 0; j < all.length; j++) if (all[j].where === C.locs[i]) n++; h += " " + btn("pnLoc", C.locs[i], esc(C.locs[i]).toUpperCase() + " (" + n + ")", PAN.loc === C.locs[i] ? "sel" : ""); }
+        h += "</div>";
+        var list = [];
+        for (i = 0; i < all.length; i++) if (!PAN.loc || all[i].where === PAN.loc) list.push(all[i]);
+        h += list.length ? panGroups(list, 0, PAN_GROUPS.length - 1, true) : "<div class='sv-empty'>Nothing here.</div>";
+        var wst = cfgJSON("waste"), mk = todayKey().substring(0, 7), w1 = +wst[mk] || 0, w2 = +wst[monthKeyAgo(1)] || 0;
+        if (w1 || w2) h += "<div class='hv-hint' style='margin-top:.5em'>Thrown out: " + w1 + " this month, " + w2 + " last month.</div>";
+        return h + wasteChart();
+    }
+    if (tab === 2) {
+        if (!C.on.cook) return "<div class='sv-empty'>Cook suggestions are off (SETTINGS).</div>";
+        var cook = (EX && EX.cook) || [], ideas = (EX && EX.ideas) || [];
+        h += "<div class='hv-hint'>Recipes that use food expiring in the next 3 days. Yours first; the ideas open on the phone.</div>";
+        if (!cook.length && !ideas.length) h += "<div class='sv-empty'>Nothing about to expire, or the cloud hasn't looked yet.</div>";
+        for (i = 0; i < cook.length; i++) h += "<div class='xr'><div class='xr-t'>" + esc(cook[i].title) + "</div><div class='xr-s'>uses " + esc(cook[i].uses.join(", ")) + "</div><div class='xr-b'>" + btn("pnCook", cook[i].id, "COOK IT") + "</div></div>";
+        for (i = 0; i < ideas.length; i++) h += "<div class='xr'><div class='xr-t'>Use the <b>" + esc(ideas[i].for) + "</b></div><div class='xr-s'>" + ideas[i].meals.map(function(m) { return esc(m.n); }).join(" &middot; ") + "</div></div>";
+        return h;
+    }
+    h += "<div class='hv-hint'>Changes reach the phone and the cloud at the next sync.</div>";
+    for (i = 0; i < HubPantry.FEATURES.length; i++) { var f = HubPantry.FEATURES[i]; h += "<div class='xr'><div class='xr-t'>" + PAN_FEAT[f] + "</div><div class='xr-b'>" + btn("pnSet", f, C.on[f] ? "&#10003; ON" : "OFF", C.on[f] ? "sel" : "") + "</div></div>"; }
+    h += "<div class='hv-lbl' style='margin-top:.5em'>PLACES" + (C.locs.length < 8 ? " " + btn("pnPlace", "", "+ PLACE") : "") + "</div>";
+    for (i = 0; i < C.locs.length; i++) h += "<div class='xr'><div class='xr-t'>" + esc(C.locs[i]) + "</div><div class='xr-s'>food keeps " + C.days[C.locs[i]] + " days here when the hub can't guess</div><div class='xr-b'>" + btn("pnDays", C.locs[i], "DAYS") + (C.locs.length > 1 ? btn("pnDel", C.locs[i], "REMOVE") : "") + "</div></div>";
+    return h;
+};
+XVA.pnAdd = function() {
+    var C = panCfg();
+    kbOpen("What food? (chicken thighs, oat milk...)", "", function(t) {
+        t = String(t || "").replace(/[|\t\n]/g, " ").replace(/^\s+|\s+$/g, "").substring(0, 60);
+        if (!t) return renderXV();
+        var g = HubPantry.guess(t, C), opts = [[g.days, "ABOUT " + g.days + " DAYS (GUESS)"], [1, "Tomorrow"], [3, "3 days"], [7, "1 week"], [14, "2 weeks"], [30, "1 month"], [90, "3 months"], [0, "No date"]];
+        pickChips("Best before?", opts, function(n) {
+            var where = [[g.where, g.where.toUpperCase() + " (GUESS)"]];
+            for (var i = 0; i < C.locs.length; i++) if (C.locs[i] !== g.where) where.push([C.locs[i], C.locs[i]]);
+            pickChips("Where does it go?", where, function(wh) { panAdd(t, 1, wh, n ? dPlus(n) : ""); panDone(); });
+        });
+    }, function(v) { var r = [], s = String(v || "").toLowerCase(); for (var i = 0; i < PAN_QUICK.length; i++) if (!s || PAN_QUICK[i].toLowerCase().indexOf(s) === 0) r.push(PAN_QUICK[i]); return r; });
+};
+XVA.leftAdd = function() {
+    var C = panCfg();
+    kbOpen("Leftovers of what?", planFor(todayKey()) || "", function(t) {
+        t = String(t || "").replace(/[|\t\n]/g, " ").replace(/^\s+|\s+$/g, "").substring(0, 50);
+        if (t) panAdd("Leftovers: " + t, 1, HubPantry.place("Fridge", C), dPlus(3));
+        panDone();
+    });
+};
+XVA.pnMinus = function(id) { var p = panGet(id); if (!p) return; p.qty = Math.max(0, (+p.qty || 1) - 1); panSave(p, p.qty ? "open" : "done"); panDone(); };
+XVA.pnPlus = function(id) { var p = panGet(id); if (!p) return; p.qty = (+p.qty || 0) + 1; panSave(p); panDone(); };
+XVA.pnUsed = function(id) { var p = panGet(id); if (!p) return; p.qty = 0; panSave(p, "done"); panDone(); };      // a staple then goes back on the list (cloud)
+XVA.pnOpen = function(id) { var p = panGet(id); if (p) panSave(HubPantry.opened(p, todayKey(), panCfg())); panDone(); };
+XVA.pnToss = function(id) {
+    var p = panGet(id); if (!p) return;
+    var w = cfgJSON("waste"), mk = todayKey().substring(0, 7); w[mk] = (+w[mk] || 0) + 1; cfgSave("waste", w);
+    p.qty = 0; panSave(p, "done"); panDone();
+};
+XVA.pnMove = function(id) {
+    var C = panCfg(), p = panGet(id); if (!p) return;
+    var i = C.locs.indexOf(p.where); p.where = C.locs[(i + 1) % C.locs.length];      // tap again to keep moving
+    if (/freez/i.test(p.where) && (!p.expires || HubPantry.daysLeft(p, todayKey()) < (C.days[p.where] || 90))) p.expires = dPlus(C.days[p.where] || 90);      // frozen food keeps much longer
+    panSave(p); panDone();
+};
+XVA.pnDate = function(id) {
+    var p = panGet(id); if (!p) return;
+    pickChips("Best before for " + p.name + "?", [[1, "Tomorrow"], [2, "2 days"], [3, "3 days"], [5, "5 days"], [7, "1 week"], [14, "2 weeks"], [30, "1 month"], [90, "3 months"], [0, "No date"]], function(n) { p.expires = n ? dPlus(n) : ""; panSave(p); panDone(); });
+};
+XVA.pnKeep = function(id) {
+    var p = panGet(id); if (!p) return;
+    askNumber("Keep at least how many " + p.name + "? (0 = don't put it back on the list)", p.low || "", function(v) { if (v === null) return renderXV(); p.low = Math.max(0, Math.round(v)); panSave(p); panDone(); });
+};
+XVA.pnLoc = function(l) { PAN.loc = l; XV.page = 0; renderXV(); };
+XVA.pnCook = function(id) { openCook(id); };
+XVA.pnSet = function(f) { var C = panCfg(); C.on[f] = !C.on[f]; panCfgSave(C); panDone(); };
+XVA.pnDays = function(l) { var C = panCfg(); askNumber("How many days does food keep in " + l + "?", C.days[l], function(v) { if (v !== null && v >= 1) { C.days[l] = Math.min(730, Math.round(v)); panCfgSave(C); } renderXV(); }); };
+XVA.pnDel = function(l) { var C = panCfg(), i = C.locs.indexOf(l); if (i < 0 || C.locs.length < 2) return; C.locs.splice(i, 1); delete C.days[l]; panCfgSave(C); renderXV(); };
+XVA.pnPlace = function() {
+    kbOpen("New place (garage freezer, cold room...)", "", function(t) {
+        var C = panCfg(); t = String(t || "").replace(/[|\t\n]/g, " ").replace(/^\s+|\s+$/g, "").substring(0, 20);
+        if (t && C.locs.length < 8 && C.locs.indexOf(t) < 0) { C.locs.push(t); C.days[t] = /freez/i.test(t) ? 90 : 7; panCfgSave(C); }
+        renderXV();
+    });
+};
+TILE_RENDER.food = function(T) {
+    var C = panCfg(), ps = panItems(C).sort(panSort), tk = todayKey(), wk = 0, i, shown = 0;
+    for (i = 0; i < ps.length; i++) { var s = HubPantry.status(ps[i], tk); if (s !== "ok" && s !== "none") wk++; }
+    var h = "<span class='stamp'>Pantry" + (wk ? " &middot; " + wk + " to use this week" : "") + "</span>";
+    if (!ps.length) h += "<div class='sv-empty'>Tap to add food" + (C.on.fromList ? ", or tick food off the shopping list" : "") + ".</div>";
+    else if (!C.on.tile) h += "<div class='py-big'>" + ps.length + "</div><div class='py-sub'>in the pantry</div>";
+    else for (i = 0; i < ps.length && shown < (T.cls === "s" ? 2 : 5); i++) {
+        if (!ps[i].expires) continue;
+        var st = HubPantry.status(ps[i], tk), hot = st === "expired" || st === "today" || st === "soon";
+        h += "<div class='tl-r'>" + (hot ? "<b>" : "") + esc(ps[i].name) + " &middot; " + panWhen(ps[i]) + (hot ? "</b>" : "") + "</div>"; shown++;
+    }
+    var ck = C.on.cook && EX && EX.cook && EX.cook[0], idea = C.on.cook && EX && EX.ideas && EX.ideas[0];
+    if (T.cls !== "s" && (ck || idea)) h += "<div class='tl-r tl-s'>Cook: " + esc(ck ? ck.title : idea.meals[0].n) + "</div>";
+    tileFill("food", T, h);
+};
+renderTileById("food");
+
+
+// =====================  10.4 PRIVACY: PIN LOCK  =====================
+// Each person can set a PIN. Locked: their Pay (only their own PIN opens it), and the shared Money, fridge
+// Notes and the Board (either person's PIN opens those). Opens for a few minutes, and everything locks again
+// when the hub goes to standby, so the standby page (and the screensaver copied from it) never shows them.
+// A PIN keeps private things off the screen for people at the fridge; the list itself is protected by the
+// passphrase (cloud.conf). PINs are stored as salted, stretched SHA-256 hashes (cfg item "pins").
+var LOCK = { until: { p1: 0, p2: 0 }, fails: 0, waitUntil: 0, was: "" };
+var LOCK_SHARED = { money: 1, notes: 1, board: 1 };
+function pinsCfg() { var o = cfgJSON("pins"); o.mins = Math.max(1, Math.min(60, +o.mins || 5)); return o; }
+function pinSet(who) { var p = pinsCfg()[who]; return !!(p && p.h && p.s); }
+function lockOn() { return pinSet("p1") || pinSet("p2"); }
+function lockNow() { return new Date().getTime(); }
+function pinHash(salt, pin) { var k = HubCrypt.utf8("kitchenhub-pin|" + salt + "|" + pin); for (var i = 0; i < 2000; i++) k = HubCrypt.sha256(k); return HubCrypt.hex(k); }
+function pinOk(who, pin) { var p = pinsCfg()[who]; return !!(p && p.h && p.s && pinHash(p.s, pin) === p.h); }
+function isOpen(who) { return !pinSet(who) || (!HUB.sleeping && LOCK.until[who] > lockNow()); }
+// area: "pay:p1", "pay:p2", "money", "notes", "board"
+function canSee(area) {
+    if (area.indexOf("pay:") === 0) return isOpen(area.substring(4));
+    if (!LOCK_SHARED[area] || !lockOn()) return true;
+    return (pinSet("p1") && isOpen("p1")) || (pinSet("p2") && isOpen("p2"));
+}
+function lockAll() { LOCK.until.p1 = 0; LOCK.until.p2 = 0; }
+function lockSig() { return [canSee("pay:p1"), canSee("pay:p2"), canSee("money"), canSee("notes"), canSee("board")].join(""); }
+function lockRefresh() {          // redraw whatever shows private things, and close a private screen that just locked
+    var s = lockSig();
+    if (s === LOCK.was) return;
+    LOCK.was = s;
+    renderTileById("pay"); renderTileById("money"); renderTileById("board"); renderTileById("shifts");
+    try { checkBulletin(); } catch (e) {}
+    if (currentView === "xv" && XV.mode === "money" && !canSee("money")) closeXV();
+    if (currentView === "xv" && XV.mode === "lock") renderXV();
+    if (currentView === "board" && !canSee("board")) { $("board-view").style.display = "none"; setView("main"); goHome(); }
+    if (HUB_OPEN && curTab === "pay" && !canSee("pay:p1")) closeHub();
+}
+// ---------- the keypad (digits never shown; a dot per digit) ----------
+var PIN = { val: "", cb: null };
+(function() {
+    var el = document.createElement("div"); el.id = "pin-pad";
+    el.style.cssText = "display:none;position:absolute;z-index:400;background:#fff;border:6px double #000;padding:1em;box-sizing:border-box;text-align:center;font-family:Helvetica,Arial,sans-serif";
+    $("root").appendChild(el);          // inside #root, so it turns with the screen
+})();
+function pinDraw(title, note) {
+    var el = $("pin-pad"), h = "<div class='hv-lbl'>" + title + "</div><div style='font-size:2.4em;letter-spacing:.3em;min-height:1.3em;margin:.2em 0'>" + (PIN.val ? new Array(PIN.val.length + 1).join("&#9679;") : "&nbsp;") + "</div>" +
+        "<div class='hv-hint' style='min-height:1.3em'>" + (note || "") + "</div>", keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "CANCEL", "0", "&#9003;"], i;
+    for (i = 0; i < keys.length; i++) h += (i % 3 === 0 ? "<div>" : "") + "<span class='opt-btn big' data-k='" + i + "' style='display:inline-block;min-width:26%;margin:.2em;text-align:center'>" + keys[i] + "</span>" + (i % 3 === 2 ? "</div>" : "");
+    h += "<div style='margin-top:.3em'><span class='opt-btn big sel' data-k='ok' style='display:inline-block;min-width:82%;text-align:center'>OK</span></div>";
+    el.innerHTML = h;
+    var bs = el.getElementsByTagName("span");
+    for (i = 0; i < bs.length; i++) (function(b) {
+        quickTap(b, function() {
+            var k = b.getAttribute("data-k");
+            if (k === "ok") { if (PIN.val.length >= 4) pinClose(PIN.val); return; }
+            k = +k;
+            if (k === 9) return pinClose(null);
+            if (k === 11) PIN.val = PIN.val.substring(0, PIN.val.length - 1); else if (PIN.val.length < 6) PIN.val += keys[k];
+            pinDraw(title, note);
+        });
+    })(bs[i]);
+}
+function pinAsk(title, cb, note) {
+    var el = $("pin-pad"); PIN.val = ""; PIN.cb = cb;
+    el.style.display = "block";
+    place(el, Math.round(W * 0.2), Math.round(H * 0.12), Math.round(W * 0.6), Math.round(H * 0.7));
+    pinDraw(title, note || "4 to 6 digits");
+}
+function pinClose(v) { $("pin-pad").style.display = "none"; var cb = PIN.cb; PIN.cb = null; PIN.val = ""; if (cb) cb(v); }
+// ask for a PIN that opens `area`, then run `then`
+function unlock(area, then) {
+    if (canSee(area)) return then();
+    var who = area.indexOf("pay:") === 0 ? [area.substring(4)] : ["p1", "p2"].filter(pinSet);
+    var name = who.length === 1 ? pName(who[0]) : "your";
+    (function ask(note) {
+        if (LOCK.waitUntil > lockNow()) note = "Too many tries. Wait " + Math.ceil((LOCK.waitUntil - lockNow()) / 1000) + " s.";
+        pinAsk((who.length === 1 ? esc(name) + "'s" : "Your") + " PIN", function(pin) {
+            if (pin === null) return;
+            if (LOCK.waitUntil > lockNow()) return ask();
+            for (var i = 0; i < who.length; i++) if (pinOk(who[i], pin)) {
+                LOCK.fails = 0; LOCK.until[who[i]] = lockNow() + pinsCfg().mins * 60000;
+                lockRefresh(); return then();
+            }
+            if (++LOCK.fails >= 5) { LOCK.fails = 0; LOCK.waitUntil = lockNow() + 60000; }
+            ask("Wrong PIN");
+        }, note);
+    })();
+}
+// ---------- what locks ----------
+var __payNow104 = payNow;
+payNow = function(w, off) { return canSee("pay:" + (w || "p1")) ? __payNow104(w, off) : null; };        // pay hides everywhere (tile, shifts, front page)
+var __moneyNow104 = moneyNow;
+moneyNow = function() {
+    if (canSee("money")) return __moneyNow104();
+    var M = __moneyNow104();        // keep its shape, hide the amounts
+    return { month: M.month, total: 0, byCat: {}, owe: 0, bills: [], due: [], budgets: {}, goals: [], locked: true };
+};
+var __openNote104 = openNote;
+openNote = function() { return canSee("notes") ? __openNote104() : null; };
+var __bull104 = bulletinItem;
+bulletinItem = function() {
+    if (!TIMER.done && !canSee("notes") && __openNote104()) return { t: "NOTE · private — tap to read", a: function() { unlock("notes", function() { checkBulletin(); }); } };
+    return __bull104();
+};
+function lockedTile(id, name, T) { tileFill(id, T, "<span class='stamp'>" + name + "</span><div class='py-big'>&#128274;</div><div class='py-sub'>locked &middot; tap to unlock</div>"); }
+var __payTile104 = TILE_RENDER.pay;
+TILE_RENDER.pay = function(T) { if (!canSee("pay:p1") && pinSet("p1")) return lockedTile("pay", "Pay", T); __payTile104(T); };
+var __moneyTile104 = TILE_RENDER.money;
+TILE_RENDER.money = function(T) { if (!canSee("money")) return lockedTile("money", "Money", T); __moneyTile104(T); };
+var __boardTile104 = TILE_RENDER.board;
+TILE_RENDER.board = function(T) { if (!canSee("board")) { var inner = $("board-in"); inner.__fk = ""; return lockedTile("board", "The Board", T); } __boardTile104(T); };
+var __openXV104 = openXV;
+openXV = function(mode, tab) { if (mode === "money" && !canSee("money")) return unlock("money", function() { __openXV104(mode, tab); }); __openXV104(mode, tab); };
+var __openBoard104 = openBoard;
+openBoard = function() { if (!canSee("board")) return unlock("board", function() { __openBoard104(); }); __openBoard104(); };
+var __selectTab104 = selectTab;
+selectTab = function(name) { if (name === "pay" && !canSee("pay:p1")) return unlock("pay:p1", function() { __selectTab104(name); }); __selectTab104(name); };
+var __rss104 = renderStandbySketch;
+renderStandbySketch = function() { if (HUB.sleeping && !canSee("board")) { $("standby-sketch").style.display = "none"; return; } __rss104(); };
+var __appList104 = appList;
+appList = function() {
+    var L = __appList104();
+    for (var i = 0; i < L.length; i++) if (L[i][0] === "money" && !canSee("money")) L[i][2] = "&#128274; locked";
+    L.push(["lock", "Privacy", lockOn() ? "PINs on &middot; LOCK NOW" : "PINs for pay, money, notes", function() { openXV("lock", 0); }]);
+    return L;
+};
+ICONS.lock = "<rect x='20' y='44' width='60' height='46' rx='6' fill='none' stroke='%c' stroke-width='8'/><path d='M32 44 V30 Q32 12 50 12 Q68 12 68 30 V44' fill='none' stroke='%c' stroke-width='8'/>";
+IC_LABEL.lock = "PRIVACY";
+// ---------- the Privacy app: set / change / remove PINs, how long they stay open, lock now ----------
+XV_TABS.lock = ["PINS"]; XV_TITLE.lock = "PRIVACY";
+XVR.lock = function() {
+    var P = pinsCfg(), h = "<div class='hv-hint'>A PIN hides pay, money, fridge notes and the board from anyone at the fridge. Pay opens only with its owner's PIN; the rest with either PIN. Everything locks again after " + P.mins + " min and at standby.</div>";
+    var people = hasP2() ? ["p1", "p2"] : ["p1"];
+    for (var i = 0; i < people.length; i++) {
+        var w = people[i], set = pinSet(w);
+        h += "<div class='xr'><div class='xr-t'>" + esc(pName(w)) + (set ? " <b class='tag o'>" + (isOpen(w) ? "OPEN" : "LOCKED") + "</b>" : "") + "</div><div class='xr-s'>" + (set ? "PIN set" : "No PIN: " + esc(pName(w)) + "'s pay is not locked") + "</div><div class='xr-b'>" +
+            (set ? btn("pinChange", w, "CHANGE PIN") + btn("pinRemove", w, "REMOVE PIN") : btn("pinNew", w, "SET A PIN", "sel")) + "</div></div>";
+    }
+    h += "<div class='xr'><div class='xr-t'>Stays open for</div><div class='xr-b'>" + [2, 5, 10, 30].map(function(m) { return btn("pinMins", String(m), m + " MIN", P.mins === m ? "sel" : ""); }).join("") + "</div></div>";
+    if (lockOn()) h += "<div class='xv-bar'>" + btn("pinLockNow", "", "&#128274; LOCK NOW", "big sel") + "</div>";
+    return h;
+};
+function pinChoose(who, done) {
+    pinAsk("New PIN for " + esc(pName(who)), function(a) {
+        if (a === null) return renderXV();
+        pinAsk("Same PIN again", function(b) {
+            if (b === null) return renderXV();
+            if (a !== b) return pinChoose(who, done);
+            var P = pinsCfg(), s = HubCrypt.hex(HubCrypt.sha256(HubCrypt.utf8(String(Math.random()) + lockNow() + who))).substring(0, 16);
+            P[who] = { s: s, h: pinHash(s, a) }; cfgSave("pins", P);
+            LOCK.until[who] = lockNow() + P.mins * 60000;
+            done();
+        });
+    });
+}
+function pinCurrent(who, then) {        // a change or removal needs that person's current PIN
+    pinAsk(esc(pName(who)) + "'s current PIN", function(v) {
+        if (v === null) return renderXV();
+        if (!pinOk(who, v)) { if (++LOCK.fails >= 5) { LOCK.fails = 0; LOCK.waitUntil = lockNow() + 60000; } return renderXV(); }
+        if (LOCK.waitUntil > lockNow()) return renderXV();
+        LOCK.fails = 0; then();
+    });
+}
+XVA.pinNew = function(w) { pinChoose(w, function() { lockRefresh(); renderXV(); }); };
+XVA.pinChange = function(w) { pinCurrent(w, function() { pinChoose(w, function() { lockRefresh(); renderXV(); }); }); };
+XVA.pinRemove = function(w) { pinCurrent(w, function() { var P = pinsCfg(); delete P[w]; cfgSave("pins", P); lockRefresh(); renderXV(); }); };
+XVA.pinMins = function(m) { var P = pinsCfg(); P.mins = +m; cfgSave("pins", P); renderXV(); };
+XVA.pinLockNow = function() { lockAll(); lockRefresh(); renderXV(); };
+// relock on time (checked every 10 s) and at standby
+setInterval(function() { if (HUB.sleeping) lockAll(); lockRefresh(); }, 10000);
+lockRefresh();
+
+
+// =====================  10.4 THE OPEN-APPS RAIL (Windows 8 style)  =====================
+// A still column on the left: the time, HOME (your tiles) and the apps you've opened, newest first. Tap a tile
+// to open an app beside the rail; tap the rail to jump between open apps or back to the tiles. The rest of the
+// hub sits on a "stage" to the right of the rail: layout() takes the rail's width off W, so every screen lays
+// itself out in what's left, unchanged. Nothing on the rail moves (no animation: e-ink). HIDE turns it off;
+// APPS > Side rail brings it back.
+var RAIL_W = 0, RAIL = { open: [], sig: "", max: 6 };
+if (FEEL.rail === undefined) FEEL.rail = 1;
+var RAIL_VIEWS = {      // view -> [key, label, icon, how to open it again]
+    board: ["board", "Board", "board", function() { openBoard(); }], cook: ["rcp", "Recipes", "rcp", function() { openCook(null); }],
+    horo: ["horo", "Stars", "horo", function() { openHoro(); }], day: ["day", "Day", "cal", function() { openDay(todayKey()); }],
+    calfull: ["cal", "Calendar", "cal", function() { openCalFull(); }], weather: ["wx", "Weather", "wx", function() { openWeather(); }],
+    shop: ["shop", "Shopping", "shop", function() { openShop(); }], hub: ["hub", "Settings", "cog", function() { openHub(); }]
+};
+(function() {      // the stage: everything that was in #root, moved one level down; the rail beside it
+    var root = $("root"), st = document.createElement("div"), rl = document.createElement("div");
+    st.id = "stage"; st.style.cssText = "position:absolute;left:0;top:0;overflow:hidden";
+    while (root.firstChild) st.appendChild(root.firstChild);
+    rl.id = "rail";
+    root.appendChild(st); root.appendChild(rl);
+    var css = document.createElement("style");
+    css.textContent = "#rail { position: absolute; display: none; background: #fff; border-right: 4px double #000; box-sizing: border-box; overflow: hidden; font-family: Helvetica, Arial, sans-serif; text-align: center; }" +
+        "#rail .rl-time { font-family: Georgia, serif; font-weight: 900; font-size: 2.1em; line-height: 1; padding-top: .35em; }" +
+        "#rail .rl-day { font-size: .62em; font-weight: 900; letter-spacing: .16em; padding: .3em 0 .6em; border-bottom: 3px solid #000; }" +
+        "#rail .rl-h { font-size: .55em; font-weight: 900; letter-spacing: .2em; color: #444; padding: .9em 0 .3em; }" +
+        "#rail .rl-i { border-bottom: 1px solid #000; padding: .45em .2em .4em; font-size: .7em; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; word-wrap: break-word; }" +
+        "#rail .rl-i.sel { background: #000; color: #fff; }" +
+        "#rail .rl-ic { display: block; width: 2.6em; height: 2.6em; margin: 0 auto .25em; }" +
+        "#rail .rl-foot { position: absolute; left: 0; right: 0; bottom: 0; font-size: .55em; font-weight: 900; letter-spacing: .2em; padding: 1em 0; border-top: 1px solid #000; }" +
+        "body.asleep #rail .rl-open { display: none; }";
+    document.getElementsByTagName("head")[0].appendChild(css);
+})();
+function railLayout() {          // called from layout(), right after W and H are known
+    var st = $("stage"), rl = $("rail");
+    if (!st || !rl) { RAIL_W = 0; return; }
+    var rw = FEEL.rail !== 0 ? Math.round(clamp(W * 0.13, 120, 240)) : 0;
+    rl.style.display = rw ? "block" : "none";
+    if (rw) { rl.style.left = "0px"; rl.style.top = "0px"; rl.style.width = rw + "px"; rl.style.height = H + "px"; rl.style.fontSize = Math.round(clamp(rw / 7.2, 12, 30)) + "px"; }
+    st.style.left = rw + "px"; st.style.width = (W - rw) + "px"; st.style.height = H + "px";
+    RAIL_W = rw; W -= rw;
+    RAIL.sig = "";
+}
+function railIcon(name) { return ICONS[name] ? "<span class='rl-ic'>" + icon(name, "%fg", "%bg") + "</span>" : ""; }
+function railKey() {
+    if (currentView === "xv") return "xv:" + XV.mode;
+    return RAIL_VIEWS[currentView] ? RAIL_VIEWS[currentView][0] : (currentView === "main" ? "home" : "");
+}
+function railNote(v) {            // remember the app just opened (newest first)
+    var it = null;
+    if (v === "xv" && XV_TITLE[XV.mode]) { var m = XV.mode; it = { k: "xv:" + m, n: XV_TITLE[m], ic: m, fn: function() { openXV(m, 0); } }; }
+    else if (RAIL_VIEWS[v]) { var r = RAIL_VIEWS[v]; it = { k: r[0], n: r[1], ic: r[2], fn: r[3] }; }
+    if (!it) return;
+    for (var i = 0; i < RAIL.open.length; i++) if (RAIL.open[i].k === it.k) { RAIL.open.splice(i, 1); break; }
+    RAIL.open.unshift(it);
+    if (RAIL.open.length > RAIL.max) RAIL.open.length = RAIL.max;
+}
+function railItem(k, label, ic, sel) {
+    return "<div class='rl-i" + (sel ? " sel" : "") + "' data-k='" + k + "'>" + railIcon(ic).replace(/%fg/g, sel ? "#fff" : "#000").replace(/%bg/g, sel ? "#000" : "#fff") + esc(label) + "</div>";
+}
+function renderRail() {
+    var rl = $("rail");
+    if (!rl || !RAIL_W) return;
+    var n = getBCNow(), h12 = n.getUTCHours() % 12 || 12, cur = railKey(), i;
+    var h = "<div class='rl-time'>" + h12 + ":" + pad2(n.getUTCMinutes()) + "</div><div class='rl-day'>" + DAYS3[n.getUTCDay()].toUpperCase() + " " + n.getUTCDate() + "</div>" +
+        railItem("home", "Home", "apps", cur === "home") + "<div class='rl-open'>";
+    if (RAIL.open.length) h += "<div class='rl-h'>OPEN</div>";
+    for (i = 0; i < RAIL.open.length; i++) h += railItem(RAIL.open[i].k, RAIL.open[i].n, RAIL.open[i].ic, cur === RAIL.open[i].k);
+    h += "</div><div class='rl-foot' data-k='hide'>HIDE &lsaquo;</div>";
+    if (h === RAIL.sig) return;           // e-ink: repaint only when something changed
+    RAIL.sig = h; rl.innerHTML = h;
+    var its = rl.getElementsByTagName("div");
+    for (i = 0; i < its.length; i++) if (its[i].getAttribute("data-k")) (function(el) { bindTap(el, function() { railTap(el.getAttribute("data-k")); }); })(its[i]);
+}
+function railTap(k) {
+    if (k === "hide") { FEEL.rail = 0; saveFeel(); relayout(); return; }
+    if (k === railKey()) return;
+    var to = null;
+    for (var i = 0; i < RAIL.open.length; i++) if (RAIL.open[i].k === k) to = RAIL.open[i];
+    if ($("xv").style.display === "block") $("xv").style.display = "none";      // goHome() leaves the extra-apps view open
+    goHome();
+    if (to) to.fn();
+}
+// ---------- hooks ----------
+var __setView104 = setView;
+setView = function(v) { __setView104(v); railNote(v); renderRail(); };
+var __pagePoint104 = pagePoint;
+pagePoint = function(cx, cy) { var p = __pagePoint104(cx, cy); return [p[0] - RAIL_W, p[1]]; };      // touches in stage coordinates (the board's pen)
+var __layout104 = layout;
+layout = function() { __layout104(); renderRail(); };
+var __appList104r = appList;
+appList = function() {
+    var L = __appList104r();
+    if (FEEL.rail === 0) L.push(["rail", "Side rail", "show the open-apps rail", function() { FEEL.rail = 1; saveFeel(); goHome(); relayout(); }]);
+    return L;
+};
+ICONS.rail = "<rect x='10' y='14' width='22' height='72' fill='%c'/><rect x='40' y='14' width='50' height='32' fill='none' stroke='%c' stroke-width='7'/><rect x='40' y='54' width='50' height='32' fill='none' stroke='%c' stroke-width='7'/>";
+IC_LABEL.rail = "RAIL";
+setInterval(renderRail, 20000);      // the clock (only repaints when the minute changes)
+relayout();
 
 </script>
 </body>

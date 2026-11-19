@@ -1,0 +1,2 @@
+#!/bin/sh
+case "$2" in battLevel) echo 80 ;; isCharging) echo 0 ;; cmState) echo "${FAKE_WIFI:-NA}" ;; *) echo "" ;; esac

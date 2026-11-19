@@ -6,7 +6,7 @@
 # The snapshot goes to extensions/shiftcal/diag.txt (readable over USB). It holds the Kindle's own system
 # log, which says why the hub page stopped (a crash, out of memory, a script error) - the hub's own logs
 # can't see that.
-DIR="/mnt/us/extensions/shiftcal"
+DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 OUT="$DIR/diag.txt"
 export TZ="PCT7"
 
@@ -19,7 +19,7 @@ export TZ="PCT7"
     echo "update pending: $(cat "$DIR/.update/pending" 2>/dev/null)"
     echo "page file: $(ls -l "$DIR/mesquite/index.html" 2>&1)"
     echo "--- processes"
-    ps 2>&1
+    ps 2>&1 | sed -e 's/Bearer [^ ]*/Bearer ***/g' -e 's/github_pat_[A-Za-z0-9_]*/github_pat_***/g' -e 's/ghp_[A-Za-z0-9]*/ghp_***/g'    # 10.5: never the token
     echo "--- powerd / screen / wifi"
     PD=$(pidof powerd 2>/dev/null); echo "powerd pid: ${PD:-none}  state: $(cat /proc/${PD:-0}/stat 2>/dev/null | awk '{print $3}') (T = stopped by the hub)"
     echo "powerd status: $(lipc-get-prop com.lab126.powerd status 2>&1 | head -3 | tr '\n' ' ')"
@@ -38,14 +38,6 @@ export TZ="PCT7"
 } > "$OUT.tmp" 2>&1
 mv "$OUT.tmp" "$OUT"
 
-# stop the hub loop(s), the page listener, the page, and RTC alarms; thaw powerd; status bar and Wi-Fi back
+# 10.5: one stop path for everything (loop, page, jobs, listener), then the Kindle back to normal
 /bin/sh "$DIR/stop_hub.sh"
-# background jobs the loop may have started (syncs, update, web pages, books) - stop_hub.sh leaves these
-for S in sync_data.sh hub_cloud.sh hub_update.sh hub_books.sh web_fetch.sh; do
-    for P in $(ps | grep "[/]$S" | awk '{print $1}'); do kill "$P" 2>/dev/null; done
-done
-rm -f "$DIR/.job_next" "$DIR/.web_next" "$DIR/.rsearch_next" /tmp/kitchenhub_nc.* 2>/dev/null
-# make sure powerd is running and not stopped (the hub pauses it while the Kindle sleeps)
-PD=$(pidof powerd 2>/dev/null); [ -n "$PD" ] && kill -CONT $PD 2>/dev/null
-lipc-set-prop com.lab126.appmgrd start app://com.lab126.booklet.home 2>/dev/null
 echo "$(date '+%m-%d %H:%M:%S') [reset] everything stopped - snapshot in diag.txt" >> "$DIR/power.log"

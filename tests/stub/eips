@@ -1,0 +1,2 @@
+#!/bin/sh
+echo "eips $*" >> "$KT/sys.log"; exit 0

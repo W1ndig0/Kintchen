@@ -1,0 +1,2 @@
+#!/bin/sh
+echo "fbink $*" >> "$KT/sys.log"; exit 0
