@@ -33,7 +33,7 @@ WHAT'S IN HERE
    Repo -> Settings -> Secrets and variables -> Actions -> New repository secret, four times:
      GIST_ID      the same gist id as in the Kindle's cloud.conf
      GIST_TOKEN   the token from step 3
-     HUB_PASS     Holy
+     HUB_PASS     your passphrase (the PASSPHRASE line in the Kindle's cloud.conf)
      NTFY_TOPIC   the fridge's alert channel: Kindle Settings > Phone > "Timer alerts on your phone" shows it
    Secrets are hidden, even though the repo is public. The brain's logs only ever show counts, never your items.
 

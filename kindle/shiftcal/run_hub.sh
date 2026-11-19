@@ -77,6 +77,7 @@ fail() {    # $1 why. Nothing has been started; leave the Kindle as a normal Kin
     scr 26 "$1"
     echo "   FAILED: $1"
     echo "$(date '+%m-%d %H:%M:%S') [launch] check '$CUR' failed: $1 - nothing started" >> "$DIR/power.log"
+    echo "launch check $CUR failed $(date '+%m-%d %H:%M')" >> "$DIR/.log_want"      # 10.7: the log goes to the cloud gist on the next sync
     # a fresh update that broke the hub's own files is undone, then the launch is tried once more
     if [ "$CAN_ROLL" = "1" ] && [ -f "$DIR/.update/pending" ] && [ -z "$HUB_ROLLED" ]; then
         scr 28 "This is a fresh update: undoing it and trying again..."

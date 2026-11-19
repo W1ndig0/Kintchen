@@ -59,6 +59,7 @@ if [ "$1" = "rollback" ]; then
     echo "$CUR" >> "$ST/bad"                         # don't auto-install the version that just failed again
     rm -f "$ST/pending" "$ST/rb.list"; rm -rf "$ST/backup"
     event "rolledback $CUR $PV"; say "rolled back $CUR -> $PV"
+    echo "rolled back $CUR $(date '+%m-%d %H:%M')" >> "$DIR/.log_want"      # 10.7: send the log on the next sync
     state rolledback "$PV" 0 "Went back to $PV (from $CUR)"; exit 0
 fi
 case "$BASE" in https://*|http://127.0.0.1*) ;; *) state error "" 0 "PAGES_URL is not set in cloud.conf"; exit 1 ;; esac

@@ -1,0 +1,46 @@
+KITCHEN HUB 10.7 - DEALS WITH PHOTOS, A REAL PAGE 2, BIG THIS WEEK, SHIFT PICKER
+Installs by itself like any update: merge it on GitHub, then the fridge offers it ("Tell me") or you tap
+Settings > Updates > CHECK FOR UPDATE.
+
+DEALS
+ 1  The Deals page opens on a new DEALS tab: a card per deal with its photo, the sale price, the regular
+    price crossed out, the % off, and why it's there (on your wishlist, at your price, or like something
+    you watch). Photos arrive with the sync after the update.
+ 2  At least five deals whenever Best Buy has them: your wishlist first, then similar things on sale, then
+    the same kind of thing more broadly. Marketplace sellers' made-up "regular" prices don't count.
+ 3  The Deals tile shows the best deal with its photo, then a line per deal while there is room.
+
+HOME SCREEN
+ 4  Page 2 is a real page now. EDIT works on either page (EDIT PAGE 1 / EDIT PAGE 2 in the tray), and
+    PAGE 1 / PAGE 2 on a tile moves it across. Your layout carries over: what was hidden is on page 2.
+ 5  SHUFFLE (while editing): mark two or more tiles and they take turns in one spot, changing every 10,
+    15, 30 or 60 seconds (SHUFFLE EVERY in the tray). Only that spot redraws.
+ 6  MORE TILES: ON (in the tray): a finer grid, so more fits on each page.
+
+ALMANAC
+ 7  The Almanac tile leads with the biggest release of the week, for example "THIS WEEK Grand Theft
+    Auto VI - today".
+ 8  Tapping it opens the new Almanac. THIS WEEK: the week's biggest games, films and TV, each with
+    headlines from Google News, and for games and films the Best Buy price and related sales. LOCAL:
+    your week (shifts, events, holidays), road and weather alerts, Prince George news. SKY: the moon,
+    three days of sun times, and on this day.
+ 9  The cloud looks every 6 hours. "Biggest" means most widely covered on Wikipedia, so it is the
+    world's big releases, not only Canada's.
+
+CALENDAR
+10  Adding a shift without typing: on a day, tap PICK HOURS, then a start (5a to 4a), the minutes
+    (00, 15, 30, 45) and a length (4 to 12 h) or an end time. "(last wk)" copies last week's shift for
+    that day. TYPE still lets you type one.
+
+ASLEEP SCREEN
+11  Settings > Look > YOUR CARDS WHILE ASLEEP: up to two cards under the clock on the asleep screens -
+    Big this week, Top deal, Shopping list, 3-day forecast, Moon & sun, or a Joke or fact. The first card
+    starts as Big this week; set it to Off if you'd rather not have it.
+
+LOGS
+12  The hub sends its log to your private cloud gist (kindle-log.txt) once a day, and on the next sync
+    after something goes wrong (a failed start, an update undone, an install that failed). The log says
+    why it was sent. Tokens are blanked out, as before.
+
+FIXES
+13  The GitHub setup notes no longer show the passphrase.

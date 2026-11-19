@@ -8,4 +8,9 @@ Needs: sh, busybox, python3, curl, node.  From this folder:
    KH_TESTS=$(pwd) sh t7.sh     updater exit codes, rollback, tampered download
    KH_TESTS=$(pwd) sh t8.sh     update through the loop, half-installed version undone
    KH_TESTS=$(pwd) busybox sh t9.sh   sync with canned feeds, data.js parses
+   KH_TESTS=$(pwd) sh t10.sh    smart wake schedule (10.6)
+   KH_TESTS=$(pwd) busybox sh t11.sh  when the log goes to the cloud gist (10.7)
+   node cloud/deals.test.js     deals: wishlist, similar, broader fill (10.7)
+   node cloud/week.test.js      big this week: releases, headlines, related deals (10.7)
+   python3 whatsnew_gen.py 10.7 rebuild mesquite/whatsnew.js from UPDATE_10.7.txt
 Every line should say PASS.
