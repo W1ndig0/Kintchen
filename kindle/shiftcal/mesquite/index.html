@@ -544,6 +544,20 @@ body.look-bold .hv-hint, body.look-bold .fp-body, body.look-bold .ra-s, body.loo
 
 /* 9.8.5 */
 .gh-q { display: inline-block; vertical-align: top; width: 48%; margin-right: 1%; }
+.dv-pick { border: 2px solid #000; padding: .2em .4em .4em; margin-top: .4em; }
+.dv-pick .opt-btn.sm { padding: .15em .45em; margin: .12em; font-size: .85em; }
+/* 10.7 deal cards */
+.dl-card { display: inline-block; vertical-align: top; width: 47%; margin: 0 2% .8em 0; border: 3px solid #000; padding: .4em; box-sizing: border-box; min-height: 7.2em; position: relative; }
+.dl-card.wide { width: 98%; }
+.dl-img { float: left; width: 6.2em; height: 6.2em; margin-right: .6em; text-align: center; overflow: hidden; border: 1px solid #000; background: #fff; }
+.dl-img img { max-width: 100%; max-height: 100%; }
+.dl-off { position: absolute; top: 0; right: 0; background: #000; color: #fff; font-weight: 900; padding: .1em .45em; font-size: 1.15em; }
+.dl-t { font-weight: 700; line-height: 1.15; margin-right: 3.2em; max-height: 3.5em; overflow: hidden; }
+.dl-p { font-size: 1.6em; font-weight: 900; margin-top: .15em; }
+.dl-p s { font-size: .55em; font-weight: 400; margin-left: .4em; }
+.dl-why { font-size: .8em; letter-spacing: .05em; text-transform: uppercase; margin-top: .2em; }
+.dl-tile { overflow: hidden; }
+.dl-tile .dl-img { width: 4.6em; height: 4.6em; }
 .gh-qr { width: 8.5em; height: 8.5em; border: 3px solid #000; padding: .3em; float: left; margin-right: .6em; background: #fff; }
 /* 10.6: in the Phone tab's narrow column each code sits on its own line, text beside it */
 #ph-codes .gh-q { display: table; width: 100%; margin: 0 0 .7em 0; }
@@ -1731,6 +1745,7 @@ function fuelSvg(pct, c, b, charging) {
 // =====================================================================
 var TILE_IDS = ["cal", "clock", "wx", "fc", "news", "mkt", "alm", "shifts", "timer"];
 var TILE_NAMES = { cal: "Calendar", clock: "Clock", wx: "Weather", fc: "Forecast", news: "News", mkt: "Markets", alm: "Almanac", shifts: "Shifts", timer: "Timer" };
+var ROT = { cur: "", next: 0 };     // 10.7: the shuffle group's tile on show
 var DEFAULT_SZ = { cal: "XL", clock: "M", wx: "M", fc: "M", news: "M", mkt: "M", alm: "M", shifts: "M", timer: "S" };
 var SIZE_KEYS = ["S", "M", "L", "XL"];
 var SIZE_DIMS = {
@@ -1738,6 +1753,7 @@ var SIZE_DIMS = {
     port: { S: [1, 1], M: [2, 1], L: [2, 2], XL: [4, 3] }
 };
 var GRID_DIMS = { land: [4, 4], port: [4, 6] };
+function applyDensity() { GRID_DIMS.land = LAYOUT && LAYOUT.dense ? [6, 4] : [4, 4]; GRID_DIMS.port = LAYOUT && LAYOUT.dense ? [4, 7] : [4, 6]; }     // 10.7: MORE TILES
 var PRESETS = {
     classic:    { label: "Classic",    land: "cal:XL clock:M wx:M fc:M news:M",            port: "clock:M wx:M cal:XL fc:M news:M alm:M shifts:M" },
     newsreader: { label: "Newsreader", land: "news:XL clock:S wx:S cal:L fc:M",            port: "clock:M wx:M news:XL cal:L fc:L" },
@@ -1756,7 +1772,7 @@ function presetList(name, ok) {
         var p = spec[i].split(":");
         out.push({ id: p[0], sz: p[1], hid: 0 }); seen[p[0]] = 1;
     }
-    for (var j = 0; j < TILE_IDS.length; j++) if (!seen[TILE_IDS[j]]) out.push({ id: TILE_IDS[j], sz: DEFAULT_SZ[TILE_IDS[j]], hid: 1 });
+    for (var j = 0; j < TILE_IDS.length; j++) if (!seen[TILE_IDS[j]]) out.push({ id: TILE_IDS[j], sz: DEFAULT_SZ[TILE_IDS[j]], hid: 0, pg: 1 });     // 10.7: the rest go to page 2
     return out;
 }
 function normList(list) {
@@ -1766,10 +1782,10 @@ function normList(list) {
             var it = list[i];
             if (!it || !TILE_NAMES[it.id] || seen[it.id]) continue;
             seen[it.id] = 1;
-            out.push({ id: it.id, sz: SIZE_DIMS.land[it.sz] ? it.sz : DEFAULT_SZ[it.id], hid: it.hid ? 1 : 0 });
+            out.push({ id: it.id, sz: SIZE_DIMS.land[it.sz] ? it.sz : DEFAULT_SZ[it.id], hid: it.hid ? 1 : 0, pg: it.pg ? 1 : 0, rot: it.rot ? 1 : 0 });
         }
     }
-    for (i = 0; i < TILE_IDS.length; i++) if (!seen[TILE_IDS[i]]) out.push({ id: TILE_IDS[i], sz: DEFAULT_SZ[TILE_IDS[i]], hid: 1 });
+    for (i = 0; i < TILE_IDS.length; i++) if (!seen[TILE_IDS[i]]) out.push({ id: TILE_IDS[i], sz: DEFAULT_SZ[TILE_IDS[i]], hid: 0, pg: 1, rot: 0 });
     return out;
 }
 function loadLayout() {
@@ -1779,14 +1795,23 @@ function loadLayout() {
         try { var old = window.localStorage.getItem("pg_layout"); if (old === "newsreader" || old === "data") start = old; } catch (e2) {}
         LAYOUT = { preset: start, fill: 1, mast: 1, land: presetList(start, "land"), port: presetList(start, "port") };
     }
+    // 10.7: tiles belong to page 1 or page 2 (pg), or to the tray (hid). Before 10.7 page 2 was simply
+    // "every tile hidden on page 1", so those become page 2 tiles - the hub looks exactly the same.
+    if (LAYOUT.pv !== 2) {
+        var ls = [LAYOUT.land || [], LAYOUT.port || []];
+        for (var a = 0; a < 2; a++) for (var b = 0; b < ls[a].length; b++) if (ls[a][b] && ls[a][b].hid) { ls[a][b].hid = 0; ls[a][b].pg = 1; }
+        LAYOUT.pv = 2;
+    }
     LAYOUT.land = normList(LAYOUT.land); LAYOUT.port = normList(LAYOUT.port);
     if (LAYOUT.fill !== 0) LAYOUT.fill = 1;
     if (LAYOUT.mast !== 0) LAYOUT.mast = 1;
     if (LAYOUT.rank !== 0) LAYOUT.rank = 1;
     if (LAYOUT.bull !== 0) LAYOUT.bull = 1;
+    applyDensity();
 }
 function saveLayout() { try { window.localStorage.setItem("pg_tiles_v92", JSON.stringify(LAYOUT)); } catch (e) {} }
-function cloneList(l) { var o = []; for (var i = 0; i < l.length; i++) o.push({ id: l[i].id, sz: l[i].sz, hid: l[i].hid }); return o; }
+function cloneList(l) { var o = []; for (var i = 0; i < l.length; i++) o.push({ id: l[i].id, sz: l[i].sz, hid: l[i].hid, pg: l[i].pg || 0, rot: l[i].rot || 0 }); return o; }
+function onPage(it) { return !it.hid && (it.pg || 0) === PAGE; }
 function snapshotLayout() { LAYOUT.prev = { land: cloneList(LAYOUT.land), port: cloneList(LAYOUT.port), preset: LAYOUT.preset }; }
 function applyPreset(name) {
     snapshotLayout();
@@ -2728,8 +2753,8 @@ function sendPower(q, done) {
 function findItem(id) { var l = LAYOUT[orientKey()]; for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
 function traySig() {
     var l = LAYOUT[orientKey()], s = "";
-    for (var i = 0; i < l.length; i++) { var p = PLACED[l[i].id]; if (l[i].hid || (p && p.nofit)) s += l[i].id + (p && p.nofit ? "!" : "") + ","; }
-    return s;
+    for (var i = 0; i < l.length; i++) { var p = PLACED[l[i].id]; if (l[i].hid || (onPage(l[i]) && p && p.nofit)) s += l[i].id + (p && p.nofit ? "!" : "") + ","; }
+    return s + "|" + PAGE + "|" + (LAYOUT.dense ? 1 : 0) + "|" + (LAYOUT.rotSec || 15);
 }
 function enterEdit() {
     if (HUB_OPEN) { HUB_OPEN = false; $("hub-view").style.display = "none"; }
@@ -2758,12 +2783,14 @@ function edAction(id, act, val) {
     for (i = 0; i < list.length; i++) if (list[i].id === id) idx = i;
     if (act === "sz") it.sz = val;
     else if (act === "hide") it.hid = 1;
-    else if (act === "show") { it.hid = 0; list.splice(idx, 1); list.push(it); }
-    else if (act === "shrink") { it.hid = 0; it.sz = "S"; }
+    else if (act === "show") { it.hid = 0; it.pg = PAGE; list.splice(idx, 1); list.push(it); }
+    else if (act === "shrink") { it.hid = 0; it.pg = PAGE; it.sz = "S"; }
+    else if (act === "pg") { it.pg = PAGE === 1 ? 0 : 1; list.splice(idx, 1); list.push(it); }     // 10.7: to the other page
+    else if (act === "rot") it.rot = it.rot ? 0 : 1;                                                  // 10.7: shuffle group
     else if (act === "mv") {
         // move past the neighbouring visible tile
         var j = idx + val;
-        while (j >= 0 && j < list.length && list[j].hid) j += val;
+        while (j >= 0 && j < list.length && !onPage(list[j])) j += val;
         if (j < 0 || j >= list.length) return;
         list.splice(idx, 1); list.splice(j, 0, it);
     }
@@ -2775,7 +2802,7 @@ function renderEditOverlays() {
     removeEditOverlays();
     if (!EDIT) return;
     var ok = orientKey(), list = LAYOUT[ok], vis = [], i;
-    for (i = 0; i < list.length; i++) { var pp = PLACED[list[i].id]; if (!list[i].hid && pp && !pp.nofit) vis.push(list[i]); }
+    for (i = 0; i < list.length; i++) { var pp = PLACED[list[i].id]; if (onPage(list[i]) && pp && !pp.nofit && !pp.hidden) vis.push(list[i]); }
     for (i = 0; i < vis.length; i++) {
         var it = vis[i], p = PLACED[it.id], el = $("t-" + it.id);
         var ov = document.createElement("div");
@@ -2787,6 +2814,7 @@ function renderEditOverlays() {
         for (var s = 0; s < SIZE_KEYS.length; s++) h += "<span class='ed-b" + (SIZE_KEYS[s] === it.sz ? " sel" : "") + "' data-a='sz' data-v='" + SIZE_KEYS[s] + "'>" + SIZE_KEYS[s] + "</span>";
         h += "</div><div class='ed-row'>";
         h += "<span class='ed-b' data-a='mv' data-v='-1'>&#9664;</span><span class='ed-b' data-a='mv' data-v='1'>&#9654;</span><span class='ed-b x' data-a='hide' data-v=''>HIDE</span></div>";
+        h += "<div class='ed-row'><span class='ed-b' data-a='pg' data-v=''>" + (PAGE === 1 ? "&#9664; PAGE 1" : "PAGE 2 &#9654;") + "</span><span class='ed-b" + (it.rot ? " sel" : "") + "' data-a='rot' data-v=''>SHUFFLE</span></div>";     // 10.7
         if (p.grew) h += "<div class='ed-note'>&darr; stretched to fill the gap</div>";
         ov.innerHTML = h;
         el.appendChild(ov);
@@ -2806,7 +2834,7 @@ function renderTray(mid) {
     var lbl = document.createElement("span"); lbl.className = "tray-lbl"; lbl.innerHTML = "ADD:"; mid.appendChild(lbl);
     for (var i = 0; i < l.length; i++) {
         var p = PLACED[l[i].id];
-        if (!(l[i].hid || (p && p.nofit))) continue;
+        if (!(l[i].hid || (onPage(l[i]) && p && p.nofit))) continue;
         any = true;
         (function(it, nofit) {
             var c = document.createElement("span");
@@ -2817,6 +2845,11 @@ function renderTray(mid) {
         })(l[i], p && p.nofit);
     }
     if (!any) lbl.innerHTML = "ALL TILES SHOWN";
+    // 10.7: edit page 2 too (swiping is off while editing), shuffle speed, and a denser grid
+    var tc = [[PAGE === 1 ? "&#9664; EDIT PAGE 1" : "EDIT PAGE 2 &#9654;", function() { PAGE = PAGE === 1 ? 0 : 1; relayout(); }],
+              ["SHUFFLE EVERY " + (LAYOUT.rotSec || 15) + "s", function() { var o = [10, 15, 30, 60], k = o.indexOf(LAYOUT.rotSec || 15); LAYOUT.rotSec = o[(k + 1) % o.length]; saveLayout(); relayout(); }],
+              [LAYOUT.dense ? "MORE TILES: ON" : "MORE TILES: OFF", function() { LAYOUT.dense = LAYOUT.dense ? 0 : 1; applyDensity(); saveLayout(); relayout(); }]];
+    for (var q = 0; q < tc.length; q++) (function(t) { var c = document.createElement("span"); c.className = "tray-chip"; c.innerHTML = t[0]; bindTap(c, t[1]); mid.appendChild(c); })(tc[q]);
     var r = document.createElement("span"); r.className = "tray-chip"; r.innerHTML = "RESET";
     bindTap(r, function() { applyPreset("classic"); });
     mid.appendChild(r);
@@ -4612,12 +4645,12 @@ function renderMonthGrid() {
 }
 
 // ---------- the day sheet ----------
-var DAY = { k: "", rep: 1, pendTitle: "", min: "00" };
+var DAY = { k: "", rep: 1, pendTitle: "", min: "00", pick: null };     // 10.7: pick = {s: start minutes|null, m: "00"}
 function openDay(k) {
     if (EDIT) return;
     unpeek();
     goHome();
-    DAY.k = k || todayKey(); DAY.rep = 1; DAY.pendTitle = ""; DAY.min = "00";
+    DAY.k = k || todayKey(); DAY.rep = 1; DAY.pendTitle = ""; DAY.min = "00"; DAY.pick = null;
     $("day-view").style.display = "block";
     setView("day");
     layoutV96();
@@ -4635,6 +4668,35 @@ function recentShifts() {
     for (i = 0; i < base.length && out.length < 8; i++) if (!seen[base[i]]) out.push(base[i]);
     return out;
 }
+// 10.7 shift picker: start hour (+ minutes), then a length or an end hour. Saves 24-hour "07:30-15:30".
+function hhmm(min) { min = ((min % 1440) + 1440) % 1440; return pad2(Math.floor(min / 60)) + ":" + pad2(min % 60); }
+function shiftStr(s, e) {
+    var a = hhmm(s), b = hhmm(e);
+    if (a.substring(3) === "00" && b.substring(3) === "00") return a.substring(0, 2) + "-" + b.substring(0, 2);
+    return a + "-" + b;
+}
+function hrLbl(h) { h = ((h % 24) + 24) % 24; return (h % 12 || 12) + (h < 12 ? "a" : "p"); }
+function shiftPickerHtml() {
+    var P = DAY.pick, h = "<div class='dv-pick'>", i, hrs = [];
+    for (i = 5; i < 24; i++) hrs.push(i);
+    for (i = 0; i < 5; i++) hrs.push(i);
+    h += "<div class='hv-hint'>STARTS</div><div class='dv-chips'>";
+    for (i = 0; i < hrs.length; i++) h += "<span class='opt-btn sm" + (P.s === hrs[i] * 60 ? " sel" : "") + "' data-ps='" + hrs[i] * 60 + "'>" + hrLbl(hrs[i]) + "</span>";
+    h += "</div><div class='dv-chips'>";
+    var ms = ["00", "15", "30", "45"];
+    for (i = 0; i < 4; i++) h += "<span class='opt-btn sm" + (P.m === ms[i] ? " sel" : "") + "' data-pm='" + ms[i] + "'>&middot;" + ms[i] + "</span>";
+    h += "</div>";
+    if (P.s !== null) {
+        var st = P.s + parseInt(P.m, 10);
+        h += "<div class='hv-hint'>LENGTH (" + esc(HubCal.fmtTime(hhmm(st))) + " start)</div><div class='dv-chips'>";
+        var lens = [4, 6, 7.5, 8, 8.5, 9, 10, 12];
+        for (i = 0; i < lens.length; i++) h += "<span class='opt-btn sm' data-pl='" + lens[i] * 60 + "'>" + lens[i] + "h &rarr; " + esc(HubCal.fmtTime(hhmm(st + lens[i] * 60))) + "</span>";
+        h += "</div><div class='hv-hint'>OR ENDS AT</div><div class='dv-chips'>";
+        for (i = 1; i <= 14; i++) { var en = Math.round((st + i * 60) / 60) * 60; h += "<span class='opt-btn sm' data-pe='" + (en % 1440) + "'>" + hrLbl(en / 60) + "</span>"; }
+        h += "</div>";
+    }
+    return h + "</div>";
+}
 function renderDay() {
     var k = DAY.k, hol = HubCal.holiday(k), v = SHIFTS[k] || "", evs = EVENTS[k] || [], h = "", i;
     $("dv-ttl").innerHTML = esc(prettyDay(k).toUpperCase());
@@ -4646,7 +4708,11 @@ function renderDay() {
     h += "<div class='dv-chips'>";
     var rs = recentShifts();
     for (i = 0; i < rs.length; i++) h += "<span class='opt-btn" + (rs[i] === v ? " sel" : "") + "' data-sh='" + esc(rs[i]) + "'>" + esc(shortShift(rs[i])) + "</span>";
-    h += "<span class='opt-btn' data-sh='OFF'>OFF</span><span class='opt-btn' data-sh='__type'>TYPE&hellip;</span>" + (v ? "<span class='opt-btn' data-sh=''>CLEAR</span>" : "") + "</div>";
+    // 10.7: last week's shift in one tap, and a start/length picker so nothing needs typing
+    var lw = SHIFTS[addDays(k, -7)];
+    if (lw && !isOff(lw) && lw !== v && rs.indexOf(lw) < 0) h += "<span class='opt-btn' data-sh='" + esc(lw) + "'>" + esc(shortShift(lw)) + " (last wk)</span>";
+    h += "<span class='opt-btn' data-sh='OFF'>OFF</span><span class='opt-btn" + (DAY.pick ? " sel" : "") + "' data-sh='__pick'>PICK HOURS&hellip;</span><span class='opt-btn' data-sh='__type'>TYPE</span>" + (v ? "<span class='opt-btn' data-sh=''>CLEAR</span>" : "") + "</div>";
+    if (DAY.pick) h += shiftPickerHtml();
     h += "<div class='hv-lbl' style='margin-top:.7em'>Also apply to</div><div class='dv-chips'>";
     var reps = [[1, "Just this day"], [7, "Next 7 days"], [14, "14"], [28, "28"]];
     for (i = 0; i < reps.length; i++) h += "<span class='opt-btn" + (DAY.rep === reps[i][0] ? " sel" : "") + "' data-rep='" + reps[i][0] + "'>" + reps[i][1] + "</span>";
@@ -4675,10 +4741,16 @@ function bindDay() {
     for (i = 0; i < L.length; i++) (function(el) {
         var sh = el.getAttribute("data-sh"), rep = el.getAttribute("data-rep");
         if (sh !== null) bindTap(el, function() {
+            if (sh === "__pick") { DAY.pick = DAY.pick ? null : { s: null, m: "00" }; renderDay(); return; }
             if (sh === "__type") { kbOpen("Shift for " + prettyDay(DAY.k) + " (e.g. 9-5, 1-7:15p, 07-15)", SHIFTS[DAY.k] || "", function(t) { if (t !== null) saveDayShift(t); }); return; }
             saveDayShift(sh);
         });
         if (rep !== null) bindTap(el, function() { DAY.rep = parseInt(rep, 10); renderDay(); });
+        var ps = el.getAttribute("data-ps"), pm = el.getAttribute("data-pm"), pl = el.getAttribute("data-pl"), pe = el.getAttribute("data-pe");
+        if (ps !== null) bindTap(el, function() { DAY.pick.s = parseInt(ps, 10); renderDay(); });
+        if (pm !== null) bindTap(el, function() { DAY.pick.m = pm; renderDay(); });
+        if (pl !== null) bindTap(el, function() { var st = DAY.pick.s + parseInt(DAY.pick.m, 10); DAY.pick = null; saveDayShift(shiftStr(st, st + parseInt(pl, 10))); });
+        if (pe !== null) bindTap(el, function() { var st = DAY.pick.s + parseInt(DAY.pick.m, 10), en = parseInt(pe, 10); DAY.pick = null; saveDayShift(shiftStr(st, en <= st ? en + 1440 : en)); });
     })(L[i]);
     for (i = 0; i < R.length; i++) (function(el) {
         var t = el.getAttribute("data-t"), mn = el.getAttribute("data-min"), x = el.getAttribute("data-x");
@@ -4741,11 +4813,11 @@ var SWIPE_INFO = {
 var NEWS_OFF = 0, RCP_OFF = 0;
 function hasPage2() {
     var l = LAYOUT[orientKey()];
-    for (var i = 0; i < l.length; i++) if (l[i].hid) return true;
+    for (var i = 0; i < l.length; i++) if (!l[i].hid && l[i].pg === 1) return true;     // 10.7: real page-2 tiles
     return false;
 }
 function setPage(p) {
-    if (p === PAGE || (p === 1 && !hasPage2())) return;
+    if (p === PAGE || (p === 1 && !hasPage2() && !EDIT)) return;
     PAGE = p; unpeek(); relayout();
 }
 function tileAt(cx, cy) {
@@ -4848,8 +4920,22 @@ function dayPart() {
 // the list the packer sees: page 2 swaps shown/hidden; "through the day" grows one timely tile a size
 function effectiveList(list, cols, rows, ok) {
     var l = [], i;
-    for (i = 0; i < list.length; i++) l.push({ id: list[i].id, sz: list[i].sz, hid: list[i].hid });
-    if (PAGE === 1 && !EDIT) for (i = 0; i < l.length; i++) l[i].hid = l[i].hid ? 0 : 1;
+    // 10.7: only this page's tiles; a shuffle group shares the slot of its first tile, one tile at a time
+    var grp = [];
+    for (i = 0; i < list.length; i++) {
+        var on = onPage(list[i]);
+        l.push({ id: list[i].id, sz: list[i].sz, hid: on ? 0 : 1 });
+        if (on && list[i].rot && !EDIT) grp.push(i);
+    }
+    if (grp.length > 1) {
+        var cur = -1;
+        for (i = 0; i < grp.length; i++) if (list[grp[i]].id === ROT.cur) cur = i;
+        if (cur < 0) { cur = 0; ROT.cur = list[grp[0]].id; }
+        var slot = grp[0], show = grp[cur];
+        for (i = 0; i < grp.length; i++) l[grp[i]].hid = 1;
+        l[slot] = { id: list[show].id, sz: list[slot].sz, hid: 0 };
+        if (show !== slot) l[show] = { id: list[slot].id, sz: list[slot].sz, hid: 1 };
+    }
     if (!FEEL.dyn || EDIT || PEEKED) return l;
     var pri = dayPart()[3];
     for (var p = 0; p < pri.length; p++) {
@@ -8910,6 +8996,70 @@ railLayout = function() {
     try { __railLayout106(); } finally { FEEL.rail = keep; }
 };
 relayout();
+// =====================  10.7: SHUFFLE TILE  =====================
+// Tiles marked SHUFFLE (edit mode) on the page on show share the slot of the first one and take turns every
+// LAYOUT.rotSec seconds while the hub is awake on the home screen. Only that slot repaints (e-ink).
+function shuffleGroup() {
+    var l = LAYOUT[orientKey()], g = [];
+    for (var i = 0; i < l.length; i++) if (onPage(l[i]) && l[i].rot) g.push(l[i].id);
+    return g;
+}
+function shuffleStep() {
+    var g = shuffleGroup();
+    if (g.length < 2 || EDIT || HUB.sleeping || HUB_OPEN || currentView !== "main" || PEEKED) return;
+    var now = new Date().getTime(), sec = (LAYOUT.rotSec || 15) * 1000;
+    if (!ROT.next) { ROT.next = now + sec; return; }
+    if (now < ROT.next) return;
+    ROT.next = now + sec;
+    var cur = g.indexOf(ROT.cur); if (cur < 0) cur = 0;
+    var nx = g[(cur + 1) % g.length], old = ROT.cur && PLACED[ROT.cur] && !PLACED[ROT.cur].hidden ? ROT.cur : g[0];
+    var po = PLACED[old], eo = $("t-" + old), en = $("t-" + nx);
+    if (!po || po.hidden || po.nofit || !eo || !en || nx === old) { ROT.cur = nx; relayout(); return; }
+    var pn = {}; for (var k in po) if (po.hasOwnProperty(k)) pn[k] = po[k];
+    PLACED[nx] = pn; PLACED[old] = { hidden: 1 };
+    var st = ["left", "top", "width", "height", "borderRightWidth", "borderBottomWidth"];
+    for (var i = 0; i < st.length; i++) en.style[st[i]] = eo.style[st[i]];
+    en.className = eo.className; en.style.display = "block"; eo.style.display = "none";
+    ROT.cur = nx;
+    renderTileById(nx);
+}
+setInterval(shuffleStep, 1000);
+// =====================  10.7: DEALS PAGE  =====================
+// The cloud brain sends EX.deals: wishlist items on sale first, then similar items on sale (same searches,
+// or the same category when there are fewer than five). Photos are downloaded by the Kindle into img/.
+function dealWhy(d) { return d.kind === "target" ? "&#9733; at your price" : d.kind === "wish" ? "on your wishlist" : "like your " + esc(String(d["for"] || "").substring(0, 28)); }
+function dealCard(d, wide) {
+    return "<div class='xr dl-card" + (wide ? " wide" : "") + "'>" + (d.off ? "<span class='dl-off'>&minus;" + d.off + "%</span>" : "") +
+        "<div class='dl-img'>" + (d.img ? "<img src='" + esc(d.img) + "' onerror='this.style.display=\"none\"'>" : "") + "</div>" +
+        "<div class='dl-t'>" + esc(d.title) + "</div>" +
+        "<div class='dl-p'>" + $m(d.price) + (d.reg > d.price ? "<s>" + $m(d.reg) + "</s>" : "") + "</div>" +
+        "<div class='dl-why'>" + dealWhy(d) + (d.clear ? " &middot; clearance" : "") + (d.ends ? " &middot; ends " + esc(String(d.ends).substring(5, 10)) : "") + " &middot; " + esc(d.store || "Best Buy") + "</div></div>";
+}
+function dealCards() {
+    var ds = (EX && EX.deals) || [], h = "", wide = PORTRAIT;
+    var hol = bigSaleDays();
+    h += "<div class='xv-bar'>" + btn("wishAdd", "", "+ WATCH SOMETHING", "big sel") + " <span class='hv-hint'>" + (hol ? "<b>" + hol + "</b> &middot; " : "") +
+         "Deals on your wishlist and things like it, from Best Buy. Photos arrive with the next sync.</span></div>";
+    if (!ds.length) return h + "<div class='sv-empty'>" + (recs("wish").length ? "No sales on your wishlist (or things like it) right now. The cloud checks every 3 h." : "Add something to watch and the deals show up here.") + "</div>";
+    for (var i = 0; i < ds.length; i++) h += dealCard(ds[i], wide);
+    return h;
+}
+XV_TABS.deals = ["DEALS", "WISHLIST", "FLYERS", "HOT DEALS"];
+var __xvrDeals107 = XVR.deals;
+XVR.deals = function(tab) { return tab === 0 ? dealCards() : __xvrDeals107(tab - 1); };
+// the tile: the best deal with its photo, then a line per deal while there is room
+var __dealsTile107 = TILE_RENDER.deals;
+TILE_RENDER.deals = function(T) {
+    var ds = (EX && EX.deals) || [];
+    if (!ds.length) return __dealsTile107(T);
+    var d = ds[0], cd = saleCountdown(), h = "<span class='stamp'>Deals</span>";
+    if (cd) h += "<div class='tl-r'><b>" + cd + "</b></div>";
+    h += "<div class='dl-tile'>" + (T.cls !== "s" && d.img ? "<div class='dl-img'><img src='" + esc(d.img) + "' onerror='this.style.display=\"none\"'></div>" : "") +
+         "<div class='tl-r'><b>" + esc(d.title) + "</b></div><div class='tl-r'><b>" + $m(d.price) + "</b>" + (d.reg > d.price ? " <s>" + $m(d.reg) + "</s> &minus;" + d.off + "%" : "") + "</div>" +
+         "<div class='tl-r tl-s'>" + dealWhy(d) + "</div></div>";
+    for (var i = 1; i < ds.length && i < (T.cls === "s" ? 1 : T.cls === "m" ? 3 : 7); i++) h += "<div class='tl-r'>" + esc(String(ds[i].title).substring(0, 40)) + " <b>" + $m(ds[i].price) + "</b> &minus;" + ds[i].off + "%</div>";
+    tileFill("deals", T, h);
+};
 </script>
 </body>
 </html>

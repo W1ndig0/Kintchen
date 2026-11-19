@@ -61,15 +61,15 @@ if [ "$1" != "search" ] && [ -z "$CLOUD_BUNDLE" ] && [ "${USE_CLOUD_DATA:-1}" = 
             rm -f "$MESQ/.bundle_list"
             NI=0
             grep '^@@IMG img/[0-9a-z]*\.\(jpg\|png\|gif\) http' "$BP" | while read -r X P U; do
-                [ -f "$MESQ/$P" ] && continue
-                [ "$NI" -ge 8 ] && break
+                [ -f "$MESQ/$P" ] && { touch "$MESQ/$P"; continue; }     # 10.7: still in use - keep it through the trim
+                [ "$NI" -ge 12 ] && break
                 kcurl -sL $IMGMAX --connect-timeout 4 --max-time 10 -A "Mozilla/5.0" -o "$MESQ/$P.part" "$U" 2>/dev/null
                 SIG=$(od -An -tx1 -N4 "$MESQ/$P.part" 2>/dev/null | tr -d ' \n')
                 case "$SIG" in ffd8*|89504e47|47494638) mv "$MESQ/$P.part" "$MESQ/$P"; NI=$((NI + 1)) ;; *) rm -f "$MESQ/$P.part" ;; esac
             done
             ls -1t "$MESQ/rcp" 2>/dev/null | tail -n +61 | while read F; do rm -f "$MESQ/rcp/$F"; done
             COUNT=$(ls -1 "$IMG_DIR" 2>/dev/null | wc -l)
-            [ "$COUNT" -gt 40 ] && ls -1t "$IMG_DIR" | tail -n +41 | while read F; do rm -f "$IMG_DIR/$F"; done
+            [ "$COUNT" -gt 60 ] && ls -1t "$IMG_DIR" | tail -n +61 | while read F; do rm -f "$IMG_DIR/$F"; done     # 10.7: news + deal photos
             rm -f "$BP"; date +%s > "$DIR/.cloud_data_at"
             echo "Cloud data: $NF files from the cloud brain ($((AGE / 60)) min old) - skipped the direct fetches"
             exit 0

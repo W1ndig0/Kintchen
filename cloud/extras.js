@@ -12,6 +12,15 @@ function bigSale(now) {     // Black Friday week + Boxing week: check hot deals 
 }
 // a pantry name as it would appear in a recipe's ingredient line ("Leftovers: chili" -> "chili", "Eggs" -> "egg")
 function ingWord(name) { return String(name || "").toLowerCase().replace(/^leftovers?:\s*/, "").replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim().replace(/(es|s)$/, ""); }
+// 10.7: a Best Buy product on sale -> a deal card (the photo is downloaded by the Kindle: img/d<hash>.jpg)
+const crypto = require("crypto");
+function onSale(p) { const s = +p.salePrice, r = +p.regularPrice; return s > 0 && r > 0 && s < r - 0.5; }
+function bbDeal(p) {
+    const price = +p.salePrice || +p.regularPrice || 0, reg = +p.regularPrice || price, src = String(p.thumbnailImage || "");
+    const img = /^https:\/\/[^\s"'<>]+$/.test(src) ? "img/d" + crypto.createHash("md5").update(src).digest("hex").slice(0, 12) + (/\.png(\?|$)/i.test(src) ? ".png" : ".jpg") : "";
+    return { sku: String(p.sku || ""), title: String(p.name || "").slice(0, 90), price, reg, off: reg > price ? Math.round((1 - price / reg) * 100) : 0,
+             img, src: img ? src : "", url: p.productUrl ? "https://www.bestbuy.ca" + p.productUrl : "", ends: p.saleEndDate || "", clear: !!p.isClearance, store: "Best Buy" };
+}
 module.exports = async function runExtras(ctx) {
     const { items, push, sent, mark, NOW, TODAY, TOMORROW, HOUR, DOW, addK, get, HubCal, decodeEnts, log } = ctx;
     const PC = ctx.pantryCfg || { on: { remind: true, cook: true } };
@@ -21,7 +30,7 @@ module.exports = async function runExtras(ctx) {
     const due = (key, mins) => !st[key + "At"] || NOW - st[key + "At"] > mins * 60000 || NOW < st[key + "At"];
     const J = async (u, ms) => { const t = await get(u, ms || 15000, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KitchenHub", Accept: "application/json" } }); try { return t ? JSON.parse(t) : null; } catch (e) { return null; } };
     const quiet = HOUR < 7 || HOUR >= 22;
-    const out = { ts: Math.floor(NOW / 1000), wish: [], flyers: [], hot: [], trivia: null, wotd: null, nhl: [], money: null, pantry: [], pkgs: [], cook: [] };
+    const out = { ts: Math.floor(NOW / 1000), deals: [], wish: [], flyers: [], hot: [], trivia: null, wotd: null, nhl: [], money: null, pantry: [], pkgs: [], cook: [] };
 
     // ---------------- wishlist: Best Buy Canada prices ----------------
     const wishes = items("wish").filter(w => w.state === "open" && w.text).map(w => ({ id: w.id, ...HubCal.parseRec("wish", w.text) }));
@@ -31,14 +40,16 @@ module.exports = async function runExtras(ctx) {
         const order = wishes.slice().sort((a, b) => ((st.wish[a.id] || {}).at || 0) - ((st.wish[b.id] || {}).at || 0));
         for (const w of order.slice(0, 12)) {
             const q = encodeURIComponent(w.query || w.name);
-            const j = await J("https://www.bestbuy.ca/api/v2/json/search?query=" + q + "&lang=en-CA&pageSize=5&sortBy=relevance");
+            const j = await J("https://www.bestbuy.ca/api/v2/json/search?query=" + q + "&lang=en-CA&pageSize=12&sortBy=relevance");
             if (!j || !Array.isArray(j.products) || !j.products.length) continue;
             const p = j.products.find(x => x.isVisible !== false) || j.products[0];
             const s = st.wish[w.id] = st.wish[w.id] || { hist: [] };
             s.at = NOW;
             const price = +p.salePrice || +p.regularPrice, last = s.price;
             s.title = p.name; s.price = price; s.reg = +p.regularPrice || price; s.url = "https://www.bestbuy.ca" + (p.productUrl || ""); s.img = p.thumbnailImage || ""; s.sku = p.sku;
-            s.ends = p.saleEndDate || ""; s.clear = !!p.isClearance;
+            s.ends = p.saleEndDate || ""; s.clear = !!p.isClearance; s.cat = p.categoryName || s.cat || "";
+            // 10.7: other results of the same search that are on sale = "similar items on sale" for the Deals page
+            s.sales = j.products.filter(x => x !== p && x.isVisible !== false && onSale(x)).map(bbDeal).sort((a, b) => b.off - a.off).slice(0, 4);
             if (!s.hist.length || s.hist[s.hist.length - 1][1] !== price) s.hist.push([Math.floor(NOW / 1000), price]);
             if (s.hist.length > 60) s.hist = s.hist.slice(-60);
             s.low = Math.min.apply(null, s.hist.map(h => h[1]));
@@ -52,6 +63,26 @@ module.exports = async function runExtras(ctx) {
         }
         log("wishlist: " + n + "/" + wishes.length + " priced");
     }
+    // ---------------- 10.7: the Deals page - at least five deals from your wishlist ----------------
+    // 1 wishlist items on sale (or at your target), 2 similar items on sale from the same searches,
+    // 3 if still fewer than five: a broader search (the item's category, or its first words) for sales.
+    const seenSku = {}, deals = [];
+    const addDeal = (d, kind, forName) => { if (!d || !d.price || (d.sku && seenSku[d.sku])) return; if (d.sku) seenSku[d.sku] = 1; deals.push(Object.assign({ kind, for: forName }, d)); };
+    for (const w of wishes) { const s = st.wish[w.id]; if (s && s.price && (s.price < s.reg - 0.5 || (w.target > 0 && s.price <= w.target))) addDeal(bbDeal({ sku: s.sku, name: s.title, salePrice: s.price, regularPrice: s.reg, thumbnailImage: s.img, productUrl: (s.url || "").replace("https://www.bestbuy.ca", ""), saleEndDate: s.ends, isClearance: s.clear }), w.target > 0 && s.price <= w.target ? "target" : "wish", w.name); }
+    const sim = [];
+    for (const w of wishes) { const s = st.wish[w.id]; (s && s.sales || []).forEach(d => sim.push([d, w.name])); }
+    sim.sort((a, b) => b[0].off - a[0].off).forEach(x => addDeal(x[0], "similar", x[1]));
+    if (wishes.length && deals.length < 5 && due("fill", 360)) {
+        st.fillAt = NOW; st.fill = [];
+        for (const w of wishes.slice(0, 3)) {
+            const s = st.wish[w.id] || {}, q = s.cat || String(w.query || w.name).split(/\s+/).slice(0, 2).join(" ");
+            const j = await J("https://www.bestbuy.ca/api/v2/json/search?query=" + encodeURIComponent(q) + "&lang=en-CA&pageSize=24&sortBy=relevance");
+            if (j && Array.isArray(j.products)) j.products.filter(x => x.isVisible !== false && onSale(x)).map(bbDeal).sort((a, b) => b.off - a.off).slice(0, 6).forEach(d => st.fill.push(Object.assign({ like: w.name }, d)));
+        }
+        log("deals: broader search added " + st.fill.length);
+    }
+    if (deals.length < 5) (st.fill || []).forEach(d => addDeal(d, "similar", d.like));
+    out.deals = deals.slice(0, 12);
     for (const w of wishes) {
         const s = st.wish[w.id] || {};
         out.wish.push({ id: w.id, name: w.name, target: w.target, title: s.title || "", price: s.price || 0, reg: s.reg || 0, low: s.low || 0, url: s.url || "", ends: s.ends || "", clear: !!s.clear, hist: (s.hist || []).slice(-20).map(h => h[1]), hit: !!(w.target && s.price && s.price <= w.target), sale: !!(s.reg && s.price && s.price < s.reg) });
