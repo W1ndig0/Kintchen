@@ -3,6 +3,7 @@
 export KH_TESTS
 # usage: . env.sh   -> fresh test folder in $KT, hub copy in $HUB_DIR
 export STUB=$KH_TESTS/stub
+chmod +x "$STUB"/* "$KH_TESTS"/fake/* 2>/dev/null     # GitHub web uploads drop the executable flag
 export KT=$(mktemp -d /tmp/khtest.XXXX)
 cp -r $KH_TESTS/../kindle/shiftcal "$KT/hub"
 export HUB_DIR="$KT/hub" HUB_TEST=1 HUB_APPREG="$KT/appreg.db" HUB_SYS_POWER_STATE="$KT/power_state"

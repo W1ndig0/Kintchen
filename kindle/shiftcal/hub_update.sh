@@ -78,6 +78,13 @@ if [ "$1" = "auto" ] && [ "$N" != "0" ] && grep -qx "$NV" "$ST/bad" 2>/dev/null;
     state available "$NV" "$N" "$NV was rolled back before - install it by hand if you want it"; say "auto: $NV is marked bad, skipping"; exit 2
 fi
 [ -n "$NV" ] || { state error "" 0 "the manifest on your site has no version"; say "manifest without a version"; exit 1; }
+# 10.6: never go backwards by "update" (GO BACK TO THE PREVIOUS VERSION is the way back). 1 if $1 is older than $2.
+older() { awk -v a="$1" -v b="$2" 'BEGIN { n = split(a, x, "."); m = split(b, y, "."); k = n > m ? n : m
+    for (i = 1; i <= k; i++) { p = x[i] + 0; q = y[i] + 0; if (p < q) { print 1; exit } if (p > q) { print 0; exit } } print 0 }'; }
+if [ "$N" != "0" ] && [ -n "$CUR" ] && [ "$(older "$NV" "$CUR")" = "1" ]; then
+    state current "$NV" 0 "Your site has $NV, older than the $CUR on the fridge - upload the newer kit to GitHub"
+    say "site has $NV, older than $CUR - not installing"; exit 2
+fi
 if [ "$1" = "check" ] || [ "$N" = "0" ]; then
     if [ "$N" = "0" ]; then state current "$NV" 0 "Up to date"; say "up to date ($NV)"
     else state available "$NV" "$N" "$N files to update"; say "update available: $NV, $N files"; fi
