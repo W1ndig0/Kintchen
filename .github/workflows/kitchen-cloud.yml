@@ -2,7 +2,7 @@
 # Needs repository secrets (Settings > Secrets and variables > Actions > New repository secret):
 #   GIST_ID     your list gist id (same as cloud.conf on the Kindle)
 #   GIST_TOKEN  a token that can read/write gists (same as cloud.conf GH_TOKEN, or a new one)
-#   HUB_PASS    your passphrase (Holy)
+#   HUB_PASS    your passphrase (the same one as PASSPHRASE in cloud.conf - never write it in this file)
 #   NTFY_TOPIC  the phone alert topic (Kindle Settings > Phone shows it)
 name: kitchen-cloud
 on:

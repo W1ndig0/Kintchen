@@ -447,7 +447,8 @@ async function main() {
     try {
         const cur = cloudFiles["bundle.txt"] ? cloudFiles["bundle.txt"].content : prevBundle;
         if (EX && Array.isArray(EX.deals) && cur && /\n@@END\n?$/.test(cur)) {
-            const want = EX.deals.filter(d => d.img && /^img\/d[0-9a-f]{12}\.(jpg|png)$/.test(d.img) && /^https:\/\/\S+$/.test(d.src)).map(d => "@@IMG " + d.img + " " + d.src);
+            const all = EX.deals.concat(...((EX.week && EX.week.events) || []).map(e => e.deals || []));
+            const want = all.filter(d => d.img && /^img\/d[0-9a-f]{12}\.(jpg|png)$/.test(d.img) && /^https:\/\/\S+$/.test(d.src)).map(d => "@@IMG " + d.img + " " + d.src).filter((l, i, arr) => arr.indexOf(l) === i);
             const kept = cur.replace(/\n@@END\n?$/, "").split("\n").filter(l => !/^@@IMG img\/d[0-9a-f]{12}\./.test(l));
             const next = kept.concat(want).join("\n") + "\n@@END\n";
             if (next !== cur) { cloudFiles["bundle.txt"] = { content: next }; log("deals: " + EX.deals.length + " (" + want.length + " photos)"); }

@@ -1,0 +1,16 @@
+# TEMPORARY (10.7 development): runs tests/probe/week_probe.js on GitHub to check the live sources. Removed before merge.
+name: probe-107
+on:
+  push:
+    branches: [hub-10.7]
+    paths: [tests/probe/**]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node tests/probe/week_probe.js

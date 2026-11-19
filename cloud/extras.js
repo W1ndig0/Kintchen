@@ -83,6 +83,13 @@ module.exports = async function runExtras(ctx) {
     }
     if (deals.length < 5) (st.fill || []).forEach(d => addDeal(d, "similar", d.like));
     out.deals = deals.slice(0, 12);
+    // ---------------- 10.7: big this week (Almanac): releases + related headlines and deals ----------------
+    if (!st.week || due("week", 360)) {
+        st.weekAt = NOW;
+        try { const wk = await require("./week.js")({ get, TODAY, addK, log, decodeEnts, bbDeal, onSale }); if (wk && (wk.events.length || !st.week)) st.week = wk; }
+        catch (e) { log("week failed: " + String(e.message || e).slice(0, 80)); }
+    }
+    out.week = st.week || null;
     for (const w of wishes) {
         const s = st.wish[w.id] || {};
         out.wish.push({ id: w.id, name: w.name, target: w.target, title: s.title || "", price: s.price || 0, reg: s.reg || 0, low: s.low || 0, url: s.url || "", ends: s.ends || "", clear: !!s.clear, hist: (s.hist || []).slice(-20).map(h => h[1]), hit: !!(w.target && s.price && s.price <= w.target), sale: !!(s.reg && s.price && s.price < s.reg) });
