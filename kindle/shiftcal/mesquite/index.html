@@ -1581,7 +1581,7 @@ function exitHub() {
 // =====================================================================
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.6";
+var VERSION = "10.7";
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
 var EDIT = false;
@@ -9076,7 +9076,7 @@ cleanEX = function(x) {
     if (!x) return x;
     function arr(a) { return a instanceof Array ? a : []; }
     function dl(d) { return d && d.title && +d.price > 0 ? { title: String(d.title), price: +d.price, reg: +d.reg || +d.price, off: Math.max(0, Math.round(+d.off || 0)), img: /^img\/d[0-9a-f]{12}\.(jpg|png)$/.test(String(d.img || "")) ? String(d.img) : "",
-        kind: String(d.kind || ""), "for": String(d["for"] || ""), ends: String(d.ends || ""), clear: !!d.clear, store: String(d.store || "") } : null; }
+        kind: String(d.kind || ""), "for": String(d["for"] || ""), also: String(d.also || ""), ends: String(d.ends || ""), clear: !!d.clear, store: String(d.store || "") } : null; }
     x.deals = arr(x.deals).map(dl).filter(function(d) { return d; });
     var w = x.week;
     if (w && typeof w === "object") {
@@ -9105,7 +9105,7 @@ function wkDay(d) {
 var WK_KIND = { game: "GAME", film: "FILM", tv: "TV" };
 function agoTxt(at) { if (!at) return ""; var h = Math.round((new Date().getTime() / 1000 - at) / 3600); return h < 1 ? "just now" : h < 24 ? h + " h ago" : Math.round(h / 24) + " d ago"; }
 var __dealWhy107 = dealWhy;
-dealWhy = function(d) { return d.kind === "rel" ? "goes with " + esc(String(d["for"]).substring(0, 30)) : __dealWhy107(d); };
+dealWhy = function(d) { return d.kind !== "rel" ? __dealWhy107(d) : d.also ? "also on sale in " + esc(d.also) : "the new release"; };
 function almWeekHtml() {
     var ev = weekEvents(), h = "", i, j;
     if (!ev.length) return "<div class='sv-empty'>" + (EX && EX.week ? "No big game, film or TV releases this week." : "The big releases of the week arrive with the next sync (the cloud looks every 6 hours).") + "</div>";
