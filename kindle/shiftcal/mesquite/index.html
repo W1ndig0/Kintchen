@@ -621,6 +621,7 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
 .ap-card.big { border-width: 4px; }
 .ap-card.big .ap-ic { width: 2.6em; height: 2.6em; }
 .ap-card.big .ap-n { font-size: 1.35em; font-weight: 900; }
+.ap-card.big .ap-tm { top: auto; bottom: .55em; left: .6em; right: auto; }      /* 10.8: under the name, now that cards are smaller */
 .ap-nav { position: absolute; left: 0; right: 0; text-align: center; white-space: nowrap; overflow: hidden; }
 .ap-nav .opt-btn.big { margin-top: 0; }
 .ap-nav #ap-prev { float: left; } .ap-nav #ap-next { float: right; }
@@ -6679,7 +6680,7 @@ appList = function() {
     return out;
 };
 renderApps = function() {
-    var L = appList(), box = $("ap-grid"), cols = PORTRAIT ? 2 : 3, rows = PORTRAIT ? 3 : 2, per = cols * rows, h = "", i;
+    var L = appList(), box = $("ap-grid"), cols = PORTRAIT ? 3 : 4, rows = PORTRAIT ? 4 : 3, per = cols * rows, h = "", i;      // 10.8: 12 a page (was 6 big, mostly empty cards)
     var pages = Math.ceil(L.length / per); if (APPS_PAGE >= pages) APPS_PAGE = 0;
     var mast = $("apps-view").getElementsByClassName("ov-mast")[0].offsetHeight, nav = Math.round(FS * 3.2);
     var gw = W - FS, gh = $("apps-view").clientHeight - mast - FS - nav;
@@ -9369,6 +9370,70 @@ tagReserve = function() {
     css.textContent = ".asleep.wk-r .fp-mast .fp-r { padding-right: 3.4em; } .asleep.wk-l .fp-mast .fp-l { padding-left: 3.4em; }";
     document.getElementsByTagName("head")[0].appendChild(css);
 })();
+// =====================  10.8: ALMANAC TILE FILLS ITS SPACE  =====================
+// Its lines never wrapped, so a narrow tile shrank the text to fit the width and left the bottom half empty.
+// Now it also tries a stacked version (sunrise and sunset on their own lines, the week's releases as a
+// list) and keeps whichever lets the text be bigger.
+(function() {
+    var css = document.createElement("style");
+    css.textContent = ".al-wk { font-family: Helvetica, Arial, sans-serif; border-bottom: 2px solid #000; padding-bottom: .25em; margin-bottom: .35em; }" +
+        ".al-wk .al-wh { font-weight: 900; font-size: .55em; letter-spacing: .16em; }" +
+        ".al-wk .al-wi { font-size: .75em; line-height: 1.2; } .al-wk .al-wi b { font-family: Georgia, serif; } .al-wdy { font-size: .62em; font-weight: 900; letter-spacing: .12em; }" +
+        ".al-st .al-sun, .al-st .al-day, .al-st .al-sub, .al-st .al-phase { white-space: normal; }";
+    document.getElementsByTagName("head")[0].appendChild(css);
+})();
+function almTileHtml(T, stack) {
+    var today = new Date(), syn = 29.53058867, age = moonPhase(today), idx = moonPhaseIndex(today), h = "", i;
+    var ev = weekEvents(), nev = stack ? Math.min(ev.length, T.tall ? 3 : 2) : Math.min(ev.length, 1);
+    if (nev) {
+        h += "<div class='al-wk'><div class='al-wh'>BIG THIS WEEK</div>";
+        for (i = 0; i < nev; i++) h += "<div class='al-wi'><span class='al-wdy'>" + esc(wkDay(ev[i].date).toUpperCase()) + "</span> <b>" + esc(ev[i].t) + "</b></div>";
+        h += "</div>";
+    }
+    var sub = (age < syn / 2) ? ("Full moon " + daysTxt(syn / 2 - age)) : ("New moon " + daysTxt(syn - age));
+    h += "<div class='al-top'><div class='al-moon'><span>" + moonGlyph(idx, "#000", "#fff") + "</span></div>" +
+         "<div class='al-ph'><div class='al-phase'>" + esc(moonPhaseLabel(today)) + "</div><div class='al-sub'>" + sub + "</div></div></div>";
+    var d = WX && WX.daily;
+    if (d && d.sunrise && d.sunset) {
+        h += stack ? "<div class='al-sun'>Sunrise " + fmtClock(d.sunrise[0]) + "<br>Sunset " + fmtClock(d.sunset[0]) + "</div>"
+                   : "<div class='al-sun'>Sunrise " + fmtClock(d.sunrise[0]) + " &middot; Sunset " + fmtClock(d.sunset[0]) + "</div>";
+        var dl = isoMin(d.sunset[0]) - isoMin(d.sunrise[0]), dtxt = "Daylight " + hm(dl);
+        if (d.sunrise[1] && d.sunset[1]) { var diff = (isoMin(d.sunset[1]) - isoMin(d.sunrise[1])) - dl; dtxt += " &middot; " + (diff < 0 ? "&minus;" : "+") + Math.abs(diff) + " min tomorrow"; }
+        h += "<div class='al-day'>" + dtxt + "</div>";
+    } else h += "<div class='al-sun'>Sun times arrive with the weather</div>";
+    var otd = window.HUB_DATA && window.HUB_DATA.onThisDay;
+    if (otd) {
+        var oy = (typeof otd === "object") ? otd.year : "", ot = (typeof otd === "object") ? otd.text : String(otd);
+        if (ot) h += "<div class='al-otd'><b>On this day" + (oy ? " in " + esc(String(oy)) : "") + ":</b> " + esc(ot) + "</div>";
+    }
+    return "<div class='" + (stack ? "al-st" : "al-wd") + "'>" + h + "</div>";
+}
+TILE_RENDER.alm = function(T) {
+    var inner = $("alm-in");
+    fitPad(inner);
+    var a = almTileHtml(T, false), b = almTileHtml(T, true), fk = T.w + "x" + T.h + "|" + a + b;
+    if (inner.__fk === fk) return;
+    inner.__fk = fk; inner.__wk = null;
+    var hi = Math.min(T.h * 0.2, FS * (T.tall ? 4.2 : 3.2));
+    setHTML(inner, a); var fa = fitText(inner, 9, hi);
+    setHTML(inner, b); var fb = fitText(inner, 9, hi);
+    if (fa > fb + 0.5) { setHTML(inner, a); fitText(inner, 9, hi); }
+    centerV(inner);
+};
+// 10.8: a small Stars tile was just the sign's name; when the day's reading fits at a readable size it shows too
+var __horoTile108 = TILE_RENDER.horo;
+TILE_RENDER.horo = function(T) {
+    if (T.cls !== "s") return __horoTile108(T);
+    var inner = $("horo-in"), i = HORO.view, z = ZODIAC[i], r = horoFor(i);
+    var h = "<span class='stamp'>" + (i === HORO.mine ? "Your stars" : "Horoscope") + "</span><div class='ho-sign'>" + z[1] + "</div><div class='ho-dates'>" + z[2] + "</div><div class='ho-text'>" + esc(r.text) + "</div>";
+    var fk = "108|" + T.w + "x" + T.h + "|" + h;
+    if (inner.__fk === fk || inner.__fk === fk + "|no") return;
+    fitPad(inner); setHTML(inner, h);
+    var f = fitText(inner, 9, Math.min(T.h * 0.2, FS * 2.2));
+    if (f >= FS * 0.72) { inner.__fk = fk; centerV(inner); return; }
+    inner.__fk = null; __horoTile108(T);      // too small to read: the name-only tile as before
+    inner.__fk = fk + "|no";
+};
 </script>
 </body>
 </html>
