@@ -621,6 +621,7 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
 .ap-card.big { border-width: 4px; }
 .ap-card.big .ap-ic { width: 2.6em; height: 2.6em; }
 .ap-card.big .ap-n { font-size: 1.35em; font-weight: 900; }
+.ap-card.big .ap-tm { top: auto; bottom: .55em; left: .6em; right: auto; }      /* 10.8: under the name, now that cards are smaller */
 .ap-nav { position: absolute; left: 0; right: 0; text-align: center; white-space: nowrap; overflow: hidden; }
 .ap-nav .opt-btn.big { margin-top: 0; }
 .ap-nav #ap-prev { float: left; } .ap-nav #ap-next { float: right; }
@@ -1581,7 +1582,7 @@ function exitHub() {
 // =====================================================================
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.7";
+var VERSION = "10.8";
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
 var EDIT = false;
@@ -3046,27 +3047,46 @@ function busyEnd(label) {
     if (BUSY_TIMER) { clearTimeout(BUSY_TIMER); BUSY_TIMER = null; }
     busyShow();
 }
+// 10.8: one set of listeners on the document instead of four per button. Every screen redraw used to
+// attach ~2,400 new listeners per round of opening things and editing, and the Kindle's browser slowed
+// down as they piled up. Same behaviour as before: pressed look on touch, a drag cancels, swipes and
+// double taps are ignored, and every bound element under the finger fires (innermost first).
+var TAP = { path: [], touched: false };
+function tapPath(t) { var p = []; for (var e = t; e && e !== document; e = e.parentNode) if (e.__taps) p.push(e); return p; }
+function tapFire(el, b) {
+    if (b.running) return;              // ignore double taps while the first is still being handled
+    if (typeof SWIPE_AT === "number" && new Date().getTime() - SWIPE_AT < 700) return;   // that was a swipe
+    b.running = true;
+    addCls(el, "pressed");
+    BUSY_N++; busyShow();
+    setTimeout(function() {
+        try { b.fn(); } catch (e) { if (window.console) console.log("tap: " + e); }
+        rmCls(el, "pressed");
+        BUSY_N = Math.max(0, BUSY_N - 1); b.running = false;
+        busyShow();
+    }, 40);
+}
+function tapAll(p) { for (var i = 0; i < p.length; i++) { var bs = p[i].__taps; for (var j = 0; j < bs.length; j++) tapFire(p[i], bs[j]); } }
 function bindTap(el, fn) {
     if (!el) return;
-    var touched = false, running = false;
-    function fire() {
-        if (running) return;            // ignore double taps while the first is still being handled
-        if (typeof SWIPE_AT === "number" && new Date().getTime() - SWIPE_AT < 700) return;   // that was a swipe
-        running = true;
-        addCls(el, "pressed");
-        BUSY_N++; busyShow();
-        setTimeout(function() {
-            try { fn(); } catch (e) { if (window.console) console.log("tap: " + e); }
-            rmCls(el, "pressed");
-            BUSY_N = Math.max(0, BUSY_N - 1); running = false;
-            busyShow();
-        }, 40);
-    }
-    el.addEventListener("touchstart", function() { touched = true; addCls(el, "pressed"); }, false);
-    el.addEventListener("touchmove", function() { touched = false; rmCls(el, "pressed"); }, false);
-    el.addEventListener("touchend", function(e) { if (touched) { touched = false; e.preventDefault(); fire(); } }, false);
-    el.addEventListener("click", function() { if (!touched) fire(); }, false);
+    (el.__taps || (el.__taps = [])).push({ fn: fn, running: false });
 }
+document.addEventListener("touchstart", function(e) {
+    TAP.path = tapPath(e.target); TAP.touched = TAP.path.length > 0;
+    for (var i = 0; i < TAP.path.length; i++) addCls(TAP.path[i], "pressed");
+}, false);
+document.addEventListener("touchmove", function() {
+    if (!TAP.touched) return;
+    TAP.touched = false;
+    for (var i = 0; i < TAP.path.length; i++) rmCls(TAP.path[i], "pressed");
+}, false);
+document.addEventListener("touchend", function(e) {
+    if (!TAP.touched) return;
+    TAP.touched = false;
+    e.preventDefault();                 // no second "click" for the same tap
+    tapAll(TAP.path);
+}, false);
+document.addEventListener("click", function(e) { if (!TAP.touched) tapAll(tapPath(e.target)); }, false);
 
 // ---------- sync through the background loop (falls back to the page's own fetch) ----------
 function hubSync() {
@@ -6660,7 +6680,7 @@ appList = function() {
     return out;
 };
 renderApps = function() {
-    var L = appList(), box = $("ap-grid"), cols = PORTRAIT ? 2 : 3, rows = PORTRAIT ? 3 : 2, per = cols * rows, h = "", i;
+    var L = appList(), box = $("ap-grid"), cols = PORTRAIT ? 3 : 4, rows = PORTRAIT ? 4 : 3, per = cols * rows, h = "", i;      // 10.8: 12 a page (was 6 big, mostly empty cards)
     var pages = Math.ceil(L.length / per); if (APPS_PAGE >= pages) APPS_PAGE = 0;
     var mast = $("apps-view").getElementsByClassName("ov-mast")[0].offsetHeight, nav = Math.round(FS * 3.2);
     var gw = W - FS, gh = $("apps-view").clientHeight - mast - FS - nav;
@@ -6865,6 +6885,7 @@ buildFeelOpts = function() {
     chipRow("opt-size", [1, 1.15, 1.3, 1.5], ["Normal", "Larger", "Large", "Huge"], uiScale(), function(v) { try { window.localStorage.setItem("pg_ui_scale", String(v)); } catch (e) {} relayout(); });
     chipRow("opt-aisles", [1, 0], ["Group the list by aisle", "In the order added"], FEEL8.aisles === 0 ? 0 : 1, function(v) { FEEL8.aisles = v; saveFeel8(); });
     chipRow("opt-warnbar", [1, 0], ["Show weather warnings across the top", "Don't"], FEEL8.warnbar === 0 ? 0 : 1, function(v) { FEEL8.warnbar = v; saveFeel8(); renderWarnBanner(); });
+    $("opt-tour").__taps = null;      // 10.8: this runs every time Settings opens; one tap used to start the tour once per opening
     bindTap($("opt-tour"), function() { closeHub(); startTour(true); });
 };
 
@@ -9032,7 +9053,7 @@ function shuffleStep() {
     ROT.cur = nx;
     renderTileById(nx);
 }
-setInterval(shuffleStep, 1000);
+setInterval(shuffleStep, 2500);      // 10.8: was every second; shuffles are 10 s or more apart, and fewer wake-ups save battery
 // =====================  10.7: DEALS PAGE  =====================
 // The cloud brain sends EX.deals: wishlist items on sale first, then similar items on sale (same searches,
 // or the same category when there are fewer than five). Photos are downloaded by the Kindle into img/.
@@ -9255,6 +9276,164 @@ function buildSlcOpts() {
 var __feelOpts107 = buildFeelOpts;
 buildFeelOpts = function() { __feelOpts107(); buildSlcOpts(); };
 buildSlcOpts();
+// =====================  10.8: CROWDED DOCK -> STATUS UNDER THE RAIL CLOCK  =====================
+// When the dock's buttons (or the edit tray) leave too little room, AWAKE / battery / UPDATED move to the
+// side rail, right under the time, and the dock gets the whole width. They go back when there is room.
+var SBR = { on: false, box: null, parts: null };
+(function() {
+    SBR.box = document.createElement("div"); SBR.box.id = "rl-st";
+    var css = document.createElement("style");
+    css.textContent = "#rl-st { border-bottom: 3px solid #000; padding: .35em .15em .45em; font-size: .7em; line-height: 1.1; }" +
+        "#rl-st > span { display: block; margin: 0; padding: .3em 0 0; border: 0; text-align: center; white-space: normal; }" +
+        "#rl-st #status-ic { width: 1.9em; height: 1.9em; margin: 0 auto; }" +
+        "#rl-st #status-txt, #rl-st #fuel-txt { margin: 0; display: block; }" +
+        "#rl-st #fuel-ic { width: .8em; height: 1.5em; display: inline-block; vertical-align: middle; }" +
+        "#rl-st #fuel-txt { display: inline-block; vertical-align: middle; margin-left: .3em; text-align: left; }" +
+        "#rl-st #st-main { font-size: .9em; } #rl-st #status-sub, #rl-st #fuel-sub { font-size: .7em; } #rl-st #sync-l { font-size: .7em; }" +
+        "body.sb-railed #sb-left { width: 0; padding: 0; }";
+    document.getElementsByTagName("head")[0].appendChild(css);
+})();
+function sbParts() {
+    if (!SBR.parts) SBR.parts = [$("status-ic"), $("status-txt"), $("fuel-ic") && $("fuel-ic").parentNode, $("sync-chunk")];
+    return SBR.parts;
+}
+function sbPut(rail) {
+    var ps = sbParts(), left = $("sb-left"), wake = $("wake-chunk"), i;
+    if (rail) {
+        for (i = 0; i < ps.length; i++) if (ps[i]) SBR.box.appendChild(ps[i]);
+        addCls(document.body, "sb-railed");
+        var day = $("rail").getElementsByClassName("rl-day")[0];
+        if (day && day.nextSibling) day.parentNode.insertBefore(SBR.box, day.nextSibling); else $("rail").appendChild(SBR.box);
+    } else {
+        for (i = 0; i < ps.length; i++) if (ps[i]) left.insertBefore(ps[i], wake);
+        rmCls(document.body, "sb-railed");
+        if (SBR.box.parentNode) SBR.box.parentNode.removeChild(SBR.box);
+    }
+    SBR.on = rail;
+}
+function sbNeed(el) {          // the width its contents want on one line (the edit tray wraps instead of overflowing)
+    var w = 0, c = el.childNodes, i;
+    for (i = 0; i < c.length; i++) {
+        var n = c[i];
+        if (n.nodeType !== 1 || n.offsetWidth === 0) continue;
+        var cs = window.getComputedStyle(n);
+        w += n.offsetWidth + (parseFloat(cs.marginLeft) || 0) + (parseFloat(cs.marginRight) || 0);
+    }
+    return w;
+}
+function sbFit() {
+    var left = $("sb-left"), mid = $("sb-mid");
+    if (!left || !mid) return;
+    var can = RAIL_W > 0 && !HUB.sleeping && $("rail").style.display !== "none";
+    var was = SBR.on;
+    if (was) sbPut(false);                 // measure with everything back in the dock (nothing paints in between)
+    var crowded = sbNeed(left) > left.clientWidth + 2 || sbNeed(mid) > mid.clientWidth + 2;
+    if (can && crowded) sbPut(true);
+}
+var __renderRail108 = renderRail;
+renderRail = function() {
+    __renderRail108();
+    if (SBR.on && !SBR.box.parentNode) sbPut(true);      // the rail was redrawn: put the status back under the clock
+};
+var __renderCtx108 = renderSysbarContext;
+renderSysbarContext = function() { __renderCtx108(); sbFit(); };
+var __layout108 = layout;
+layout = function() { __layout108(); sbFit(); };
+setInterval(function() { if (!HUB.sleeping) sbFit(); else if (SBR.on) sbPut(false); }, 20000);
+var __applyState108 = applyState;
+applyState = function(st) { __applyState108(st); if (HUB.sleeping && SBR.on) sbPut(false); else if (!HUB.sleeping && !SBR.on) sbFit(); };      // asleep: the status belongs to the black bar
+sbFit();
+// =====================  10.8: ASLEEP TAG AT THE TOP, SMALLER  =====================
+// The moon tag sat halfway down the power-button edge, on top of the front page's text. It now sits in the
+// top corner of that edge, small, and the front page keeps that corner free.
+var __placeWake108 = placeWakeTag;
+placeWakeTag = function(rot) {
+    __placeWake108(rot);
+    var el = $("wake-tag"), th = Math.round(FS * 1.5);
+    el.style.height = th + "px"; el.style.lineHeight = th + "px";
+    el.style.fontSize = Math.round(FS * 0.62) + "px"; el.style.padding = "0 " + Math.round(FS * 0.25) + "px"; el.style.borderWidth = "2px";
+    el.style.left = el.style.right = el.style.top = el.style.bottom = "";
+    if (rot === 90) { el.style.right = "0"; el.style.top = "0"; }
+    else if (rot === 270) { el.style.left = "0"; el.style.top = "0"; }
+    else if (rot === 180) { el.style.top = "0"; el.style.right = "0"; }
+    else { el.style.bottom = (Math.round(FS * 3) + 8) + "px"; el.style.right = "0"; }
+    rmCls(document.body, "wk-l"); rmCls(document.body, "wk-r");
+    if (rot === 90 || rot === 180) addCls(document.body, "wk-r"); else if (rot === 270) addCls(document.body, "wk-l");
+};
+// the strip that used to be kept free down that edge goes back to the page; standing up, only a short band above the bar
+tagReserve = function() {
+    if (!HUB.sleeping) return { r: 0, b: 0 };
+    return getRot() === 0 ? { r: 0, b: Math.round(FS * 1.7) } : { r: 0, b: 0 };
+};
+(function() {
+    var css = document.createElement("style");
+    css.textContent = ".asleep.wk-r .fp-mast .fp-r { padding-right: 3.4em; } .asleep.wk-l .fp-mast .fp-l { padding-left: 3.4em; }";
+    document.getElementsByTagName("head")[0].appendChild(css);
+})();
+// =====================  10.8: ALMANAC TILE FILLS ITS SPACE  =====================
+// Its lines never wrapped, so a narrow tile shrank the text to fit the width and left the bottom half empty.
+// Now it also tries a stacked version (sunrise and sunset on their own lines, the week's releases as a
+// list) and keeps whichever lets the text be bigger.
+(function() {
+    var css = document.createElement("style");
+    css.textContent = ".al-wk { font-family: Helvetica, Arial, sans-serif; border-bottom: 2px solid #000; padding-bottom: .25em; margin-bottom: .35em; }" +
+        ".al-wk .al-wh { font-weight: 900; font-size: .55em; letter-spacing: .16em; }" +
+        ".al-wk .al-wi { font-size: .75em; line-height: 1.2; } .al-wk .al-wi b { font-family: Georgia, serif; } .al-wdy { font-size: .62em; font-weight: 900; letter-spacing: .12em; }" +
+        ".al-st .al-sun, .al-st .al-day, .al-st .al-sub, .al-st .al-phase { white-space: normal; }";
+    document.getElementsByTagName("head")[0].appendChild(css);
+})();
+function almTileHtml(T, stack) {
+    var today = new Date(), syn = 29.53058867, age = moonPhase(today), idx = moonPhaseIndex(today), h = "", i;
+    var ev = weekEvents(), nev = stack ? Math.min(ev.length, T.tall ? 3 : 2) : Math.min(ev.length, 1);
+    if (nev) {
+        h += "<div class='al-wk'><div class='al-wh'>BIG THIS WEEK</div>";
+        for (i = 0; i < nev; i++) h += "<div class='al-wi'><span class='al-wdy'>" + esc(wkDay(ev[i].date).toUpperCase()) + "</span> <b>" + esc(ev[i].t) + "</b></div>";
+        h += "</div>";
+    }
+    var sub = (age < syn / 2) ? ("Full moon " + daysTxt(syn / 2 - age)) : ("New moon " + daysTxt(syn - age));
+    h += "<div class='al-top'><div class='al-moon'><span>" + moonGlyph(idx, "#000", "#fff") + "</span></div>" +
+         "<div class='al-ph'><div class='al-phase'>" + esc(moonPhaseLabel(today)) + "</div><div class='al-sub'>" + sub + "</div></div></div>";
+    var d = WX && WX.daily;
+    if (d && d.sunrise && d.sunset) {
+        h += stack ? "<div class='al-sun'>Sunrise " + fmtClock(d.sunrise[0]) + "<br>Sunset " + fmtClock(d.sunset[0]) + "</div>"
+                   : "<div class='al-sun'>Sunrise " + fmtClock(d.sunrise[0]) + " &middot; Sunset " + fmtClock(d.sunset[0]) + "</div>";
+        var dl = isoMin(d.sunset[0]) - isoMin(d.sunrise[0]), dtxt = "Daylight " + hm(dl);
+        if (d.sunrise[1] && d.sunset[1]) { var diff = (isoMin(d.sunset[1]) - isoMin(d.sunrise[1])) - dl; dtxt += " &middot; " + (diff < 0 ? "&minus;" : "+") + Math.abs(diff) + " min tomorrow"; }
+        h += "<div class='al-day'>" + dtxt + "</div>";
+    } else h += "<div class='al-sun'>Sun times arrive with the weather</div>";
+    var otd = window.HUB_DATA && window.HUB_DATA.onThisDay;
+    if (otd) {
+        var oy = (typeof otd === "object") ? otd.year : "", ot = (typeof otd === "object") ? otd.text : String(otd);
+        if (ot) h += "<div class='al-otd'><b>On this day" + (oy ? " in " + esc(String(oy)) : "") + ":</b> " + esc(ot) + "</div>";
+    }
+    return "<div class='" + (stack ? "al-st" : "al-wd") + "'>" + h + "</div>";
+}
+TILE_RENDER.alm = function(T) {
+    var inner = $("alm-in");
+    fitPad(inner);
+    var a = almTileHtml(T, false), b = almTileHtml(T, true), fk = T.w + "x" + T.h + "|" + a + b;
+    if (inner.__fk === fk) return;
+    inner.__fk = fk; inner.__wk = null;
+    var hi = Math.min(T.h * 0.2, FS * (T.tall ? 4.2 : 3.2));
+    setHTML(inner, a); var fa = fitText(inner, 9, hi);
+    setHTML(inner, b); var fb = fitText(inner, 9, hi);
+    if (fa > fb + 0.5) { setHTML(inner, a); fitText(inner, 9, hi); }
+    centerV(inner);
+};
+// 10.8: a small Stars tile was just the sign's name; when the day's reading fits at a readable size it shows too
+var __horoTile108 = TILE_RENDER.horo;
+TILE_RENDER.horo = function(T) {
+    if (T.cls !== "s") return __horoTile108(T);
+    var inner = $("horo-in"), i = HORO.view, z = ZODIAC[i], r = horoFor(i);
+    var h = "<span class='stamp'>" + (i === HORO.mine ? "Your stars" : "Horoscope") + "</span><div class='ho-sign'>" + z[1] + "</div><div class='ho-dates'>" + z[2] + "</div><div class='ho-text'>" + esc(r.text) + "</div>";
+    var fk = "108|" + T.w + "x" + T.h + "|" + h;
+    if (inner.__fk === fk || inner.__fk === fk + "|no") return;
+    fitPad(inner); setHTML(inner, h);
+    var f = fitText(inner, 9, Math.min(T.h * 0.2, FS * 2.2));
+    if (f >= FS * 0.72) { inner.__fk = fk; centerV(inner); return; }
+    inner.__fk = null; __horoTile108(T);      // too small to read: the name-only tile as before
+    inner.__fk = fk + "|no";
+};
 </script>
 </body>
 </html>
