@@ -9176,6 +9176,85 @@ TILE_RENDER.alm = function(T) {
         centerV(inner);
     }
 };
+// ---------- 10.7 sleep view: up to two cards of your choice on the asleep screens (front page and night screen) ----------
+var SLC = ["week", ""];
+try { var slc0 = JSON.parse(window.localStorage.getItem("pg_slc_107") || "null"); if (slc0 instanceof Array) SLC = [String(slc0[0] || ""), String(slc0[1] || "")]; } catch (e) {}
+function saveSLC() { try { window.localStorage.setItem("pg_slc_107", JSON.stringify(SLC)); } catch (e) {} }
+var SLC_IDS = ["", "week", "deal", "shop", "fc", "sky", "fun"], SLC_NAMES = ["Off", "Big this week", "Top deal", "Shopping list", "3-day forecast", "Moon & sun", "Joke or fact"];
+function sleepCard(id) {      // -> [heading, [lines]] or null when there's nothing to show
+    var L = [], i;
+    if (id === "week") {
+        var ev = weekEvents();
+        for (i = 0; i < ev.length && i < 3; i++) L.push("<b>" + esc(wkDay(ev[i].date).replace(/^./, function(c) { return c.toUpperCase(); })) + "</b> " + esc(ev[i].t));
+        return L.length ? ["Big this week", L] : null;
+    }
+    if (id === "deal") {
+        var ds = (EX && EX.deals) || [];
+        for (i = 0; i < ds.length && i < 2; i++) L.push(esc(String(ds[i].title).substring(0, 48)) + " <b>" + $m(ds[i].price) + "</b>" + (ds[i].off ? " &minus;" + ds[i].off + "%" : ""));
+        return L.length ? ["Deals", L] : null;
+    }
+    if (id === "shop") {
+        var its = itemsOf("shop").filter(function(x) { return x.state === "open"; }), names = its.slice(0, 8).map(function(x) { return esc(x.text || x.name || ""); }).filter(Boolean);
+        return names.length ? ["Shopping list", [names.join(", ") + (its.length > 8 ? " +" + (its.length - 8) : "")]] : null;
+    }
+    if (id === "fc") {
+        var d = WX && WX.daily;
+        if (!d || !d.temperature_2m_max) return null;
+        for (i = 1; i < 4 && i < d.temperature_2m_max.length; i++) L.push("<b>" + (i === 1 ? "Tomorrow" : prettyDay(addDays(todayKey(), i)).split(",")[0]) + "</b> " + deg(d.temperature_2m_max[i]) + " / " + deg(d.temperature_2m_min[i]) + (d.weather_code ? " " + esc(WMO[d.weather_code[i]] || "") : ""));
+        return ["Next days", L];
+    }
+    if (id === "sky") {
+        var t = new Date(), syn = 29.53058867, age = moonPhase(t);
+        L.push(esc(moonPhaseLabel(t)) + " &middot; " + (age < syn / 2 ? "full moon " + daysTxt(syn / 2 - age) : "new moon " + daysTxt(syn - age)));
+        var w = WX && WX.daily;
+        if (w && w.sunrise && w.sunrise[1]) L.push("Sunrise tomorrow " + fmtClock(w.sunrise[1]));
+        return ["Sky", L];
+    }
+    if (id === "fun") {
+        var j = EX && (EX.joke || EX.fact);
+        return j ? [EX.joke ? "Joke" : "Did you know", [esc(String(j).substring(0, 220))]] : null;
+    }
+    return null;
+}
+var __front107 = renderFront;
+renderFront = function() {
+    __front107();
+    var el = $("front");
+    if (!el || el.style.display !== "block") return;
+    var side = $("fp-side"), nt = el.getElementsByClassName("nt")[0], box = side || nt;
+    if (!box) return;
+    for (var c = 0; c < 2; c++) {
+        if (!SLC[c] || (c === 1 && SLC[1] === SLC[0])) continue;
+        var cd = sleepCard(SLC[c]);
+        if (!cd) continue;
+        var d = document.createElement("div");
+        d.className = side ? "fp-sec slc" : "slc";
+        d.innerHTML = side ? "<div class='fp-h'>" + esc(cd[0]) + "</div><div class='fp-li'>" + cd[1].join("</div><div class='fp-li'>") + "</div>"
+                           : "<div class='au-h'>" + esc(cd[0]) + "</div><div class='au-li'>" + cd[1].join("</div><div class='au-li'>") + "</div>";
+        var k = side ? side.getElementsByClassName("fp-k")[0] : null;      // front page: right under the clock, so they're never the part trimmed away
+        if (k && k.nextSibling) side.insertBefore(d, k.nextSibling); else box.appendChild(d);
+    }
+    if (side) fitText(side, 9, FS * 1.3);
+};
+// settings (Sleep): pick the two cards
+(function() {
+    var fr = $("opt-front");
+    if (!fr) return;
+    var row = fr.parentNode, add = document.createElement("div");
+    while (row.parentNode && !/hv-cols/.test(row.className || "")) row = row.parentNode;      // full width, under the row of columns
+    if (!row.parentNode) row = fr.parentNode;
+    add.className = "hv-row";
+    add.innerHTML = "<div class='hv-lbl'>Your cards while asleep</div><div class='hv-hint'>First card</div><div id='opt-slc1'></div><div class='hv-hint'>Second card</div><div id='opt-slc2'></div><div class='hv-hint'>Shown under the clock on the asleep screens (front page and night screen).</div>";
+    if (row.nextSibling) row.parentNode.insertBefore(add, row.nextSibling); else row.parentNode.appendChild(add);
+})();
+function buildSlcOpts() {
+    if (!$("opt-slc1")) return;
+    chipRow("opt-slc1", SLC_IDS, SLC_NAMES, SLC[0], function(v) { SLC[0] = v; saveSLC(); renderFront(); });
+    chipRow("opt-slc2", SLC_IDS, SLC_NAMES, SLC[1], function(v) { SLC[1] = v; saveSLC(); renderFront(); });
+}
+var __feelOpts107 = buildFeelOpts;
+buildFeelOpts = function() { __feelOpts107(); buildSlcOpts(); };
+buildSlcOpts();
 </script>
 </body>
 </html>
