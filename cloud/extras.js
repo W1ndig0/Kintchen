@@ -14,7 +14,8 @@ function bigSale(now) {     // Black Friday week + Boxing week: check hot deals 
 function ingWord(name) { return String(name || "").toLowerCase().replace(/^leftovers?:\s*/, "").replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim().replace(/(es|s)$/, ""); }
 // 10.7: a Best Buy product on sale -> a deal card (the photo is downloaded by the Kindle: img/d<hash>.jpg)
 const crypto = require("crypto");
-function onSale(p) { const s = +p.salePrice, r = +p.regularPrice; return s > 0 && r > 0 && s < r - 0.5; }
+// marketplace sellers (custom-painted controllers etc.) post made-up "regular" prices, so only Best Buy's own prices count as a sale
+function onSale(p) { const s = +p.salePrice, r = +p.regularPrice; return !p.isMarketplace && s > 0 && r > 0 && s < r - 0.5; }
 function bbDeal(p) {
     const price = +p.salePrice || +p.regularPrice || 0, reg = +p.regularPrice || price, src = String(p.thumbnailImage || "");
     const img = /^https:\/\/[^\s"'<>]+$/.test(src) ? "img/d" + crypto.createHash("md5").update(src).digest("hex").slice(0, 12) + (/\.png(\?|$)/i.test(src) ? ".png" : ".jpg") : "";

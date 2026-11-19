@@ -11,7 +11,7 @@ async function get(url, ms, opts) {
 (async () => {
     // the same helpers extras.js uses
     const crypto = require("crypto");
-    const onSale = p => { const s = +p.salePrice, r = +p.regularPrice; return s > 0 && r > 0 && s < r - 0.5; };
+    const onSale = p => { const s = +p.salePrice, r = +p.regularPrice; return !p.isMarketplace && s > 0 && r > 0 && s < r - 0.5; };
     const bbDeal = p => { const price = +p.salePrice || +p.regularPrice || 0, reg = +p.regularPrice || price; return { sku: String(p.sku || ""), title: String(p.name || "").slice(0, 60), price, reg, off: reg > price ? Math.round((1 - price / reg) * 100) : 0, img: p.thumbnailImage ? "img/d" + crypto.createHash("md5").update(String(p.thumbnailImage)).digest("hex").slice(0, 12) + ".jpg" : "", src: String(p.thumbnailImage || "").slice(0, 70) }; };
     const today = new Date(Date.now() - 7 * 3600000).toISOString().slice(0, 10);
     const addK = (k, n) => new Date(Date.parse(k + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);

@@ -18,7 +18,9 @@ module.exports = async function week(ctx) {
     const UA = { headers: { "User-Agent": "KitchenHub/10.7 (https://github.com/W1ndig0/Kintchen; kitchen display)", Accept: "application/sparql-results+json" } };
     const found = {};
     for (const [kind, cls, minLinks] of KINDS) {
-        const t = await get("https://query.wikidata.org/sparql?format=json&query=" + encodeURIComponent(sparql(cls, from, to, minLinks)), 25000, UA);
+        const u = "https://query.wikidata.org/sparql?format=json&query=" + encodeURIComponent(sparql(cls, from, to, minLinks));
+        let t = await get(u, 30000, UA);
+        if (!t) { log("week: " + kind + " " + cls + " query slow, trying once more"); t = await get(u, 55000, UA); }
         let j = null; try { j = t ? JSON.parse(t) : null; } catch (e) { j = null; }
         const rows = j && j.results && Array.isArray(j.results.bindings) ? j.results.bindings : [];
         for (const r of rows) {
