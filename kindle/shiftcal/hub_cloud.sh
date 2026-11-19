@@ -198,7 +198,10 @@ do_log() {
     CG=$(sed -n 's/^CLOUD_GIST=\([A-Za-z0-9]*\)$/\1/p' "$DIR/.cloud_links" 2>/dev/null | head -1)
     [ -n "$CG" ] || { say "log upload: no cloud gist yet (the GitHub Action makes it)"; return 0; }
     {
-        echo "Kitchen Hub log - $(date)"; echo "== power.log"; tail -n 220 "$DIR/power.log" 2>/dev/null
+        echo "Kitchen Hub log - $(date)"
+        [ -s "$DIR/.log_want" ] && { echo "== why this was sent (10.7)"; tail -n 10 "$DIR/.log_want"; }
+        [ -s "$DIR/.boot_fail" ] && { echo "== last failed start"; cat "$DIR/.boot_fail"; }
+        echo "== power.log"; tail -n 220 "$DIR/power.log" 2>/dev/null
         echo "== sync.log"; tail -n 120 "$LOG" 2>/dev/null; echo "== hub.log"; tail -n 40 "$DIR/hub.log" 2>/dev/null
     } | sed 's/github_pat_[A-Za-z0-9_]*/<token>/g; s/ghp_[A-Za-z0-9]*/<token>/g' > "$T/lg.$$"
     { printf '{"files":{"kindle-log.txt":{"content":"'; jstr < "$T/lg.$$"; printf '"}}}'; } > "$T/p.$$"

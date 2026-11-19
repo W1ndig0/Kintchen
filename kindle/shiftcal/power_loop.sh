@@ -322,6 +322,12 @@ wifi_off() { lipc-set-prop com.lab126.cmd wirelessEnable 0 2>/dev/null; }
 # Sync in a background subshell; result lands in .last_sync, which the main loop re-reads.
 SYNC_PID=""
 LAST_SYNC_TRY=0
+log_due() {      # 10.7: something failed (launch, rollback, update), the page never started, or a day since the last upload
+    [ -s "$DIR/.log_want" ] && return 0
+    [ -f "$DIR/.boot_fail" ] && [ "$DIR/.boot_fail" -nt "$DIR/.log_up_at" ] && return 0
+    LU=$(cat "$DIR/.log_up_at" 2>/dev/null | tr -cd '0-9')
+    [ -z "$LU" ] || [ $(( $(date +%s) - LU )) -ge 86400 ]
+}
 start_sync() {   # $1 = "lists": only exchange the lists with the gist (quick)
     if [ "$BOOT" = "1" ]; then BOOT_SYNC=1; [ "$1" = "lists" ] || BOOT_FULL=1; return; fi   # 10.4.1: after the page is up
     [ "$1" = "lists" ] || LAST_SYNC_TRY=$(date +%s)
@@ -346,6 +352,12 @@ start_sync() {   # $1 = "lists": only exchange the lists with the gist (quick)
                 write_cloud_js                                # 9.8.5: the cloud brain's links (TV, calendar) for the page
                 # 10.3: the book cloud - fetch books you put on the Kindle, remove ones you moved back
                 { [ -s "$DIR/.books_want" ] || [ -s "$DIR/.books_have" ]; } && sh "$DIR/hub_books.sh"
+                # 10.7: the log goes to your private cloud gist once a day, and on the next full sync after something went wrong
+                if [ "$1" != "lists" ] && log_due; then
+                    LU0=$(cat "$DIR/.log_up_at" 2>/dev/null)
+                    sh "$DIR/hub_cloud.sh" log
+                    [ "$(cat "$DIR/.log_up_at" 2>/dev/null)" != "$LU0" ] && rm -f "$DIR/.log_want"
+                fi
             fi
         else
             log "wifi did not connect within ${WIFI_TIMEOUT}s"
@@ -383,7 +395,7 @@ start_job() {     # 9.8.5: update-check | update-install | logup | status  (same
                     case "$URC" in
                         0) log "update installed - restarting the hub"; echo "update installed" > "$DIR/.relaunch" ;;
                         2) log "update: nothing to install" ;;
-                        *) log "update: install failed (see sync.log)" ;;
+                        *) log "update: install failed (see sync.log)"; echo "update install failed $(date '+%m-%d %H:%M')" >> "$DIR/.log_want" ;;
                     esac ;;
                 update-auto)
                     date +%Y-%m-%d > "$DIR/.update_auto_day"
@@ -860,6 +872,7 @@ boot_done() {
 boot_failed() {
     log "page never talked to the loop in ${BOOT_WAIT}s - stopping everything"
     echo "the page did not start ($(date '+%m-%d %H:%M'))" > "$DIR/.boot_fail"
+    echo "page did not start $(date '+%m-%d %H:%M')" >> "$DIR/.log_want"
     rm -f "$DIR/.boot"
     if [ -f "$DIR/.update/pending" ] && [ -z "$HUB_ROLLED" ]; then
         read -r PNV PPV PAT PW < "$DIR/.update/pending"
