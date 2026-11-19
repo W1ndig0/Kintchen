@@ -15,6 +15,15 @@
 #   * The page closing over and over (3 times in 15 minutes) stops the hub instead of reopening it forever.
 #   * FREEZE_POWERD=0 in eco.conf turns off pausing powerd during sleep (for testing the wake freeze).
 #
+# 10.6: smart wake schedule (SMART_SLEEP=1). How often the Kindle wakes depends on where you are:
+#   home  every HOME_MIN minutes (15)
+#   work  every AWAY_MIN minutes (120) - work times come from your shifts: the page sends them as
+#         away=START-END,... (epoch seconds, next 7 days) and they are kept in .away
+#   night every NIGHT_MIN minutes (180) between NIGHT_FROM and NIGHT_TO o'clock (23 - 6)
+# When a work shift or the night ends, the Kindle wakes right then, so it speeds up as soon as you're home.
+# A full sync still happens at most every SYNC_EVERY_MIN minutes (60); in between, a wake only refreshes
+# the screen. SMART_SLEEP=0 is the old fixed INTERVAL_MIN.
+#
 # v9.2 fixes
 #   * Button wake: an early wake from suspend (rc=0, well before the alarm) is treated as YOU pressing
 #     the power button. The hub now stays awake for the full window (min 2 min) instead of
@@ -28,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.5"
+VERSION="10.6"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -70,11 +79,18 @@ load_conf() {
     CLOUD_ON_WAKE=1
     PHONE_ALERTS=1
     USE_CLOUD_DATA=1
+    SMART_SLEEP=1; HOME_MIN=15; AWAY_MIN=120; NIGHT_MIN=180; NIGHT_FROM=23; NIGHT_TO=6     # 10.6
     FREEZE_POWERD=1                    # 10.5: 0 = let powerd run while the Kindle sleeps (test for the wake freeze)
     AUTO_UPDATE=1                      # 0 = only when you tap, 1 = check nightly and tell you (10.5 default), 2 = install at night (undone by itself if it fails)
     [ -f "$CONF" ] && . "$CONF"
     case "$AUTO_UPDATE" in 0|1|2) ;; *) AUTO_UPDATE=1 ;; esac
     case "$FREEZE_POWERD" in 0|1) ;; *) FREEZE_POWERD=1 ;; esac
+    case "$SMART_SLEEP" in 0|1) ;; *) SMART_SLEEP=1 ;; esac
+    case "$HOME_MIN" in ''|*[!0-9]*) HOME_MIN=15 ;; esac;   [ "$HOME_MIN" -lt 5 ] && HOME_MIN=5
+    case "$AWAY_MIN" in ''|*[!0-9]*) AWAY_MIN=120 ;; esac;  [ "$AWAY_MIN" -lt 15 ] && AWAY_MIN=15
+    case "$NIGHT_MIN" in ''|*[!0-9]*) NIGHT_MIN=180 ;; esac; [ "$NIGHT_MIN" -lt 15 ] && NIGHT_MIN=15
+    case "$NIGHT_FROM" in ''|*[!0-9]*) NIGHT_FROM=23 ;; esac; [ "$NIGHT_FROM" -gt 23 ] && NIGHT_FROM=23
+    case "$NIGHT_TO" in ''|*[!0-9]*) NIGHT_TO=6 ;; esac;     [ "$NIGHT_TO" -gt 23 ] && NIGHT_TO=6
     case "$USE_CLOUD_DATA" in 0|1) ;; *) USE_CLOUD_DATA=1 ;; esac
     case "$PHONE_ALERTS" in 0|1) ;; *) PHONE_ALERTS=1 ;; esac
     case "$CLOUD_ON_WAKE" in 0|1) ;; *) CLOUD_ON_WAKE=1 ;; esac
@@ -105,6 +121,12 @@ PHONE_ALERTS=$PHONE_ALERTS
 USE_CLOUD_DATA=$USE_CLOUD_DATA
 AUTO_UPDATE=$AUTO_UPDATE
 FREEZE_POWERD=$FREEZE_POWERD
+SMART_SLEEP=$SMART_SLEEP
+HOME_MIN=$HOME_MIN
+AWAY_MIN=$AWAY_MIN
+NIGHT_MIN=$NIGHT_MIN
+NIGHT_FROM=$NIGHT_FROM
+NIGHT_TO=$NIGHT_TO
 EOT
     mv "$CONF.tmp" "$CONF"
 }
@@ -234,6 +256,8 @@ window.HUB_STATE = {
     charging: $CHARGING,
     lastRid: $LAST_RID,
     booted: $([ "$BOOT" = "0" ] && echo 1 || echo 0),
+    smart: $SMART_SLEEP, homeMin: $HOME_MIN, awayMin: $AWAY_MIN, nightMin: $NIGHT_MIN, nightFrom: $NIGHT_FROM, nightTo: $NIGHT_TO,
+    where: "${SMODE:-fixed}", aways: $(grep -c . "$DIR/.away" 2>/dev/null || echo 0),
     snoozeUntil: 0
 };
 EOT
@@ -539,6 +563,18 @@ poll_settings_http() {
         log "staying awake ${SNZ}s (requested from the hub)"
     fi
     V=$(num_or_empty "$(qv interval)"); [ -n "$V" ] && { INTERVAL_MIN=$V; SYNC_EVERY_MIN=$V; CHANGED=1; }
+    # 10.6: smart schedule settings and your work times (from the page's shift calendar)
+    V=$(num_or_empty "$(qv smart)");  [ -n "$V" ] && { case "$V" in 0|1) SMART_SLEEP=$V ;; esac; CHANGED=1; }
+    V=$(num_or_empty "$(qv home)");   [ -n "$V" ] && { HOME_MIN=$V; CHANGED=1; }
+    V=$(num_or_empty "$(qv away)");   [ -n "$V" ] && { AWAY_MIN=$V; CHANGED=1; }
+    V=$(num_or_empty "$(qv night)");  [ -n "$V" ] && { NIGHT_MIN=$V; CHANGED=1; }
+    V=$(num_or_empty "$(qv nf)");     [ -n "$V" ] && { NIGHT_FROM=$V; CHANGED=1; }
+    V=$(num_or_empty "$(qv nt)");     [ -n "$V" ] && { NIGHT_TO=$V; CHANGED=1; }
+    V=$(qv aw | tr -cd '0-9,-')
+    if [ -n "$V" ] || [ "$(qv aw0)" = "1" ]; then
+        printf '%s' "$V" | tr ',' '\n' | sed -n 's/^\([0-9]\{9,11\}\)-\([0-9]\{9,11\}\)$/\1 \2/p' | head -n 30 > "$DIR/.away.tmp"
+        if ! cmp -s "$DIR/.away.tmp" "$DIR/.away"; then mv "$DIR/.away.tmp" "$DIR/.away"; log "work times from the calendar: $(grep -c . "$DIR/.away") in the next week"; else rm -f "$DIR/.away.tmp"; fi
+    fi
     V=$(num_or_empty "$(qv window)");   [ -n "$V" ] && { WAKE_WINDOW=$V; [ "$WAKE_WINDOW" -lt "$MIN_WINDOW" ] && WAKE_WINDOW=$MIN_WINDOW; CHANGED=1; }
     V=$(num_or_empty "$(qv ss)")
     if [ -n "$V" ]; then
@@ -559,7 +595,7 @@ poll_settings_http() {
     fi
     if [ "$CHANGED" = "1" ]; then
         save_conf
-        log "settings saved: interval=${INTERVAL_MIN}m window=${WAKE_WINDOW}s screenshot=${SCREENSAVER_MODE} hide-statusbar=${PILLOW_DISABLE}"
+        log "settings saved: interval=${INTERVAL_MIN}m window=${WAKE_WINDOW}s screenshot=${SCREENSAVER_MODE} hide-statusbar=${PILLOW_DISABLE} smart=${SMART_SLEEP} (home ${HOME_MIN}m, work ${AWAY_MIN}m, night ${NIGHT_MIN}m ${NIGHT_FROM}-${NIGHT_TO})"
     fi
     write_ui_state 0
 }
@@ -605,6 +641,27 @@ write_cloud_js() {
 CURL_BIN=/usr/bin/curl; [ -x "$CURL_BIN" ] || CURL_BIN=curl
 CURL="$CURL_BIN"; [ -f "$DIR/kcurl.sh" ] && . "$DIR/kcurl.sh"; command -v kcurl >/dev/null 2>&1 || kcurl() { "$CURL_BIN" "$@"; }     # 10.5: never unchecked when kcurl.sh is missing
 cloud_ready() { [ -f "$DIR/cloud.conf" ] && [ -f "$DIR/hub_cloud.sh" ]; }
+
+# 10.6: how long to sleep now. Sets STEP (the interval, seconds), SMODE (home | away | night | fixed) and
+# BOUND (epoch when that period ends, 0 = none). Times of day use the hub's fixed UTC-7, like fmt_epoch.
+smart_step() {
+    STEP=$((INTERVAL_MIN * 60)); SMODE=fixed; BOUND=0
+    [ "$SMART_SLEEP" = "1" ] || return 0
+    NOWS=$(date +%s); LSEC=$(( (NOWS - 25200) % 86400 ))
+    SMODE=home; STEP=$((HOME_MIN * 60))
+    F=$((NIGHT_FROM * 3600)); T=$((NIGHT_TO * 3600)); NIGHT=0
+    if [ "$F" -gt "$T" ]; then { [ "$LSEC" -ge "$F" ] || [ "$LSEC" -lt "$T" ]; } && NIGHT=1
+    elif [ "$F" -lt "$T" ]; then [ "$LSEC" -ge "$F" ] && [ "$LSEC" -lt "$T" ] && NIGHT=1; fi
+    if [ "$NIGHT" = "1" ]; then SMODE=night; STEP=$((NIGHT_MIN * 60)); BOUND=$(( NOWS + (T - LSEC + 86400) % 86400 )); fi
+    if [ -s "$DIR/.away" ]; then
+        while IFS=' ' read -r AS AE; do
+            case "$AS$AE" in ''|*[!0-9]*) continue ;; esac
+            if [ "$NOWS" -ge "$AS" ] && [ "$NOWS" -lt "$AE" ]; then
+                SMODE=away; STEP=$((AWAY_MIN * 60)); BOUND=$AE; break
+            fi
+        done < "$DIR/.away"
+    fi
+}
 
 GOV_SAVED=""
 if [ "$HUB_TEST" != "1" ]; then
@@ -900,9 +957,12 @@ while true; do
     fi
 
     NOW=$(date +%s)
+    smart_step                                   # 10.6: home / work / night interval
     SECS=$((STEP - (NOW % STEP)))
     [ "$SECS" -lt 60 ] && SECS=$((SECS + STEP))
+    if [ "$BOUND" -gt 0 ] && [ $((NOW + SECS)) -gt "$BOUND" ]; then SECS=$((BOUND - NOW)); [ "$SECS" -lt 60 ] && SECS=60; fi    # wake when the shift / night ends
     NEXT_WAKE_EPOCH=$((NOW + SECS))
+    [ "$SMODE" != "fixed" ] && log "next wake $(fmt_epoch "$NEXT_WAKE_EPOCH") ($SMODE, every $((STEP / 60)) min)"
 
     write_ui_state 1
     write_log_js

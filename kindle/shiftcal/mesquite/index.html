@@ -266,7 +266,15 @@ svg { overflow: visible; }
 .hv-tab { display: table-cell; text-align: center; padding: .55em .3em; font-family: Helvetica, Arial, sans-serif; font-weight: 900; font-size: .85em; letter-spacing: .16em; text-transform: uppercase; border-right: 2px solid #000; }
 .hv-tab:last-child { border-right: 0; }
 .hv-tab.sel { background: #000; color: #fff; }
-.hv-wrap { position: relative; overflow: hidden; padding: .3em .9em; font-family: Helvetica, Arial, sans-serif; }
+.hv-wrap { position: relative; overflow: hidden; padding: .3em .9em 1.5em; font-family: Helvetica, Arial, sans-serif; }
+/* 10.6: Settings scroll (drag up or down, or the arrows); e-ink: the page jumps, nothing animates */
+#hv-sbar { position: absolute; right: 0; width: 2.4em; display: none; border-left: 3px solid #000; background: #fff; z-index: 2; font-family: Helvetica, Arial, sans-serif; }
+#hv-sbar .sb-b { height: 2.4em; line-height: 2.4em; text-align: center; font-size: 1em; font-weight: 900; border-bottom: 2px solid #000; }
+#hv-sbar .sb-b:last-child { border-bottom: 0; border-top: 2px solid #000; position: absolute; left: 0; right: 0; bottom: 0; }
+#hv-strack { position: absolute; left: 0; right: 0; }
+#hv-sthumb { position: absolute; left: 22%; right: 22%; background: #000; min-height: 1.2em; }
+.hv-sec { border: 2px solid #000; padding: .1em .7em .3em; margin: .5em 0 .8em; }
+.hv-pane .hv-row { word-wrap: break-word; }
 .hv-row { margin: .55em 0; }
 .hv-lbl { font-weight: 900; font-size: .9em; text-transform: uppercase; letter-spacing: .14em; }
 .hv-hint { font-size: .7em; color: #333; margin-top: .25em; letter-spacing: .04em; }
@@ -537,6 +545,10 @@ body.look-bold .hv-hint, body.look-bold .fp-body, body.look-bold .ra-s, body.loo
 /* 9.8.5 */
 .gh-q { display: inline-block; vertical-align: top; width: 48%; margin-right: 1%; }
 .gh-qr { width: 8.5em; height: 8.5em; border: 3px solid #000; padding: .3em; float: left; margin-right: .6em; background: #fff; }
+/* 10.6: in the Phone tab's narrow column each code sits on its own line, text beside it */
+#ph-codes .gh-q { display: table; width: 100%; margin: 0 0 .7em 0; }
+#ph-codes .gh-qr { display: table-cell; float: none; width: 7.5em; height: 7.5em; }
+#ph-codes .gh-q .hv-hint { display: table-cell; vertical-align: top; padding-left: .7em; }
 .fp-pin { border: 3px double #000; padding: .3em .5em; font-weight: 700; font-size: 1.15em; margin: .2em 0; }
 .dv-rep { font-size: .75em; letter-spacing: .06em; white-space: nowrap; padding-left: .4em; }
 
@@ -747,13 +759,26 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
         <div class="hv-tab" data-tab="people">People</div>
         <div class="hv-tab" data-tab="pay">Pay</div>
         <div class="hv-tab" data-tab="phone">Phone</div>
+        <div class="hv-tab" data-tab="updates">Updates</div>
         <div class="hv-tab" data-tab="markets">Markets</div>
-        <div class="hv-tab" data-tab="system">Battery</div>
         <div class="hv-tab" data-tab="log">Log</div>
     </div>
+    <div id="hv-sbar"><div class="sb-b" id="hv-sup">&#9650;</div><div id="hv-strack"><div id="hv-sthumb"></div></div><div class="sb-b" id="hv-sdn">&#9660;</div></div>
     <div class="hv-wrap" id="hv-wrap">
         <div class="hv-pane" id="pane-power">
-            <div class="hv-row"><div class="hv-lbl">Wake &amp; sync every</div><div id="opt-int"></div></div>
+            <div class="hv-sec">
+            <div class="hv-row"><div class="hv-lbl">Wake schedule</div><div id="opt-smart"></div>
+                <div class="hv-hint" id="smart-now"></div></div>
+            <div id="smart-rows">
+                <div class="hv-row"><div class="hv-lbl">At home, wake every</div><div id="opt-home"></div></div>
+                <div class="hv-row"><div class="hv-lbl">At work, wake every</div><div id="opt-awaymin"></div>
+                    <div class="hv-hint">Work times come from your shifts in the calendar (with half an hour either side for the trip).</div></div>
+                <div class="hv-row"><div class="hv-lbl">Asleep from</div><div id="opt-nf"></div></div>
+                <div class="hv-row"><div class="hv-lbl">Until</div><div id="opt-nt"></div></div>
+                <div class="hv-row"><div class="hv-lbl">Asleep, wake every</div><div id="opt-nightmin"></div></div>
+            </div>
+            </div>
+            <div class="hv-row"><div class="hv-lbl" id="lbl-int">Wake &amp; sync every</div><div id="opt-int"></div></div>
             <div class="hv-row"><div class="hv-lbl">Stay awake after waking</div><div id="opt-win"></div>
                 <div class="hv-hint">Always at least 2 min. Every tap restarts the countdown, and pressing the power button wakes it for the full time.</div></div>
             <div class="hv-row"><div class="hv-lbl">Standby picture</div><div id="opt-ss"></div>
@@ -827,22 +852,25 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
                 <span class="opt-btn big" id="hv-sync">SYNC NOW</span>
                 <span class="opt-btn big" id="hv-exit">EXIT HUB</span>
             </div>
-            <div class="hv-hint">Exit returns to the Library. The background loop keeps running until "Stop background updates" in KUAL.</div>
+            <div class="hv-hint">Exit stops the hub and its background loop and goes back to the Library. Tap Kitchen Hub Display to start it again.</div>
         </div>
         <div class="hv-pane" id="pane-phone" style="display:none">
             <div class="hv-cols">
                 <div style="width:40%">
                     <div class="hv-row"><div class="hv-lbl">Pair your phone</div><div id="ph-qr"></div><div class="hv-hint" id="ph-qrhint"></div></div>
+                    <div class="hv-row"><div class="hv-lbl">Calendar &amp; TV</div><div id="ph-codes"><div class="hv-hint">The calendar and TV codes appear after the cloud brain's first run.</div></div></div>
                 </div>
                 <div>
                     <div class="hv-row"><div class="hv-lbl">Lists in the cloud</div><div id="ph-status" style="font-size:.85em;line-height:1.5;margin-top:.3em"></div></div>
                     <div class="hv-row"><span class="opt-btn big" id="ph-sync">SYNC LISTS NOW</span></div>
                     <div class="hv-row"><div class="hv-lbl">Timer alerts on your phone</div><div id="ph-ntfy"></div></div>
-                    <div class="hv-row"><div class="hv-lbl">GitHub cloud (brain, updates, TV + calendar)</div><div id="ph-gh"></div></div>
                     <div class="hv-row"><div class="hv-lbl">Sync lists on button wake</div><div id="opt-cloudwake"></div>
                         <div class="hv-hint">On: pressing the power button also fetches list changes from your phone (a few seconds of Wi-Fi).</div></div>
                 </div>
             </div>
+        </div>
+        <div class="hv-pane" id="pane-updates" style="display:none">
+            <div class="hv-row"><div class="hv-lbl">Cloud brain &amp; updates</div><div id="ph-gh"></div></div>
         </div>
         <div class="hv-pane" id="pane-people" style="display:none"></div>
         <div class="hv-pane" id="pane-pay" style="display:none"></div>
@@ -1530,7 +1558,7 @@ function exitHub() {
 // =====================================================================
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.5";
+var VERSION = "10.6";
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
 var EDIT = false;
@@ -6756,7 +6784,7 @@ gitHubPane = function() {
     else h += "<div class='hv-hint'>" + esc(pName("p2")) + "&rsquo;s calendar code appears after the next cloud brain run.</div>";
     var pl = pairLink();
     if (pl) h += "<div class='gh-q'><div class='gh-qr'>" + qrSvg(pl + "&who=p2") + "</div><div class='hv-hint'><b>Pair " + esc(pName("p2")) + "&rsquo;s phone</b><br>Things he adds show his letter.</div></div>";
-    box.innerHTML += h + "</div>";
+    var add = document.createElement("div"); add.innerHTML = h + "</div>"; box.appendChild(add);      // 10.6: innerHTML += unhooked every button above it
 };
 
 // ---------- refresh hooks ----------
@@ -8708,6 +8736,180 @@ IC_LABEL.rail = "RAIL";
 setInterval(renderRail, 20000);      // the clock (only repaints when the minute changes)
 relayout();
 
+// =====================  10.6: SETTINGS REFRESH, SMART WAKE SCHEDULE, RAIL SLEEPS  =====================
+// Settings scroll: the panes can be taller than the screen. Drag up or down anywhere in a pane, or tap the
+// arrows; the page jumps (no animation: e-ink). The bar on the right only shows when there is more to see.
+var HVS = { sig: "", y0: 0, t0: 0, on: false };
+function hvMax() { var w = $("hv-wrap"); return w ? Math.max(0, w.scrollHeight - w.clientHeight) : 0; }
+function hvScrollUpdate() {
+    var w = $("hv-wrap"), b = $("hv-sbar");
+    if (!w || !b) return;
+    if (!HUB_OPEN) { b.style.display = "none"; return; }
+    var max = hvMax(), top = $("hv-mast").offsetHeight + $("hv-tabs").offsetHeight;
+    if (max <= 4) {
+        if (HVS.sig !== "none") { HVS.sig = "none"; b.style.display = "none"; w.style.marginRight = "0px"; }
+        if (w.scrollTop) w.scrollTop = 0;
+        return;
+    }
+    var bw = b.offsetWidth || Math.round(FS * 2.4);
+    var sig = top + "|" + w.clientHeight + "|" + w.scrollHeight + "|" + w.scrollTop;
+    if (sig === HVS.sig) return;           // e-ink: repaint only when something moved
+    HVS.sig = sig;
+    b.style.display = "block"; b.style.top = top + "px"; b.style.height = w.clientHeight + "px";
+    w.style.marginRight = bw + "px";
+    var tr = $("hv-strack"), th = $("hv-sthumb"), bh = $("hv-sup").offsetHeight;
+    tr.style.top = bh + "px"; tr.style.height = Math.max(10, w.clientHeight - 2 * bh) + "px";
+    var trh = tr.offsetHeight, hgt = Math.max(FS * 1.2, trh * w.clientHeight / w.scrollHeight);
+    th.style.height = Math.round(hgt) + "px";
+    th.style.top = Math.round((trh - hgt) * (w.scrollTop / max)) + "px";
+}
+function hvScrollTo(y) { var w = $("hv-wrap"); if (!w) return; w.scrollTop = Math.max(0, Math.min(hvMax(), Math.round(y))); hvScrollUpdate(); }
+function hvScrollBy(dy) { var w = $("hv-wrap"); if (w) hvScrollTo(w.scrollTop + dy); }
+(function() {
+    var w = $("hv-wrap");
+    function down(y) { HVS.on = true; HVS.y0 = y; HVS.t0 = w.scrollTop; }
+    function up(y) {
+        if (!HVS.on) return;
+        HVS.on = false;
+        var dy = HVS.y0 - y;
+        if (Math.abs(dy) < Math.max(30, FS * 1.5)) return;
+        hvScrollTo(HVS.t0 + dy * 1.5);       // a drag moves the page a bit further than the finger: fewer drags
+        SWIPE_AT = new Date().getTime();     // the finger lifting on a button is not a tap
+    }
+    w.addEventListener("touchstart", function(e) { if (e.touches.length === 1) down(e.touches[0].clientY); }, false);
+    w.addEventListener("touchend", function(e) { var t = e.changedTouches && e.changedTouches[0]; if (t) up(t.clientY); }, false);
+    w.addEventListener("mousedown", function(e) { down(e.clientY); }, false);
+    w.addEventListener("mouseup", function(e) { up(e.clientY); }, false);
+    bindTap($("hv-sup"), function() { hvScrollBy(-$("hv-wrap").clientHeight * 0.8); });
+    bindTap($("hv-sdn"), function() { hvScrollBy($("hv-wrap").clientHeight * 0.8); });
+    setInterval(function() { if (HUB_OPEN) hvScrollUpdate(); }, 1500);      // panes change size as they load
+})();
+var __layoutHub106 = layoutHub;
+layoutHub = function() { __layoutHub106(); HVS.sig = ""; hvScrollUpdate(); };
+
+// ---------- tabs: Battery joins Sleep; Updates gets its own tab (the Phone tab was doing seven jobs) ----------
+// the calendar / TV / roommate codes that the cloud pane draws are moved to the Phone tab
+function movePhoneCodes() {
+    var src = $("ph-gh"), dst = $("ph-codes");
+    if (!src || !dst) return;
+    var qs = src.getElementsByClassName("gh-q"), list = [], i;
+    for (i = 0; i < qs.length; i++) list.push(qs[i]);
+    if (!list.length) return;
+    dst.innerHTML = "";
+    for (i = 0; i < list.length; i++) dst.appendChild(list[i]);
+}
+var __ghPane106 = gitHubPane;
+gitHubPane = function() { __ghPane106(); movePhoneCodes(); HVS.sig = ""; };
+var __selectTab106 = selectTab;
+selectTab = function(name) {
+    if (name === "system") name = "power";
+    var w = $("hv-wrap"), same = (name === curTab);
+    if (name === "updates") {
+        __selectTab106("phone");             // draws the cloud pane into #ph-gh, which now lives on the Updates tab
+        curTab = "updates";
+        $("pane-phone").style.display = "none"; $("pane-updates").style.display = "block";
+        var tabs = $("hv-tabs").getElementsByTagName("div");
+        for (var i = 0; i < tabs.length; i++) tabs[i].className = "hv-tab" + (tabs[i].getAttribute("data-tab") === "updates" ? " sel" : "");
+        loadScript("cloud.js", function() { if (curTab === "updates" && HUB_OPEN) renderPhonePane(); });
+    } else {
+        $("pane-updates").style.display = "none";
+        __selectTab106(name);
+    }
+    if (name === "power") { $("pane-system").style.display = "block"; renderStatusTable(); renderBattery(); buildSmartOpts(); }
+    if (w && !same) w.scrollTop = 0;
+    HVS.sig = ""; hvScrollUpdate();
+};
+// re-bind the tab strip: the old bindings point at the old selectTab, and there are new tabs
+(function() {
+    var old = $("hv-tabs"), fresh = old.cloneNode(true);
+    old.parentNode.replaceChild(fresh, old);
+    var tabs = fresh.getElementsByTagName("div");
+    for (var i = 0; i < tabs.length; i++) (function(t) { bindTap(t, function() { selectTab(t.getAttribute("data-tab")); }); })(tabs[i]);
+})();
+if (curTab === "system") curTab = "power";
+
+// ---------- smart wake schedule (Settings > Sleep) ----------
+// The loop decides: home every N min, at work (your shifts) every N min, asleep every N min. The page edits
+// the numbers and tells the loop when you work.
+var SMART_OPTS = { home: [10, 15, 20, 30], awaymin: [60, 120, 180, 240], nightmin: [120, 180, 240, 360], nf: [21, 22, 23, 0, 1], nt: [5, 6, 7, 8, 9] };
+function hourLbl(h) { return (h % 12 || 12) + (h < 12 ? " AM" : " PM"); }
+function minLbl(m) { return m < 60 ? m + " min" : (m % 60 ? (m / 60).toFixed(1) : m / 60) + " h"; }
+function smartFromState() {
+    var S = window.HUB_STATE || {};
+    return { smart: S.smart === 0 ? 0 : 1, home: +S.homeMin || 15, awaymin: +S.awayMin || 120, nightmin: +S.nightMin || 180,
+             nf: S.nightFrom === undefined ? 23 : +S.nightFrom, nt: S.nightTo === undefined ? 6 : +S.nightTo };
+}
+var __openHub106 = openHub;
+openHub = function() { var sm = smartFromState(); __openHub106(); for (var k in sm) if (sm.hasOwnProperty(k)) editCfg[k] = sm[k]; if (curTab === "power") buildSmartOpts(); };
+function smartNowText() {
+    var S = window.HUB_STATE || {}, w = S.where, n = +S.aways || 0;
+    var h = w === "away" ? "Right now: <b>at work</b>." : w === "night" ? "Right now: <b>night</b>." : w === "home" ? "Right now: <b>home</b>." : "";
+    if (editCfg.smart) h += " " + (n ? n + " work time" + (n === 1 ? "" : "s") + " this week from your shifts." : "No shifts found for the next week &mdash; add them in the Calendar.");
+    else h += " Off: the hub wakes at the same interval all day.";
+    return h + " Tap SAVE below after a change.";
+}
+function buildSmartOpts() {
+    if (!$("opt-smart")) return;
+    if (editCfg.smart === undefined) { var sm = smartFromState(); for (var k in sm) if (sm.hasOwnProperty(k)) editCfg[k] = sm[k]; }
+    chipRow("opt-smart", [1, 0], ["Smart: home, work, night", "Same all day"], editCfg.smart, function(v) { editCfg.smart = v; buildSmartOpts(); });
+    $("smart-rows").style.display = editCfg.smart ? "block" : "none";
+    $("lbl-int").innerHTML = editCfg.smart ? "Full sync at most every" : "Wake &amp; sync every";
+    var rows = [["home", minLbl], ["awaymin", minLbl], ["nightmin", minLbl], ["nf", hourLbl], ["nt", hourLbl]];
+    for (var i = 0; i < rows.length; i++) (function(key, fmt) {
+        var vals = SMART_OPTS[key].slice(0), labels = [];
+        if (vals.indexOf(editCfg[key]) < 0) vals.push(editCfg[key]);
+        for (var j = 0; j < vals.length; j++) labels.push(fmt(vals[j]));
+        chipRow("opt-" + key, vals, labels, editCfg[key], function(v) { editCfg[key] = v; });
+    })(rows[i][0], rows[i][1]);
+    $("smart-now").innerHTML = smartNowText();
+    HVS.sig = "";
+}
+saveHub = function() {      // 10.6: the Sleep tab's SAVE also sends the schedule
+    HUB.int = editCfg.int; HUB.win = editCfg.win; HUB.ss = editCfg.ss;
+    saveCfg();
+    $("hv-msg").innerHTML = "Saving&hellip;";
+    busyStart("SAVING", 12000);
+    var q = "interval=" + editCfg.int + "&window=" + editCfg.win + "&ss=" + editCfg.ss;
+    if (editCfg.smart !== undefined) q += "&smart=" + editCfg.smart + "&home=" + editCfg.home + "&away=" + editCfg.awaymin + "&night=" + editCfg.nightmin + "&nf=" + editCfg.nf + "&nt=" + editCfg.nt;
+    sendPower(q, function(r) {
+        busyEnd("SAVING");
+        $("hv-msg").innerHTML = (r === "ok") ? "Saved. The background loop confirmed." : "Saved here, but the background loop did not answer (it only listens while awake).";
+        AWAY.sent = ""; sendAway();
+    });
+};
+// your work times for the next week -> the loop (epoch seconds, half an hour either side for the trip)
+var AWAY = { sent: "" };
+function awayWindows() {
+    var nowS = Math.floor(new Date().getTime() / 1000), off = tzOffsetHours(new Date().getTime()) * 3600, k0 = todayKey(), out = [];
+    for (var i = -1; i < 8; i++) {
+        var k = addDays(k0, i), sp = spanOf("p1", k);
+        if (!sp) continue;
+        var mid = Date.UTC(+k.substring(0, 4), +k.substring(5, 7) - 1, +k.substring(8, 10)) / 1000 + off;
+        var s = mid + sp.s * 60 - 1800, e = mid + sp.e * 60 + 1800;
+        if (e > nowS) out.push(s + "-" + e);
+    }
+    return out.join(",");
+}
+function sendAway() {
+    var a; try { a = awayWindows(); } catch (e) { return; }
+    if (a === AWAY.sent) return;
+    sendPower(a ? "aw=" + a : "aw0=1", function(r) { if (r === "ok") AWAY.sent = a; });
+}
+var __onWake106 = onWake;
+onWake = function() { __onWake106(); setTimeout(sendAway, 6000); };
+var __itemsUI106 = renderItemsUI;
+renderItemsUI = function() { __itemsUI106(); setTimeout(sendAway, 3000); };      // a shift added or changed
+setTimeout(sendAway, 15000);
+setInterval(function() { if (!HUB.sleeping) sendAway(); }, 30 * 60000);      // new days come into the week
+
+// ---------- the side rail sleeps with the hub: the standby picture gets the whole screen ----------
+var __railLayout106 = railLayout;
+railLayout = function() {
+    var keep = FEEL.rail;
+    if (HUB.sleeping) FEEL.rail = 0;      // just for this layout; the setting itself is untouched
+    try { __railLayout106(); } finally { FEEL.rail = keep; }
+};
+relayout();
 </script>
 </body>
 </html>
