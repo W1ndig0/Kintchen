@@ -23,7 +23,7 @@ async function get(url, ms, opts) {
         (e.news || []).forEach(n => console.log("     news: " + n.t.slice(0, 90) + " (" + n.src + ")"));
         (e.deals || []).forEach(d => console.log("     deal: " + d.title + " $" + d.price + (d.off ? " (-" + d.off + "% of $" + d.reg + ")" : "") + " " + (d.src ? "photo ok" : "NO PHOTO")));
     }
-    console.log("== Best Buy fields check");
+    console.log("== Best Buy fields check (skipped)"); return;
     for (const q of ["nintendo switch 2", "sony headphones"]) {
         const t = await get("https://www.bestbuy.ca/api/v2/json/search?query=" + encodeURIComponent(q) + "&lang=en-CA&pageSize=12&sortBy=relevance", 15000, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KitchenHub", Accept: "application/json" } });
         let j = null; try { j = JSON.parse(t); } catch (e) {}

@@ -35,7 +35,7 @@ module.exports = async function week(ctx) {
     for (const e of events.slice(0, 4)) {
         // related headlines: Google News search for the exact title (Canada, English)
         e.news = [];
-        const rss = await get("https://news.google.com/rss/search?q=" + encodeURIComponent("\"" + e.t + "\"") + "&hl=en-CA&gl=CA&ceid=CA:en", 15000, { headers: { "User-Agent": "Mozilla/5.0 KitchenHub" } });
+        const rss = await get("https://news.google.com/rss/search?q=" + encodeURIComponent("\"" + e.t + "\" " + ({ game: "game", film: "film", tv: "series" }[e.kind] || "")) + "&hl=en-CA&gl=CA&ceid=CA:en", 15000, { headers: { "User-Agent": "Mozilla/5.0 KitchenHub" } });
         const items = String(rss || "").split("<item>").slice(1);
         for (const it of items) {
             const g = re => { const m = re.exec(it); return m ? decodeEnts(m[1].replace(/<!\[CDATA\[|\]\]>/g, "")).trim() : ""; };
@@ -51,8 +51,12 @@ module.exports = async function week(ctx) {
             const j = await J("https://www.bestbuy.ca/api/v2/json/search?query=" + encodeURIComponent(e.t) + "&lang=en-CA&pageSize=12&sortBy=relevance");
             const ps = j && Array.isArray(j.products) ? j.products.filter(p => p.isVisible !== false && (+p.salePrice || +p.regularPrice) > 0) : [];
             const w = words(e.t), match = p => w.length && w.every(x => String(p.name || "").toLowerCase().indexOf(x) >= 0);
-            const own = ps.filter(match).slice(0, 2).map(bbDeal), sale = ps.filter(p => !match(p) && onSale(p)).map(bbDeal).sort((a, b) => b.off - a.off).slice(0, 2);
-            e.deals = own.concat(sale).slice(0, 3);
+            // the release itself only counts in a game or movie department (a search for "I Play Rocky" also finds toy cameras),
+            // and "goes with it" means on sale in the same department (other PS5 games), never whatever else the search turned up
+            const media = p => /game|movie|blu-?ray|dvd|4k|film/i.test(String(p.categoryName || "")), ownP = ps.filter(p => match(p) && media(p)).slice(0, 2);
+            const cats = ownP.map(p => String(p.categoryName || "")).filter(Boolean);
+            const sale = ps.filter(p => !match(p) && onSale(p) && cats.indexOf(String(p.categoryName || "")) >= 0).map(bbDeal).sort((a, b) => b.off - a.off).slice(0, 2);
+            e.deals = ownP.map(bbDeal).concat(sale).slice(0, 3);
         }
     }
     return { at: Math.floor(Date.now() / 1000), from, to, events };

@@ -549,6 +549,15 @@ body.look-bold .hv-hint, body.look-bold .fp-body, body.look-bold .ra-s, body.loo
 /* 10.7 deal cards */
 .dl-card { display: inline-block; vertical-align: top; width: 47%; margin: 0 2% .8em 0; border: 3px solid #000; padding: .4em; box-sizing: border-box; min-height: 7.2em; position: relative; }
 .dl-card.wide { width: 98%; }
+/* 10.7 almanac: big this week */
+.wk-ev { border: 3px solid #000; padding: .5em .6em; margin: 0 0 .8em 0; }
+.wk-t { font-family: Georgia, serif; font-weight: 700; font-size: 1.5em; line-height: 1.15; }
+.wk-d { font-family: Helvetica, Arial, sans-serif; font-weight: 900; font-size: .7em; letter-spacing: .14em; text-transform: uppercase; margin: .2em 0 .3em 0; }
+.wk-n { font-size: .9em; line-height: 1.3; padding: .15em 0 .15em .8em; text-indent: -.8em; }
+.wk-n i { font-size: .8em; }
+.wk-ev .dl-card { width: 98%; min-height: 0; }
+.al-big { font-family: Helvetica, Arial, sans-serif; font-size: .8em; border-bottom: 2px solid #000; padding-bottom: .2em; margin-bottom: .3em; }
+.al-big b { letter-spacing: .1em; }
 .dl-img { float: left; width: 6.2em; height: 6.2em; margin-right: .6em; text-align: center; overflow: hidden; border: 1px solid #000; background: #fff; }
 .dl-img img { max-width: 100%; max-height: 100%; }
 .dl-off { position: absolute; top: 0; right: 0; background: #000; color: #fff; font-weight: 900; padding: .1em .45em; font-size: 1.15em; }
@@ -9059,6 +9068,113 @@ TILE_RENDER.deals = function(T) {
          "<div class='tl-r tl-s'>" + dealWhy(d) + "</div></div>";
     for (var i = 1; i < ds.length && i < (T.cls === "s" ? 1 : T.cls === "m" ? 3 : 7); i++) h += "<div class='tl-r'>" + esc(String(ds[i].title).substring(0, 40)) + " <b>" + $m(ds[i].price) + "</b> &minus;" + ds[i].off + "%</div>";
     tileFill("deals", T, h);
+};
+// ---------- 10.7 almanac: what's big this week (games, films, TV from the cloud), local, sky ----------
+var __cleanEX107 = cleanEX;
+cleanEX = function(x) {
+    x = __cleanEX107(x);
+    if (!x) return x;
+    function arr(a) { return a instanceof Array ? a : []; }
+    function dl(d) { return d && d.title && +d.price > 0 ? { title: String(d.title), price: +d.price, reg: +d.reg || +d.price, off: Math.max(0, Math.round(+d.off || 0)), img: /^img\/d[0-9a-f]{12}\.(jpg|png)$/.test(String(d.img || "")) ? String(d.img) : "",
+        kind: String(d.kind || ""), "for": String(d["for"] || ""), ends: String(d.ends || ""), clear: !!d.clear, store: String(d.store || "") } : null; }
+    x.deals = arr(x.deals).map(dl).filter(function(d) { return d; });
+    var w = x.week;
+    if (w && typeof w === "object") {
+        w.events = arr(w.events).filter(function(e) { return e && e.t && /^\d{4}-\d\d-\d\d$/.test(String(e.date)); }).map(function(e) {
+            return { t: String(e.t), kind: String(e.kind || ""), date: String(e.date), rank: +e.rank || 0,
+                     news: arr(e.news).filter(function(n) { return n && n.t; }).map(function(n) { return { t: String(n.t), src: String(n.src || ""), at: +n.at || 0 }; }),
+                     deals: arr(e.deals).map(dl).filter(function(d) { return d; }) };
+        });
+        x.week = w;
+    } else x.week = null;
+    return x;
+};
+if (EX) EX = cleanEX(EX);
+function weekEvents() {      // this week's releases that haven't passed (yesterday's still shows for a day)
+    var w = EX && EX.week, k = todayKey();
+    if (!w || !w.events) return [];
+    return w.events.filter(function(e) { return e.date >= addDays(k, -1) && e.date <= addDays(k, 8); });
+}
+function wkDay(d) {
+    var k = todayKey();
+    if (d === k) return "today";
+    if (d === addDays(k, 1)) return "tomorrow";
+    if (d === addDays(k, -1)) return "yesterday";
+    return prettyDay(d).split(",")[0];
+}
+var WK_KIND = { game: "GAME", film: "FILM", tv: "TV" };
+function agoTxt(at) { if (!at) return ""; var h = Math.round((new Date().getTime() / 1000 - at) / 3600); return h < 1 ? "just now" : h < 24 ? h + " h ago" : Math.round(h / 24) + " d ago"; }
+var __dealWhy107 = dealWhy;
+dealWhy = function(d) { return d.kind === "rel" ? "goes with " + esc(String(d["for"]).substring(0, 30)) : __dealWhy107(d); };
+function almWeekHtml() {
+    var ev = weekEvents(), h = "", i, j;
+    if (!ev.length) return "<div class='sv-empty'>" + (EX && EX.week ? "No big game, film or TV releases this week." : "The big releases of the week arrive with the next sync (the cloud looks every 6 hours).") + "</div>";
+    for (i = 0; i < ev.length; i++) {
+        var e = ev[i];
+        h += "<div class='wk-ev'><div class='wk-t'>" + esc(e.t) + "</div><div class='wk-d'><span class='chip'>" + (WK_KIND[e.kind] || "NEW") + "</span>" +
+             (e.date < todayKey() ? "came out " : "out ") + esc(wkDay(e.date)) + "</div>";
+        for (j = 0; j < e.news.length; j++) h += "<div class='wk-n'>&bull; " + esc(e.news[j].t) + " <i>" + esc(e.news[j].src) + (e.news[j].at ? " &middot; " + agoTxt(e.news[j].at) : "") + "</i></div>";
+        for (j = 0; j < e.deals.length; j++) { var d = e.deals[j]; if (!d.kind) { d.kind = "rel"; d["for"] = e.t; } h += dealCard(d, true); }
+        h += "</div>";
+    }
+    return h + "<div class='hv-hint'>The biggest new games, films and shows by how widely they're covered, with headlines from Google News and prices from Best Buy.</div>";
+}
+function almLocalHtml() {
+    var W = window.HUB_WHATSON || {}, h = "", i, k = todayKey(), rows = [];
+    for (i = 0; i < 8; i++) {
+        var dk = addDays(k, i), hn = HubCal.holiday(dk), v = SHIFTS[dk], evs = EVENTS[dk] || [], lbl = i === 0 ? "Today" : i === 1 ? "Tomorrow" : prettyDay(dk).split(",")[0];
+        if (hn) rows.push([lbl, "<b>" + esc(hn) + "</b>"]);
+        if (v && !isOff(v)) rows.push([lbl, "Shift " + esc(shortShift(v))]);
+        for (var j = 0; j < evs.length; j++) rows.push([lbl, (evs[j].time ? HubCal.fmtTime(evs[j].time) + " " : "") + esc(evs[j].title)]);
+    }
+    var hol = bigSaleDays();
+    h += "<div class='wo-h'>Your week</div>";
+    if (hol) h += "<div class='wo-li'><b>" + hol + "</b></div>";
+    if (!rows.length) h += "<div class='wo-li'>Nothing on the calendar this week.</div>";
+    for (i = 0; i < rows.length && i < 14; i++) h += "<div class='wo-li'><b>" + rows[i][0] + "</b> " + rows[i][1] + "</div>";
+    if (W.alerts && W.alerts.length) {
+        h += "<div class='wo-h wo-alert'>Road &amp; weather alerts</div>";
+        for (i = 0; i < W.alerts.length && i < 5; i++) h += "<div class='wo-li'><span class='chip'>" + esc(W.alerts[i].s) + "</span>" + esc(W.alerts[i].t) + "</div>";
+    }
+    if (W.pg && W.pg.length) {
+        h += "<div class='wo-h'>Around Prince George</div>";
+        for (i = 0; i < W.pg.length && i < 8; i++) h += "<div class='wo-li'>&bull; " + esc(decodeEnts(W.pg[i].t || "")) + "</div>";
+    } else h += "<div class='hv-hint' style='margin-top:.6em'>Prince George news and events arrive with the next sync.</div>";
+    return h;
+}
+function almSkyHtml() {
+    var today = new Date(), syn = 29.53058867, age = moonPhase(today), h = "";
+    h += "<div class='al-top'><div class='al-moon'><span>" + moonGlyph(moonPhaseIndex(today), "#000", "#fff") + "</span></div><div class='al-ph'><div class='al-phase'>" + esc(moonPhaseLabel(today)) + "</div>" +
+         "<div class='al-sub'>Full moon " + daysTxt(age < syn / 2 ? syn / 2 - age : syn * 1.5 - age) + " &middot; New moon " + daysTxt(syn - age) + "</div></div></div>";
+    var d = WX && WX.daily;
+    if (d && d.sunrise && d.sunset) {
+        h += "<div class='wo-h'>Sun</div>";
+        for (var i = 0; i < Math.min(3, d.sunrise.length); i++) if (d.sunrise[i] && d.sunset[i])
+            h += "<div class='wo-li'><b>" + (i === 0 ? "Today" : i === 1 ? "Tomorrow" : prettyDay(addDays(todayKey(), i)).split(",")[0]) + "</b> up " + fmtClock(d.sunrise[i]) + ", down " + fmtClock(d.sunset[i]) + " &middot; " + hm(isoMin(d.sunset[i]) - isoMin(d.sunrise[i])) + " of daylight</div>";
+    } else h += "<div class='hv-hint'>Sun times arrive with the weather.</div>";
+    var otd = window.HUB_DATA && window.HUB_DATA.onThisDay;
+    if (otd) { var oy = typeof otd === "object" ? otd.year : "", ot = typeof otd === "object" ? otd.text : String(otd); if (ot) h += "<div class='wo-h'>On this day" + (oy ? " in " + esc(String(oy)) : "") + "</div><div class='wo-li'>" + esc(ot) + "</div>"; }
+    return h;
+}
+XV_TABS.alm = ["THIS WEEK", "LOCAL", "SKY"]; XV_TITLE.alm = "ALMANAC";
+XVR.alm = function(tab) { return tab === 0 ? almWeekHtml() : tab === 1 ? almLocalHtml() : almSkyHtml(); };
+function openAlm() { openXV("alm", 0); }
+OPEN_ACT.alm = openAlm;
+var __tileTap107 = tileTap;
+tileTap = function(id, open) { return __tileTap107(id, id === "alm" ? openAlm : open); };
+// the tile: the week's biggest release on top of the moon and sun
+var __almTile107 = TILE_RENDER.alm;
+TILE_RENDER.alm = function(T) {
+    var ev = weekEvents(), inner = $("alm-in"), top = ev.length ? "<b>THIS WEEK</b> " + esc(ev[0].t) + " &middot; " + esc(wkDay(ev[0].date)) + (ev.length > 1 && T.cls !== "s" ? " <i>+" + (ev.length - 1) + " more</i>" : "") : "";
+    if (inner.__wk !== top) { inner.__fk = null; inner.__wk = top; }
+    __almTile107(T);
+    if (top && !inner.getElementsByClassName("al-big").length) {
+        var b = document.createElement("div");
+        b.className = "al-big"; b.innerHTML = top;
+        inner.insertBefore(b, inner.firstChild);
+        fitText(inner, 9, Math.min(T.h * 0.22, FS * (T.tall ? 3.6 : 2.6)));
+        centerV(inner);
+    }
 };
 </script>
 </body>
