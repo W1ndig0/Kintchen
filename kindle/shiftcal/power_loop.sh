@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.9.1"
+VERSION="10.9.2"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -463,6 +463,18 @@ poll_settings_http() {
     case "$REQ" in *"/save?"*) ;; *) return ;; esac
     QS=$(echo "$REQ" | sed -n 's#.* /save?\([^ ]*\) HTTP.*#\1#p')
     NOWQ=$(date +%s)
+    # 10.9.2: the page's start-up black box (a tiny script at the top of the page, separate from the big one):
+    # how far the page got (pgl) and any script error (pgerr). No key needed - it only writes a line to the
+    # log (at most 40 per start) and changes nothing, so a page that never says "I'm up" leaves its reason here.
+    PGL=$(qv pgl); PGE=$(qv pgerr)
+    if [ -n "$PGL$PGE" ]; then
+        PG_N=$(( ${PG_N:-0} + 1 ))
+        if [ "$PG_N" -le 40 ]; then
+            [ -n "$PGL" ] && log "page start-up: $(urldecode "$PGL" | tr -cd 'A-Za-z0-9 :=.,/_()-' | cut -c1-120)"
+            [ -n "$PGE" ] && log "page SCRIPT ERROR: $(urldecode "$PGE" | tr -cd 'A-Za-z0-9 :=.,/_()@#|<>[]-' | cut -c1-220)"
+        fi
+        return
+    fi
     # 10.9: no key, no action (logged at most once a minute so a noisy device can't fill the log).
     # 10.9.1: EXCEPT the page's "I'm up": start-up and a fresh update's health check must never depend on the
     # key (10.9 rolled back on a Kindle where the page's key never matched). They change nothing else.

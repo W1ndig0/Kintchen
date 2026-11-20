@@ -1,3 +1,4 @@
+khMark("v109.js: started");     // 10.9.2 black box
 /* Kitchen Hub 10.9 — loaded after the main page script (index.html). ES5 only: the Kindle's browser is old.
  *
  *  1. Authenticator (TOTP, RFC 6238): a 6-digit code from Google/Microsoft Authenticator guards pairing codes,
@@ -744,3 +745,4 @@ FILLER_EXTRA.push(function() {
     return ["BIRD OF THE HOUR", "<img src='" + esc(b.img) + "' alt='' onerror=\"this.style.display='none'\" style='display:block;margin:.1em 0 .2em;-webkit-filter:grayscale(1);filter:grayscale(1)'>" +
         esc(b.n) + "<div style='font:normal .45em Helvetica,Arial,sans-serif;margin-top:.2em'>" + esc(b.note) + "<br>Photo: " + esc(b.by) + " (" + esc(b.lic) + ")</div>"];
 });
+khMark("v109.js: finished");     // 10.9.2 black box
