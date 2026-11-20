@@ -620,6 +620,13 @@ poll_settings_http() {
             cloud_ready && [ "$CLOUD_ON_WAKE" = "1" ] && ! sync_running && start_sync lists
         fi
     fi
+    # 10.9: a command for the kitchen monitor, locked by the page with your passphrase ("~" + base64url)
+    SCR=$(qv screen)
+    if [ -n "$SCR" ]; then
+        case "$SCR" in "~"*) ;; *) SCR="" ;; esac
+        case "$SCR" in *[!A-Za-z0-9_~-]*) SCR="" ;; esac
+        [ -n "$SCR" ] && [ ${#SCR} -le 1500 ] && screen_send "$SCR"
+    fi
     # 10.9: Settings > System asks for a fresh look at CPU, memory and services
     if [ "$(qv sysinfo)" = "1" ] && [ -f "$DIR/hub_sys.sh" ]; then SYS_AT=$NOWQ; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & fi
     # 10.9: power settings from Settings > Sleep
@@ -723,7 +730,33 @@ rotate_keys() {
     write_cloud_js
     log "new keys made (passphrase, alert topic, monitor topic) - re-pair the phone, PC and TV, then update the GitHub secrets"
 }
+# 10.9: the kitchen monitor's channel (ntfy topic). Made once from the Kindle's random source when missing;
+# the TV/monitor learns it from its sealed pairing code (Settings > Security > TV / MONITOR).
+mon_topic_init() {
+    [ -f "$DIR/cloud.conf" ] || return 0
+    grep -q '^MON_TOPIC=khscreen-[0-9a-f]\{20\}' "$DIR/cloud.conf" && return 0
+    MT="khscreen-$(od -An -tx1 -N10 /dev/urandom 2>/dev/null | tr -cd 'a-f0-9')"
+    [ ${#MT} = 29 ] && hub_conf_set MON_TOPIC "$MT" && log "made the kitchen monitor's channel"
+}
+# 10.9: send one (already locked) command to the kitchen monitor. Wi-Fi stays on 90 s for the next tap.
+screen_send() {
+    MT=$(sed -n 's/^MON_TOPIC=\(khscreen-[0-9a-f]*\)$/\1/p' "$DIR/cloud.conf" 2>/dev/null | head -1)
+    [ -n "$MT" ] || { log "screen: no monitor channel yet"; return; }
+    NEWU=$(( $(date +%s) + 90 )); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+    (
+        trap - EXIT INT TERM
+        SF=$(mktemp 2>/dev/null) || SF="/tmp/kh_scr.$$"
+        ( umask 077; printf '%s' "$1" > "$SF" )
+        if wifi_on; then
+            C=$(kcurl -s --connect-timeout 8 --max-time 15 -o /dev/null -w '%{http_code}' -H "Cache: no" --data-binary "@$SF" "https://ntfy.sh/$MT" 2>/dev/null)
+            [ "$C" = "200" ] || log "screen: send failed ($C)"
+        else log "screen: no Wi-Fi"; fi
+        rm -f "$SF"
+        sleep 90; sync_running || wifi_off
+    ) &
+}
 write_cloud_js() {
+    mon_topic_init
     NT=$(ntfy_topic)
     if [ -f "$DIR/cloud.conf" ]; then
         # 10.9: pass0 = the passphrase before the last key change (still opens older items); legacy=1 when

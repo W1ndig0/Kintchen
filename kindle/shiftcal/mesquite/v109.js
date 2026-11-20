@@ -647,3 +647,62 @@ buildFeelOpts = function() {
     chipRow("opt-space", [1, 0], ["On", "Off"], FEEL.space === 0 ? 0 : 1, function(v) { FEEL.space = v; saveFeel(); SPACE.need = {}; relayout(); });
     chipRow("opt-fillers", [1, 0], ["On", "Off"], FEEL.fillers === 0 ? 0 : 1, function(v) { FEEL.fillers = v; saveFeel(); relayout(); });
 };
+
+// ===================== 11. THE KITCHEN MONITOR (mini PC + see-through screen) =====================
+// The monitor shows tv.html. Each button here sends one command through your private ntfy channel
+// (MON_TOPIC): locked with your passphrase, with the time and a counter, so nobody else can send one
+// and an old one can't be replayed. Pair the monitor once: Settings > Security > TV / MONITOR.
+var MON = { n: 0, stepN: 0, recipe: "" };
+try { MON.n = parseInt(window.localStorage.getItem("pg_mon_n"), 10) || 0; } catch (e) {}
+function monSend(c, a, note) {
+    var C = window.HUB_CLOUD || {};
+    if (!C.mon || !C.pass) { monMsg("The monitor isn't set up yet: Settings &rsaquo; Security &rsaquo; TV / MONITOR (it needs the cloud set up first)."); return; }
+    MON.n++; try { window.localStorage.setItem("pg_mon_n", String(MON.n)); } catch (e) {}
+    var msg = HubCrypt.lock(JSON.stringify({ c: c, a: a === undefined ? "" : a, t: new Date().getTime(), n: MON.n }), C.pass);
+    sendPower("screen=" + msg, function(r) { monMsg(r === "ok" ? (note || "Sent") + " &mdash; the monitor shows it in a few seconds." : "The hub's loop didn't answer &mdash; try again."); });
+    monMsg("Sending&hellip; (Wi-Fi turns on for a moment)");
+}
+function monMsg(h) { var m = $("mon-msg"); if (m) m.innerHTML = h; }
+ICONS.screen = "<rect x='8' y='14' width='84' height='54' fill='none' stroke='%c' stroke-width='7'/><path d='M 36 86 L 64 86 M 50 68 L 50 86' stroke='%c' stroke-width='7'/>";
+IC_LABEL.screen = "SCREEN";
+var __appList109 = appList;
+appList = function() {
+    var L = __appList109(), C = window.HUB_CLOUD || {};
+    L.splice(Math.max(0, L.length - 2), 0, ["screen", "Kitchen screen", C.mon ? "control the monitor" : "pair it in Security", openScreenPanel]);
+    return L;
+};
+function openScreenPanel() {
+    var rs = itemsOf("recipe"), h = "", i;
+    function b(id, label, sel) { return "<span class='opt-btn big" + (sel ? " sel" : "") + "' id='" + id + "' style='margin:.15em .2em .15em 0'>" + label + "</span>"; }
+    h += "<div class='hv-lbl'>Kitchen screen</div><div class='hv-hint' id='mon-msg'>Tap a button; the monitor follows in a few seconds.</div>";
+    h += "<div class='hv-lbl' style='margin-top:.6em'>Show</div><div>" + b("ms-dash", "DASHBOARD") + b("ms-clock", "BIG CLOCK") + b("ms-timer", "MY TIMER") + b("ms-menu", "MENU BOARD") + b("ms-week", "THE WEEK") + b("ms-news", "NEWS") + b("ms-off", "SCREEN OFF") + "</div>";
+    h += "<div class='hv-lbl' style='margin-top:.6em'>Screens</div><div>" + b("ms-prev", "&#9664; BACK") + b("ms-next", "NEXT &#9654;") + b("ms-pause", "PAUSE") + b("ms-play", "PLAY") + "</div>";
+    if (rs.length) {
+        h += "<div class='hv-lbl' style='margin-top:.6em'>Cook a recipe on the screen</div><div>";
+        for (i = 0; i < rs.length && i < 8; i++) { var t = parseRecipe(rs[i].text).title; h += "<span class='opt-btn' data-rt='" + esc(t) + "' style='margin:.15em .2em .15em 0'>" + esc(t.substring(0, 28)) + "</span>"; }
+        h += "</div><div>" + b("ms-sprev", "&#9664; STEP") + b("ms-snext", "STEP &#9654;") + b("ms-sdone", "DONE COOKING") + "</div>";
+    }
+    h += "<div class='hv-lbl' style='margin-top:.6em'>Look</div><div>" + b("ms-glass", "SEE-THROUGH") + b("ms-dark", "DARK") + b("ms-light", "LIGHT") + b("ms-auto", "AUTO") + "</div>";
+    secBox(h, true);
+    function on(id, f) { var e = $(id); if (e) bindTap(e, f); }
+    on("ms-dash", function() { monSend("scene", "dash", "Dashboard"); });
+    on("ms-clock", function() { monSend("scene", "clock", "Big clock"); });
+    on("ms-timer", function() { if (!(TIMER.end > new Date().getTime())) { monMsg("No timer running here. Start one on the Timer tile first."); return; } monSend("timer", TIMER.end + "|" + (TIMER.mins || ""), "Timer"); });
+    on("ms-menu", function() { monSend("scene", "menu", "Menu board"); });
+    on("ms-week", function() { monSend("slide", "week", "The week"); });
+    on("ms-news", function() { monSend("slide", "news", "News"); });
+    on("ms-off", function() { monSend("scene", "off", "Screen off"); });
+    on("ms-prev", function() { monSend("go", -1, "Back"); });
+    on("ms-next", function() { monSend("go", 1, "Next"); });
+    on("ms-pause", function() { monSend("pause", 1, "Paused"); });
+    on("ms-play", function() { monSend("pause", 0, "Playing"); });
+    on("ms-sprev", function() { monSend("step", -1, "Step back"); });
+    on("ms-snext", function() { monSend("step", 1, "Next step"); });
+    on("ms-sdone", function() { monSend("cook", "", "Done cooking"); });
+    on("ms-glass", function() { monSend("theme", "glass", "See-through look"); });
+    on("ms-dark", function() { monSend("theme", "dark", "Dark look"); });
+    on("ms-light", function() { monSend("theme", "light", "Light look"); });
+    on("ms-auto", function() { monSend("theme", "auto", "Auto look"); });
+    var rb = $("sec-in").getElementsByTagName("span");
+    for (i = 0; i < rb.length; i++) (function(el) { var t = el.getAttribute("data-rt"); if (t) bindTap(el, function() { monSend("cook", t, "Cooking " + t); }); })(rb[i]);
+}
