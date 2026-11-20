@@ -5,7 +5,7 @@ ok() { echo "PASS $*"; }; bad() { echo "FAIL $*"; }
 # a "suspend" that really waits for the RTC alarm, unless $KT/button exists (then it is a power-button press after 3 s)
 export HUB_SUSPEND_CMD='if [ -f "$KT/button" ]; then rm -f "$KT/button"; sleep 3; exit 0; fi; T=$(cat "$HUB_RTC_CANDIDATES"); N=$(date +%s); [ "$T" -gt "$N" ] && sleep $((T - N)); exit 0'
 export HUB_TEST_STEP=40 HUB_QUICK_SEC=6
-printf 'INTERVAL_MIN=5\nWAKE_WINDOW=4\nWIFI_TIMEOUT=2\nSCREENSAVER_MODE=off\nPILLOW_DISABLE=2\nCLOUD_ON_WAKE=0\nAUTO_UPDATE=0\nFRONTLIGHT=7\n' > "$HUB_DIR/eco.conf"
+printf 'INTERVAL_MIN=5\nWAKE_WINDOW=4\nWIFI_TIMEOUT=2\nSCREENSAVER_MODE=off\nPILLOW_DISABLE=2\nCLOUD_ON_WAKE=0\nAUTO_UPDATE=0\nLIGHT_AWAKE=7\n' > "$HUB_DIR/eco.conf"
 sh "$HUB_DIR/run_hub.sh" eco >/dev/null 2>&1
 ping_page vp=1x1 >/dev/null
 waitfor 'grep -q "quick wake (timer)" "$HUB_DIR/power.log"' 90 && ok "timer wake is a quick wake" || bad "no quick wake: $(tail -3 "$HUB_DIR/power.log")"
@@ -30,7 +30,7 @@ waitfor 'grep -q "next wake" "$HUB_DIR/power.log"' 40; touch "$KT/button"
 waitfor 'grep -q "awake (button)" "$HUB_DIR/power.log"' 60 && ok "power button: full wake" || bad "button: $(tail -3 "$HUB_DIR/power.log")"
 # settings from the page
 ping_page "clockmode=min&quickwake=1&light=30" >/dev/null; sleep 3
-grep -q '^CLOCK_MODE=min' "$HUB_DIR/eco.conf" && grep -q '^FRONTLIGHT=24' "$HUB_DIR/eco.conf" && ok "settings saved (clock every minute, light capped at 24)" || bad "settings: $(grep -E 'CLOCK|FRONT' "$HUB_DIR/eco.conf" | tr '\n' ' ')"
+grep -q '^CLOCK_MODE=min' "$HUB_DIR/eco.conf" && grep -q '^LIGHT_AWAKE=24' "$HUB_DIR/eco.conf" && ok "settings saved (clock every minute, light capped at 24)" || bad "settings: $(grep -E 'CLOCK|LIGHT' "$HUB_DIR/eco.conf" | tr '\n' ' ')"
 sh "$HUB_DIR/stop_hub.sh" launch >/dev/null 2>&1; sleep 1
 # the every-minute clock: tick by tick until the next real wake
 : > "$HUB_DIR/power.log"

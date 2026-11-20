@@ -1,4 +1,4 @@
-khMark("v109.js: started");     // 10.9.2 black box
+khNow("v109.js: started");     // 10.9.2 black box
 /* Kitchen Hub 10.9 — loaded after the main page script (index.html). ES5 only: the Kindle's browser is old.
  *
  *  1. Authenticator (TOTP, RFC 6238): a 6-digit code from Google/Microsoft Authenticator guards pairing codes,
@@ -345,13 +345,13 @@ applyItems = function() { __applyItems109(); try { relockOld(); pickUpToken(); }
 // The loop says in state.js whether the next timer wake is a quick one (quick:1) and how the standby clock
 // works (clockMode "15" | "min"). On a quick wake (or a minute tick) the page stays on its standby view and
 // refreshes quietly: no black flash, no switch to the tiles and back.
-var PWR = { quick: 0, clockMode: "15", light: 0, quickWake: 1, rate7: 0, wakesPerDay: 0 };
+var PWR = { quick: 0, clockMode: "15", light: -1, quickWake: 1, rate7: 0, wakesPerDay: 0 };
 var __applyState109 = applyState;
 applyState = function(s) {
     if (s) {
         PWR.quick = parseInt(s.quick, 10) === 1 ? 1 : 0;
         if (s.clockMode) PWR.clockMode = s.clockMode === "min" ? "min" : "15";
-        if (s.frontlight !== undefined) PWR.light = parseInt(s.frontlight, 10) || 0;
+        if (s.frontlight !== undefined) { PWR.light = parseInt(s.frontlight, 10); if (isNaN(PWR.light)) PWR.light = -1; }      // -1 = the Kindle's own
         if (s.quickWake !== undefined) PWR.quickWake = parseInt(s.quickWake, 10) === 0 ? 0 : 1;
         PWR.rate7 = parseFloat(s.rate7) || 0; PWR.wakesPerDay = parseFloat(s.wakesPerDay) || 0;
     }
@@ -407,11 +407,11 @@ buildSmartOpts = function() {
     box.innerHTML =
         "<div class='hv-row'><div class='hv-lbl'>Timer wakes</div><div id='opt-quick'></div><div class='hv-hint'>Quick: the Kindle refreshes the standby page in a few seconds and sleeps again; the power button (or a tap while it refreshes) opens the hub. Full: every wake keeps the hub open for the wake window.</div></div>" +
         "<div class='hv-row'><div class='hv-lbl'>Standby clock</div><div id='opt-clockm'></div><div class='hv-hint'>Every minute: a short wake each minute to change the time (no Wi-Fi, no touch). Every wake: the time is exact at each wake and shows when it changes next.</div></div>" +
-        "<div class='hv-row'><div class='hv-lbl'>Light while you use it</div><div id='opt-light'></div><div class='hv-hint'>Always off while the hub sleeps.</div></div>" +
+        "<div class='hv-row'><div class='hv-lbl'>Light while you use it</div><div id='opt-light'></div><div class='hv-hint'>Kindle's own: the hub doesn't touch the light. A level: that light while the hub is awake, off while it sleeps.</div></div>" +
         "<div class='hv-hint' id='v9-use'>" + use + "</div>";
     chipRow("opt-quick", [1, 0], ["Quick", "Full"], PWR.quickWake, function(v) { PWR.quickWake = v; sendPower("quickwake=" + v); });
     chipRow("opt-clockm", ["15", "min"], ["Every wake", "Every minute"], PWR.clockMode, function(v) { PWR.clockMode = v; sendPower("clockmode=" + v); });
-    chipRow("opt-light", [0, 4, 8, 12, 16, 20, 24], ["Off", "4", "8", "12", "16", "20", "24"], PWR.light, function(v) { PWR.light = v; sendPower("light=" + v); });
+    chipRow("opt-light", [-1, 0, 4, 8, 12, 16, 20, 24], ["Kindle's own", "Off", "4", "8", "12", "16", "20", "24"], PWR.light, function(v) { PWR.light = v; sendPower("light=" + (v < 0 ? "keep" : v)); });
     if (typeof HVS !== "undefined") HVS.sig = "";
 };
 
@@ -745,4 +745,6 @@ FILLER_EXTRA.push(function() {
     return ["BIRD OF THE HOUR", "<img src='" + esc(b.img) + "' alt='' onerror=\"this.style.display='none'\" style='display:block;margin:.1em 0 .2em;-webkit-filter:grayscale(1);filter:grayscale(1)'>" +
         esc(b.n) + "<div style='font:normal .45em Helvetica,Arial,sans-serif;margin-top:.2em'>" + esc(b.note) + "<br>Photo: " + esc(b.by) + " (" + esc(b.lic) + ")</div>"];
 });
-khMark("v109.js: finished");     // 10.9.2 black box
+khNow("v109.js: finished");     // 10.9.2 black box
+// 10.9.2: the first status read, layout, redraw and wake are reported going in and coming out (black box)
+khWatch("applyState"); khWatch("relayout"); khWatch("renderAllTiles"); khWatch("onWake");

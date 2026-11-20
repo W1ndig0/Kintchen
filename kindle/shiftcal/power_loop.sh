@@ -84,7 +84,8 @@ load_conf() {
     LOCAL_ONLY=0                       # 10.9: 1 = the settings port listens on 127.0.0.1 only (needs an nc with -s; test first)
     QUICK_WAKE=1                       # 10.9: timer wakes refresh the standby page and sleep again (button = full hub); 0 = old way
     CLOCK_MODE=15                      # 10.9: standby clock: 15 = exact at each wake (:00 :15 :30 :45), min = new minute every minute
-    FRONTLIGHT=0                       # 10.9: 0-24, the light while the hub is awake (off while it sleeps)
+    LIGHT_AWAKE=keep                   # 10.9.2: keep = the hub never touches the frontlight (as before 10.9);
+                                       #         0-24 = this light while awake, off while it sleeps
     AUTO_UPDATE=1                      # 0 = only when you tap, 1 = check nightly and tell you (10.5 default), 2 = install at night (undone by itselfif it fails)
     [ -f "$CONF" ] && . "$CONF"
     case "$AUTO_UPDATE" in 0|1|2) ;; *) AUTO_UPDATE=1 ;; esac
@@ -92,7 +93,9 @@ load_conf() {
     case "$LOCAL_ONLY" in 0|1) ;; *) LOCAL_ONLY=0 ;; esac
     case "$QUICK_WAKE" in 0|1) ;; *) QUICK_WAKE=1 ;; esac
     case "$CLOCK_MODE" in 15|min) ;; *) CLOCK_MODE=15 ;; esac
-    case "$FRONTLIGHT" in ''|*[!0-9]*) FRONTLIGHT=0 ;; esac; [ "$FRONTLIGHT" -gt 24 ] && FRONTLIGHT=24
+    # (10.9 had FRONTLIGHT=0 as its default, which turned the light OFF at every start and wake; that old
+    #  setting is ignored, so nobody gets a dark screen they never asked for)
+    case "$LIGHT_AWAKE" in keep) ;; ''|*[!0-9]*) LIGHT_AWAKE=keep ;; *) [ "$LIGHT_AWAKE" -gt 24 ] && LIGHT_AWAKE=24 ;; esac
     case "$SMART_SLEEP" in 0|1) ;; *) SMART_SLEEP=1 ;; esac
     case "$HOME_MIN" in ''|*[!0-9]*) HOME_MIN=15 ;; esac;   [ "$HOME_MIN" -lt 5 ] && HOME_MIN=5
     case "$AWAY_MIN" in ''|*[!0-9]*) AWAY_MIN=120 ;; esac;  [ "$AWAY_MIN" -lt 15 ] && AWAY_MIN=15
@@ -132,7 +135,7 @@ FREEZE_POWERD=$FREEZE_POWERD
 LOCAL_ONLY=$LOCAL_ONLY
 QUICK_WAKE=$QUICK_WAKE
 CLOCK_MODE=$CLOCK_MODE
-FRONTLIGHT=$FRONTLIGHT
+LIGHT_AWAKE=$LIGHT_AWAKE
 SMART_SLEEP=$SMART_SLEEP
 HOME_MIN=$HOME_MIN
 AWAY_MIN=$AWAY_MIN
@@ -271,7 +274,7 @@ window.HUB_STATE = {
     smart: $SMART_SLEEP, homeMin: $HOME_MIN, awayMin: $AWAY_MIN, nightMin: $NIGHT_MIN, nightFrom: $NIGHT_FROM, nightTo: $NIGHT_TO,
     where: "${SMODE:-fixed}", aways: $(grep -c . "$DIR/.away" 2>/dev/null || echo 0),
     snoozeUntil: 0,
-    quick: ${QUICK_NEXT:-0}, quickWake: $QUICK_WAKE, clockMode: "$CLOCK_MODE", frontlight: $FRONTLIGHT,
+    quick: ${QUICK_NEXT:-0}, quickWake: $QUICK_WAKE, clockMode: "$CLOCK_MODE", frontlight: $([ "$LIGHT_AWAKE" = keep ] && echo -1 || echo "$LIGHT_AWAKE"),
     rate7: ${RATE7:-0}, hours7: ${HRS7:-0}, wakesPerDay: ${WPD:-0}
 };
 EOT
@@ -639,7 +642,7 @@ poll_settings_http() {
         [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
         # 10.9: a tap during a quick wake turns it into a full one (page, light, lists from the phone)
         if [ "$QUICK_ACTIVE" = "1" ]; then
-            QUICK_ACTIVE=0; WAKE_REASON=touch; set_light "$FRONTLIGHT"; write_ui_state 0; log "tapped during a quick wake - full wake"
+            QUICK_ACTIVE=0; WAKE_REASON=touch; set_light "$LIGHT_AWAKE"; write_ui_state 0; log "tapped during a quick wake - full wake"
             cloud_ready && [ "$CLOUD_ON_WAKE" = "1" ] && ! sync_running && start_sync lists
         fi
     fi
@@ -655,8 +658,9 @@ poll_settings_http() {
     # 10.9: power settings from Settings > Sleep
     V=$(qv quickwake); case "$V" in 0|1) QUICK_WAKE=$V; CHANGED=1; log "quick timer wakes: $V" ;; esac
     V=$(qv clockmode); case "$V" in 15|min) CLOCK_MODE=$V; CHANGED=1; log "standby clock: $V" ;; esac
-    V=$(num_or_empty "$(qv light)")
-    if [ -n "$V" ]; then [ "$V" -gt 24 ] && V=24; FRONTLIGHT=$V; CHANGED=1; set_light "$V"; log "frontlight: $V"; fi
+    V=$(qv light)
+    if [ "$V" = "keep" ]; then LIGHT_AWAKE=keep; CHANGED=1; log "frontlight: left to the Kindle"
+    elif [ -n "$(num_or_empty "$V")" ]; then [ "$V" -gt 24 ] && V=24; LIGHT_AWAKE=$V; CHANGED=1; set_light "$V"; log "frontlight: $V"; fi
     SNZ=$(num_or_empty "$(qv snooze)")
     if [ -n "$SNZ" ] && [ "$SNZ" != "0" ]; then
         [ "$SNZ" = "1" ] && SNZ=300
@@ -836,8 +840,9 @@ if [ "$HUB_TEST" != "1" ]; then
 fi
 
 # NB: never name a variable PPID - it is read-only in many shells
-# 10.9: the frontlight (0 = off). On only while the hub is awake for you; every standby turns it off.
-set_light() { [ "$HUB_TEST" = "1" ] && { echo "light $1" >> "${KT:-/tmp}/light.log" 2>/dev/null; return 0; }; lipc-set-prop com.lab126.powerd flIntensity "${1:-0}" 2>/dev/null; }
+# 10.9: the frontlight (0 = off). "keep" (the default) = never touched. With a level chosen: on only while the
+# hub is awake for you, off at every standby.
+set_light() { [ "${1:-keep}" = keep ] && return 0; [ "$HUB_TEST" = "1" ] && { echo "light $1" >> "${KT:-/tmp}/light.log" 2>/dev/null; return 0; }; lipc-set-prop com.lab126.powerd flIntensity "${1:-0}" 2>/dev/null; }
 freeze_powerd() { [ "$FREEZE_POWERD" = "1" ] || return 0; PD=$(pidof powerd 2>/dev/null); [ -n "$PD" ] && kill -STOP $PD 2>/dev/null; }
 thaw_powerd()   { PD=$(pidof powerd 2>/dev/null); [ -n "$PD" ] && kill -CONT $PD 2>/dev/null; }
 
@@ -1094,7 +1099,7 @@ while true; do
     else
         AWAKE_UNTIL=$((NOW + WAKE_WINDOW))
         NEXT_WAKE_EPOCH=0
-        set_light "$FRONTLIGHT"
+        set_light "$LIGHT_AWAKE"
         write_ui_state 0
         log "awake (${WAKE_REASON}) for ${WAKE_WINDOW}s, battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
         # 10.9: task manager / hub-mode probe (looks only), at most every 10 minutes, in the background
@@ -1165,7 +1170,7 @@ while true; do
 
     # 10.9: the next timer wake will be a quick one (the page reads this before it sleeps)
     QUICK_NEXT=0; [ "$QUICK_WAKE" = "1" ] && [ ! -f "$DIR/.update/pending" ] && QUICK_NEXT=1
-    set_light 0
+    [ "$LIGHT_AWAKE" != keep ] && set_light 0      # only if you chose a light level for the hub
     write_ui_state 1
     write_log_js
     [ "$QUICK_ACTIVE" = "1" ] && sleep 3 || sleep 6   # give the page time to draw the standby frame before it is captured

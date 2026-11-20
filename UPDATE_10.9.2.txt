@@ -3,58 +3,61 @@ Installs by itself like any update: merge it on GitHub, then tap Settings > Upda
 If it starts: Settings > SECURITY > SET UP (one time, 2 minutes). If it rolls back again, send the log.
 
 FIX
- 1  10.9 and 10.9.1 rolled back on the fridge: the new page never got a single message to the loop. It
-    works in every browser and test here, so 10.9.2 adds a start-up black box: a tiny script at the very
-    top of the page reports how far the page got, which of its files loaded and any script error, with the
-    file and line. If it rolls back again, Phone app > Fridge > Show the last log names the cause. The
-    10.9.1 start-up fixes are all still in.
+ 1  10.9 and 10.9.1 rolled back on the fridge: the new page never got a single message to the loop and
+    the screen stayed blank. It works in every browser and test here, so 10.9.2 adds a start-up black box:
+    the log (Phone app > Fridge > Show the last log) gets each start-up step as it happens, which files
+    loaded and any script error with its file and line, and a script error also shows on the screen
+    instead of a blank page. If it rolls back again, that names the cause. The 10.9.1 fixes are still in.
+ 2  10.9 turned the frontlight OFF every time it started or woke (the new light setting defaulted to
+    Off). Now the hub leaves the light alone unless you pick a level in Settings > Sleep > Light while
+    you use it ("Kindle's own" is the default).
 
 
 SECURITY
- 2  Authenticator codes: Settings > Security > SET UP shows a code for Google or Microsoft Authenticator.
+ 3  Authenticator codes: Settings > Security > SET UP shows a code for Google or Microsoft Authenticator.
     After that, pairing codes, the first cloud connection and new keys need a fresh 6-digit code.
- 3  Pairing codes are sealed: the QR holds everything locked with a one-time code shown next to it, never
+ 4  Pairing codes are sealed: the QR holds everything locked with a one-time code shown next to it, never
     inside it. A copied or photographed link alone opens nothing. The shopping-list QR only opens the app.
- 4  MAKE NEW KEYS: the Kindle makes a new passphrase, alert channel and monitor channel itself. Old
+ 5  MAKE NEW KEYS: the Kindle makes a new passphrase, alert channel and monitor channel itself. Old
     lists and books still open until you tap FINISH; the screen walks you through the GitHub secrets.
     Fridges that used the old built-in passphrase are told to do this.
- 5  A new GitHub token goes in on the phone (Fridge > New GitHub token); the fridge picks it up itself.
- 6  The fridge's settings port needs a key now, so other devices on your Wi-Fi can't stop the hub, undo an
+ 6  A new GitHub token goes in on the phone (Fridge > New GitHub token); the fridge picks it up itself.
+ 7  The fridge's settings port needs a key now, so other devices on your Wi-Fi can't stop the hub, undo an
     update or send phone alerts. Fixed: a phone alert could be made to send a file off the Kindle.
- 7  The phone app and TV page are hidden from search engines and do nothing until paired. The PC helper
+ 8  The phone app and TV page are hidden from search engines and do nothing until paired. The PC helper
     asks for the pairing link (it no longer stays in PowerShell's history) and locks its saved token.
 
 BATTERY
- 8  Timer wakes are quick: the fridge refreshes the asleep screen in a few seconds and sleeps again,
+ 9  Timer wakes are quick: the fridge refreshes the asleep screen in a few seconds and sleeps again,
     instead of staying awake for 2 minutes with nobody there (and flashing the screen twice). The power
     button, or a tap while it refreshes, opens the hub as before. Settings > Sleep > Timer wakes.
- 9  The asleep clock is honest: the exact time and "until 6:00 PM" (at night, "back at"). Or choose
+10  The asleep clock is honest: the exact time and "until 6:00 PM" (at night, "back at"). Or choose
     "every minute": a 3-second wake each minute changes just the time (no Wi-Fi, no touch).
-10  Settings > Sleep shows how much battery an hour it uses lately, to compare settings. New: a light
-    setting for while you use the hub (always off asleep).
+11  Settings > Sleep shows how much battery an hour it uses lately, to compare settings. New: a light
+    setting for while you use the hub (off asleep), or leave it to the Kindle (the default).
 
 HOME SCREEN
-11  Spare room goes to tiles whose content didn't fit; an empty shopping list or idle timer shrinks.
-12  Small cards fill leftover space: bird of the hour, tomorrow's shift, sunrise or sunset, the next
+12  Spare room goes to tiles whose content didn't fit; an empty shopping list or idle timer shrinks.
+13  Small cards fill leftover space: bird of the hour, tomorrow's shift, sunrise or sunset, the next
     holiday or event. No more blank holes.
-13  Live boosts: a running timer, rain or a storm in the next 3 hours, or a shift within 2 hours makes
+14  Live boosts: a running timer, rain or a storm in the next 3 hours, or a shift within 2 hours makes
     that tile bigger (up to two, kept at least 30 minutes so the screen doesn't jump).
-14  Bird of the hour: birds of Prince George for the season, with real photos (free-licence Wikimedia
+15  Bird of the hour: birds of Prince George for the season, with real photos (free-licence Wikimedia
     Commons pictures, photographer credited).
 
 KITCHEN MONITOR
-15  APPS > Kitchen screen controls the TV page on a mini PC: dashboard, big clock, your timer, a tavern
+16  APPS > Kitchen screen controls the TV page on a mini PC: dashboard, big clock, your timer, a tavern
     menu board, the week, news, screen off, cook a recipe step by step. Pair the monitor once:
     Settings > Security > TV / MONITOR. Commands are locked and can't be replayed.
-16  See-through look for transparent screens: black is clear glass, the type is warm and bright.
+17  See-through look for transparent screens: black is clear glass, the type is warm and bright.
 
 SYSTEM
-17  Settings > System (was Log): a task manager - CPU, memory, storage, battery, the busiest programs and
+18  Settings > System (was Log): a task manager - CPU, memory, storage, battery, the busiest programs and
     the Kindle's own services. It only looks; the list goes to your cloud log so a later "hub mode" can
     pause only services that are safe to pause on your Kindle.
 
 FIXES
-18  Changes made on the fridge could get lost when its background loop was busy; they're sent one batch
+19  Changes made on the fridge could get lost when its background loop was busy; they're sent one batch
     at a time now, retried, and sent again if the fridge's file doesn't have them.
-19  The cloud brain can't hang any more when GitHub or ntfy doesn't answer (it stops after 45 s).
-20  The asleep front page no longer cuts a story in the middle of a symbol.
+20  The cloud brain can't hang any more when GitHub or ntfy doesn't answer (it stops after 45 s).
+21  The asleep front page no longer cuts a story in the middle of a symbol.
