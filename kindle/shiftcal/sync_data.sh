@@ -87,10 +87,14 @@ jesc() { sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 WX_JSON="null"
 W_URL="https://api.open-meteo.com/v1/forecast?latitude=53.9171&longitude=-122.7497&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,cloud_cover&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,snowfall,weather_code,wind_gusts_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,snowfall_sum,precipitation_probability_max&timezone=Etc%2FGMT%2B7&forecast_days=5"
 W_RAW=""; [ "$1" = "search" ] || W_RAW=$(kcurl -s --connect-timeout 6 --max-time 12 "$W_URL" | tr '\r\n' '  ')
+# 10.9.3: a download cut off by --max-time still contains "hourly" and "daily" but isn't whole JSON, and went
+# into data.js as-is (data.js then fails to load: no weather, no news). Only a reply that ends with } counts.
+case "$W_RAW" in *"}"|*"} "|*"}  ") ;; *) W_RAW="" ;; esac
 case "$W_RAW" in
     "{"*'"hourly"'*'"daily"'*) WX_JSON="$W_RAW"; echo "Weather synced"; printf '%s' "$W_RAW" > "$DIR/.wx_cache" ;;
     *) if [ "$1" != "search" ] && [ -s "$DIR/.wx_cache" ] && [ $(( $(date +%s) - $(date -r "$DIR/.wx_cache" +%s 2>/dev/null || echo 0) )) -lt 21600 ]; then
            WX_JSON=$(cat "$DIR/.wx_cache"); echo "Weather fetch failed - kept the last forecast"
+           case "$WX_JSON" in "{"*"}"|"{"*"} "|"{"*"}  ") ;; *) WX_JSON="null" ;; esac     # 10.9.3: never a cut-off cache
        else [ "$1" = "search" ] || echo "Weather fetch failed"; fi ;;
 esac
 
