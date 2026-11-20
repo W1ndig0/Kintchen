@@ -14,7 +14,14 @@
   function put(kind, text, id, state) { store = lockEdit(store, id || HubData.newId("p"), kind, state || "open", text); ls.set(K.store, store); render(); syncSoon(400); }
   function ago(sec) { if (!sec) return "never"; var m = Math.round((Date.now() / 1000 - sec) / 60); return m < 2 ? "just now" : m < 90 ? m + " min ago" : m < 2880 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " days ago"; }
   function pagesBase() { return location.origin + location.pathname.replace(/[^\/]*$/, ""); }
-  function tvLink() { var b = X.brain; return b && b.tv ? pagesBase() + "tv.html#g=" + b.tv + (pk() ? "&k=" + encodeURIComponent(pk()) : "") : ""; }
+  // 10.9: the TV link is sealed (passphrase locked with a one-time code shown here, not in the link)
+  var TVCODE = "";
+  function tvLink() {
+    var b = X.brain; if (!b || !b.tv) return "";
+    if (!TVCODE) TVCODE = HubCrypt.pairCode(10);
+    return pagesBase() + "tv.html#tv2=" + encodeURIComponent(HubCrypt.seal({ g: b.tv, k: pk(), k0: (cfg && cfg.k0) || "", m: (cfg && cfg.mon) || "" }, TVCODE));
+  }
+  function tvCode() { return TVCODE ? TVCODE.slice(0, 5) + "-" + TVCODE.slice(5) : ""; }
   function copy(text, el) {
     var done = function(t) { if (el) { var o = el.textContent; el.textContent = t; setTimeout(function() { el.textContent = o; }, 2500); } };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function() { done("Copied"); }, function() { prompt("Copy", text); });
@@ -141,9 +148,13 @@
     // links
     var tv = tvLink(), ics = b && b.ics ? b.ics : "";
     h += '<h2>TV, PC and calendar</h2>';
-    if (tv) h += '<p class="row"><a class="btn" style="display:inline-flex;align-items:center;text-decoration:none" href="' + esc(tv) + '" target="_blank">Open TV page</a><button class="btn ghost" id="tv-copy">Copy TV link</button></p><p style="font-size:13px;color:var(--mute)">Apple TV: open it in a browser app (e.g. “Web for Apple TV”) and paste with the iPhone keyboard, or AirPlay this page from Safari. PC: open it full screen (F11).</p>';
+    if (tv) h += '<p class="row"><a class="btn" style="display:inline-flex;align-items:center;text-decoration:none" href="' + esc(tv) + '" target="_blank">Open TV page</a><button class="btn ghost" id="tv-copy">Copy TV link</button></p>' +
+      '<p style="font-size:14px">TV code: <b style="font-family:monospace;font-size:18px;letter-spacing:.06em">' + esc(tvCode()) + '</b> &mdash; the TV page asks for it once. It is not in the link, so send it separately.</p>';
     if (ics) h += '<p class="row"><a class="btn" style="display:inline-flex;align-items:center;text-decoration:none" href="' + esc(ics.replace(/^https:/, "webcal:")) + '">Subscribe to calendar</a><button class="btn ghost" id="ics-copy">Copy link</button></p><p style="font-size:13px;color:var(--mute)">Shifts with times, events, chores and B.C. holidays, in the iPhone Calendar, Outlook or Google Calendar. Updates every 30 min. Anyone with the link can read it.</p>';
     if (!tv && !ics) h += '<p class="empty">These appear once the cloud brain has run (GITHUB_SETUP.txt).</p>';
+    // 10.9: a new GitHub token: tested here, used by this phone at once, and handed to the fridge (locked in the gist)
+    h += '<h2>New GitHub token</h2><p style="font-size:13px;color:var(--mute);margin:0 0 6px">Make it on github.com &rsaquo; Settings &rsaquo; Developer settings &rsaquo; Fine-grained tokens (Gists: read and write). Paste it here: this phone checks it, starts using it, and the fridge picks it up at its next sync. Then delete the old token on github.com and re-pair the PC.</p>' +
+      '<div class="row"><input id="gt-t" type="password" autocomplete="off" placeholder="github_pat_…" style="flex:1;font-size:17px;padding:10px;border:2px solid var(--ink)"><button class="btn" id="gt-go">Replace</button></div><div id="gt-msg" style="font-size:14px;margin-top:4px"></div>';
     // log
     h += '<h2>Fridge log</h2><p class="row"><button class="btn ghost" id="lg-show">Show the last log</button><button class="btn ghost" id="pt-go">Test phone push</button></p><pre id="lg-box" style="white-space:pre-wrap;font-size:11px;max-height:340px;overflow:auto;border:1px solid var(--rule);padding:6px" hidden></pre>';
     box.innerHTML = h;
@@ -158,6 +169,17 @@
       bt.addEventListener("click", function() { var c = bt.getAttribute("data-c"); if (c === "update|install" && !confirm("Install the update from your GitHub site at the next wake? The hub restarts by itself.")) return; if (c === "update|rollback" && !confirm("Go back to the version the fridge had before its last update?")) return; put("cmd", c); });
     });
     if ($("tv-copy")) $("tv-copy").addEventListener("click", function() { copy(tv, $("tv-copy")); });
+    $("gt-go").addEventListener("click", function() {
+      var t = $("gt-t").value.trim(), msg = $("gt-msg");
+      if (!/^[A-Za-z0-9_]{20,255}$/.test(t)) { msg.textContent = "That doesn't look like a GitHub token."; return; }
+      msg.textContent = "Checking…";
+      timed(cfg.api + "/gists/" + cfg.gist, { headers: { Authorization: "Bearer " + t, Accept: "application/vnd.github+json" }, cache: "no-store" }, 15000).then(function(r) {
+        if (!r.ok) { msg.textContent = "GitHub refused that token (" + r.status + "). It needs Gists: read and write."; return; }
+        put("cfg", t, "ghtoken");                       // locked with the passphrase; the fridge takes it, then deletes it
+        cfg.token = t; ls.set(K.cfg, JSON.stringify(cfg)); $("gt-t").value = "";
+        msg.textContent = "Done. This phone uses the new token; the fridge picks it up at its next sync.";
+      }, function() { msg.textContent = "Couldn't reach GitHub. Try again."; });
+    });
     if ($("ics-copy")) $("ics-copy").addEventListener("click", function() { copy(ics, $("ics-copy")); });
     $("pt-go").addEventListener("click", function() { put("req", "pushtest"); $("pt-go").textContent = "Asked (next brain run)"; });
     $("lg-show").addEventListener("click", function() {

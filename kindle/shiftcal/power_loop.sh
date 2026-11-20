@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.8"
+VERSION="10.9"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -81,10 +81,18 @@ load_conf() {
     USE_CLOUD_DATA=1
     SMART_SLEEP=1; HOME_MIN=15; AWAY_MIN=120; NIGHT_MIN=180; NIGHT_FROM=23; NIGHT_TO=6     # 10.6
     FREEZE_POWERD=1                    # 10.5: 0 = let powerd run while the Kindle sleeps (test for the wake freeze)
-    AUTO_UPDATE=1                      # 0 = only when you tap, 1 = check nightly and tell you (10.5 default), 2 = install at night (undone by itself if it fails)
+    LOCAL_ONLY=0                       # 10.9: 1 = the settings port listens on 127.0.0.1 only (needs an nc with -s; test first)
+    QUICK_WAKE=1                       # 10.9: timer wakes refresh the standby page and sleep again (button = full hub); 0 = old way
+    CLOCK_MODE=15                      # 10.9: standby clock: 15 = exact at each wake (:00 :15 :30 :45), min = new minute every minute
+    FRONTLIGHT=0                       # 10.9: 0-24, the light while the hub is awake (off while it sleeps)
+    AUTO_UPDATE=1                      # 0 = only when you tap, 1 = check nightly and tell you (10.5 default), 2 = install at night (undone by itselfif it fails)
     [ -f "$CONF" ] && . "$CONF"
     case "$AUTO_UPDATE" in 0|1|2) ;; *) AUTO_UPDATE=1 ;; esac
     case "$FREEZE_POWERD" in 0|1) ;; *) FREEZE_POWERD=1 ;; esac
+    case "$LOCAL_ONLY" in 0|1) ;; *) LOCAL_ONLY=0 ;; esac
+    case "$QUICK_WAKE" in 0|1) ;; *) QUICK_WAKE=1 ;; esac
+    case "$CLOCK_MODE" in 15|min) ;; *) CLOCK_MODE=15 ;; esac
+    case "$FRONTLIGHT" in ''|*[!0-9]*) FRONTLIGHT=0 ;; esac; [ "$FRONTLIGHT" -gt 24 ] && FRONTLIGHT=24
     case "$SMART_SLEEP" in 0|1) ;; *) SMART_SLEEP=1 ;; esac
     case "$HOME_MIN" in ''|*[!0-9]*) HOME_MIN=15 ;; esac;   [ "$HOME_MIN" -lt 5 ] && HOME_MIN=5
     case "$AWAY_MIN" in ''|*[!0-9]*) AWAY_MIN=120 ;; esac;  [ "$AWAY_MIN" -lt 15 ] && AWAY_MIN=15
@@ -121,6 +129,10 @@ PHONE_ALERTS=$PHONE_ALERTS
 USE_CLOUD_DATA=$USE_CLOUD_DATA
 AUTO_UPDATE=$AUTO_UPDATE
 FREEZE_POWERD=$FREEZE_POWERD
+LOCAL_ONLY=$LOCAL_ONLY
+QUICK_WAKE=$QUICK_WAKE
+CLOCK_MODE=$CLOCK_MODE
+FRONTLIGHT=$FRONTLIGHT
 SMART_SLEEP=$SMART_SLEEP
 HOME_MIN=$HOME_MIN
 AWAY_MIN=$AWAY_MIN
@@ -258,7 +270,9 @@ window.HUB_STATE = {
     booted: $([ "$BOOT" = "0" ] && echo 1 || echo 0),
     smart: $SMART_SLEEP, homeMin: $HOME_MIN, awayMin: $AWAY_MIN, nightMin: $NIGHT_MIN, nightFrom: $NIGHT_FROM, nightTo: $NIGHT_TO,
     where: "${SMODE:-fixed}", aways: $(grep -c . "$DIR/.away" 2>/dev/null || echo 0),
-    snoozeUntil: 0
+    snoozeUntil: 0,
+    quick: ${QUICK_NEXT:-0}, quickWake: $QUICK_WAKE, clockMode: "$CLOCK_MODE", frontlight: $FRONTLIGHT,
+    rate7: ${RATE7:-0}, hours7: ${HRS7:-0}, wakesPerDay: ${WPD:-0}
 };
 EOT
     mv "$STATE_JS.tmp" "$STATE_JS"
@@ -414,6 +428,15 @@ sync_running() { [ -n "$SYNC_PID" ] && kill -0 "$SYNC_PID" 2>/dev/null; }
 HAVE_NC=0
 NC_OUT="${TMPDIR:-/tmp}/kitchenhub_nc.$$"      # 10.5: in RAM, not on the flash storage
 command -v nc >/dev/null 2>&1 && HAVE_NC=1
+
+# 10.9: the settings port needs a key. Before 10.9 anything on the home Wi-Fi could stop the hub, roll back
+# an update, send phone alerts or (with notify=@file) mail a file off the Kindle. The key is made here once,
+# kept in .port_key (only this Kindle has it) and handed to the page in mesquite/portkey.js, which is never
+# served over the network (the port only ever answers "ok").
+# (hub_port_key, in hub_common.sh, also runs in run_hub.sh BEFORE the page opens)
+hub_port_key; PORT_KEY=$HC_PORT_KEY
+hub_totp_init
+KEY_BAD_LOGGED=0
 qv() { echo "$QS" | tr '&' '\n' | sed -n "s/^$1=//p" | head -1; }
 num_or_empty() { case "$1" in ''|*[!0-9]*) echo "" ;; *) echo "$1" ;; esac; }
 
@@ -425,7 +448,8 @@ poll_settings_http() {
     # connects; a page that connects and then freezes (Kindle error box) kept the socket open and blocked
     # the loop forever - no standby, no auto-rollback, a Kindle that needed a reboot.
     : > "$NC_OUT"
-    printf 'HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' | nc -l -p 8765 -w 1 > "$NC_OUT" 2>/dev/null &
+    NC_BIND=""; [ "$LOCAL_ONLY" = "1" ] && NC_BIND="-s 127.0.0.1"
+    printf 'HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' | nc -l -p 8765 $NC_BIND -w 1 > "$NC_OUT" 2>/dev/null &
     NCP=$!
     ( sleep 5; kill "$NCP" 2>/dev/null ) >/dev/null 2>&1 &
     NCW=$!
@@ -437,9 +461,14 @@ poll_settings_http() {
     fi
     REQ=$(head -1 "$NC_OUT" 2>/dev/null)
     case "$REQ" in *"/save?"*) ;; *) return ;; esac
-    [ "$BOOT" = "1" ] && boot_done
     QS=$(echo "$REQ" | sed -n 's#.* /save?\([^ ]*\) HTTP.*#\1#p')
     NOWQ=$(date +%s)
+    # 10.9: no key, no action (logged at most once a minute so a noisy device can't fill the log)
+    if [ "$(qv pk)" != "$PORT_KEY" ]; then
+        [ $((NOWQ - KEY_BAD_LOGGED)) -ge 60 ] && { log "settings port: a request without the right key was ignored"; KEY_BAD_LOGGED=$NOWQ; }
+        return
+    fi
+    [ "$BOOT" = "1" ] && boot_done
     CHANGED=0
     # a request id the page repeats on retries: handle each id once, echo it back through state.js
     RID=$(num_or_empty "$(qv rid)")
@@ -555,6 +584,25 @@ poll_settings_http() {
         case "$V" in 1) PHONE_ALERTS=1 ;; *) PHONE_ALERTS=0 ;; esac
         CHANGED=1; write_cloud_js; log "phone alerts: $PHONE_ALERTS"
     fi
+    # ---- 10.9: security (the page asks for an authenticator code before it sends any of these) ----
+    if [ "$(qv totpon)" = "1" ] && [ ! -f "$DIR/.totp_on" ]; then
+        date +%s > "$DIR/.totp_on"; hub_totp_init; log "authenticator set up"
+    fi
+    if [ "$(qv cloudok)" = "1" ] && [ -f "$DIR/.totp_on" ] && [ ! -f "$DIR/.cloud_ok" ]; then
+        date +%s > "$DIR/.cloud_ok"; log "cloud: first connection allowed (authenticator code entered)"
+        write_cloud_js; CLOUD_DUE=$((NOWQ + 5)); NEWU=$((NOWQ + 90)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+    fi
+    GT=$(qv ghtoken)
+    if [ -n "$GT" ] && [ -f "$DIR/.totp_on" ]; then        # a new GitHub token, handed over by the phone (locked in the gist)
+        case "$GT" in
+            *[!A-Za-z0-9_]*) log "new GitHub token refused (odd characters)" ;;
+            *) if [ ${#GT} -ge 20 ] && [ ${#GT} -le 255 ] && hub_conf_set GH_TOKEN "$GT"; then log "GitHub token replaced"; write_cloud_js; else log "new GitHub token refused"; fi ;;
+        esac
+    fi
+    if [ "$(qv rotate)" = "1" ] && [ -f "$DIR/.totp_on" ]; then rotate_keys; fi
+    if [ "$(qv keysdone)" = "1" ] && [ -f "$DIR/.totp_on" ]; then
+        rm -f "$DIR/.pass_old"; hub_conf_set PASSPHRASE_OLD ""; log "key change finished: the old passphrase is forgotten"; write_cloud_js
+    fi
     if [ "$(qv exit)" = "1" ]; then
         log "exit requested from the hub - stopping"
         write_ui_state 0
@@ -566,7 +614,26 @@ poll_settings_http() {
     if [ -n "$T_REQ" ]; then
         NEWU=$((NOWQ + WAKE_WINDOW))
         [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+        # 10.9: a tap during a quick wake turns it into a full one (page, light, lists from the phone)
+        if [ "$QUICK_ACTIVE" = "1" ]; then
+            QUICK_ACTIVE=0; WAKE_REASON=touch; set_light "$FRONTLIGHT"; write_ui_state 0; log "tapped during a quick wake - full wake"
+            cloud_ready && [ "$CLOUD_ON_WAKE" = "1" ] && ! sync_running && start_sync lists
+        fi
     fi
+    # 10.9: a command for the kitchen monitor, locked by the page with your passphrase ("~" + base64url)
+    SCR=$(qv screen)
+    if [ -n "$SCR" ]; then
+        case "$SCR" in "~"*) ;; *) SCR="" ;; esac
+        case "$SCR" in *[!A-Za-z0-9_~-]*) SCR="" ;; esac
+        [ -n "$SCR" ] && [ ${#SCR} -le 1500 ] && screen_send "$SCR"
+    fi
+    # 10.9: Settings > System asks for a fresh look at CPU, memory and services
+    if [ "$(qv sysinfo)" = "1" ] && [ -f "$DIR/hub_sys.sh" ]; then SYS_AT=$NOWQ; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & fi
+    # 10.9: power settings from Settings > Sleep
+    V=$(qv quickwake); case "$V" in 0|1) QUICK_WAKE=$V; CHANGED=1; log "quick timer wakes: $V" ;; esac
+    V=$(qv clockmode); case "$V" in 15|min) CLOCK_MODE=$V; CHANGED=1; log "standby clock: $V" ;; esac
+    V=$(num_or_empty "$(qv light)")
+    if [ -n "$V" ]; then [ "$V" -gt 24 ] && V=24; FRONTLIGHT=$V; CHANGED=1; set_light "$V"; log "frontlight: $V"; fi
     SNZ=$(num_or_empty "$(qv snooze)")
     if [ -n "$SNZ" ] && [ "$SNZ" != "0" ]; then
         [ "$SNZ" = "1" ] && SNZ=300
@@ -631,23 +698,82 @@ notify_phone() {
         trap - EXIT INT TERM
         WAS=$(lipc-get-prop com.lab126.wifid cmState 2>/dev/null)
         if wifi_on; then
-            C=$(kcurl -s --connect-timeout 8 --max-time 20 -o /dev/null -w '%{http_code}' -H "Title: Kitchen Hub" -H "Tags: alarm_clock" -H "Priority: high" -d "$1" "https://ntfy.sh/$TOPIC" 2>/dev/null)
-            log "phone alert sent ($C): $1"
+            # 10.9: the text goes in from our own temp file. With -d "$1", a message starting with @ made curl
+            # send a FILE (e.g. cloud.conf) instead. A file (not stdin) because kcurl may try more than once.
+            NF=$(mktemp 2>/dev/null) || NF="/tmp/kh_ntfy.$$"
+            ( umask 077; printf '%s' "$1" > "$NF" )
+            C=$(kcurl -s --connect-timeout 8 --max-time 20 -o /dev/null -w '%{http_code}' -H "Title: Kitchen Hub" -H "Tags: alarm_clock" -H "Priority: high" --data-binary "@$NF" "https://ntfy.sh/$TOPIC" 2>/dev/null)
+            rm -f "$NF"
+            log "phone alert sent ($C): $(printf '%s' "$1" | cut -c1-80)"
         else log "phone alert: no Wi-Fi"; fi
         [ "$WAS" = "CONNECTED" ] || sync_running || wifi_off
     ) &
 }
+# 10.9: MAKE NEW KEYS (Settings > Security, after an authenticator code). New passphrase, alert topic and
+# monitor topic, all from the Kindle's random source. The passphrase before this one is kept as
+# PASSPHRASE_OLD so everything locked with it still opens until the page has re-locked it and you tap
+# FINISH; the phone, PC and TV get the new keys from a new sealed pairing code on the Kindle.
+rand_b32() { od -An -tu1 -N"$1" /dev/urandom 2>/dev/null | awk 'BEGIN { A = "ABCDEFGHJKMNPQRSTUVWXYZ23456789" } { for (i = 1; i <= NF; i++) printf "%s", substr(A, $i % 31 + 1, 1) }'; }
+rotate_keys() {
+    [ -f "$DIR/cloud.conf" ] || { log "new keys: no cloud.conf"; return; }
+    OLDP=$( PASSPHRASE="@unset@"; . "$DIR/cloud.conf" >/dev/null 2>&1; [ "$PASSPHRASE" = "@unset@" ] && PASSPHRASE=$(hc_legacy_pass); printf '%s' "$PASSPHRASE" )
+    R=$(rand_b32 24)
+    [ ${#R} = 24 ] || { log "new keys: no random source - nothing changed"; return; }
+    NEWP=$(echo "$R" | sed 's/\(....\)/\1-/g; s/-$//')         # XXXX-XXXX-XXXX-XXXX-XXXX-XXXX (about 118 bits)
+    NTN="kitchenhub-$(od -An -tx1 -N10 /dev/urandom | tr -cd 'a-f0-9')"
+    MTN="khscreen-$(od -An -tx1 -N10 /dev/urandom | tr -cd 'a-f0-9')"
+    # the old one goes in its own private file (any characters), not cloud.conf; FINISH deletes it
+    [ -n "$OLDP" ] && ( umask 077; printf '%s' "$OLDP" > "$DIR/.pass_old" )
+    hub_conf_set PASSPHRASE "$NEWP" || { rm -f "$DIR/.pass_old"; log "new keys: could not write cloud.conf"; return; }
+    hub_conf_set NTFY_TOPIC "$NTN"; hub_conf_set MON_TOPIC "$MTN"
+    date +%s > "$DIR/.keys_at"
+    write_cloud_js
+    log "new keys made (passphrase, alert topic, monitor topic) - re-pair the phone, PC and TV, then update the GitHub secrets"
+}
+# 10.9: the kitchen monitor's channel (ntfy topic). Made once from the Kindle's random source when missing;
+# the TV/monitor learns it from its sealed pairing code (Settings > Security > TV / MONITOR).
+mon_topic_init() {
+    [ -f "$DIR/cloud.conf" ] || return 0
+    grep -q '^MON_TOPIC=khscreen-[0-9a-f]\{20\}' "$DIR/cloud.conf" && return 0
+    MT="khscreen-$(od -An -tx1 -N10 /dev/urandom 2>/dev/null | tr -cd 'a-f0-9')"
+    [ ${#MT} = 29 ] && hub_conf_set MON_TOPIC "$MT" && log "made the kitchen monitor's channel"
+}
+# 10.9: send one (already locked) command to the kitchen monitor. Wi-Fi stays on 90 s for the next tap.
+screen_send() {
+    MT=$(sed -n 's/^MON_TOPIC=\(khscreen-[0-9a-f]*\)$/\1/p' "$DIR/cloud.conf" 2>/dev/null | head -1)
+    [ -n "$MT" ] || { log "screen: no monitor channel yet"; return; }
+    NEWU=$(( $(date +%s) + 90 )); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+    (
+        trap - EXIT INT TERM
+        SF=$(mktemp 2>/dev/null) || SF="/tmp/kh_scr.$$"
+        ( umask 077; printf '%s' "$1" > "$SF" )
+        if wifi_on; then
+            C=$(kcurl -s --connect-timeout 8 --max-time 15 -o /dev/null -w '%{http_code}' -H "Cache: no" --data-binary "@$SF" "https://ntfy.sh/$MT" 2>/dev/null)
+            [ "$C" = "200" ] || log "screen: send failed ($C)"
+        else log "screen: no Wi-Fi"; fi
+        rm -f "$SF"
+        sleep 90; sync_running || wifi_off
+    ) &
+}
 write_cloud_js() {
+    mon_topic_init
     NT=$(ntfy_topic)
     if [ -f "$DIR/cloud.conf" ]; then
-        ( GIST_ID=""; GH_TOKEN=""; PAGES_URL=""; PASSPHRASE="Holy"; . "$DIR/cloud.conf"
+        # 10.9: pass0 = the passphrase before the last key change (still opens older items); legacy=1 when
+        # cloud.conf has no PASSPHRASE and the pre-10.9 built-in one is in use (the page asks you to make new
+        # keys); mon = the kitchen monitor's topic; cok = this Kindle may use the cloud (authenticator code given)
+        ( GIST_ID=""; GH_TOKEN=""; PAGES_URL=""; PASSPHRASE="@unset@"; PASSPHRASE_OLD=""; MON_TOPIC=""; . "$DIR/cloud.conf"
+          LEG=0; [ "$PASSPHRASE" = "@unset@" ] && { PASSPHRASE=$(hc_legacy_pass); LEG=1; }      # no PASSPHRASE line at all (PASSPHRASE= empty means no lock, as before)
+          [ -z "$PASSPHRASE_OLD" ] && [ -s "$DIR/.pass_old" ] && PASSPHRASE_OLD=$(cat "$DIR/.pass_old")
           Q() { echo "$1" | sed 's/[\\"]//g'; }
           LK() { sed -n "s/^$1=\\([A-Za-z0-9:/._-]*\\)\$/\\1/p" "$DIR/.cloud_links" 2>/dev/null | head -1; }
           CDA=$(cat "$DIR/.cloud_data_at" 2>/dev/null | tr -cd '0-9'); BA=$(LK BRAIN_AT | tr -cd '0-9')
-          printf 'window.HUB_CLOUD={pages:"%s",gist:"%s",token:"%s",pass:"%s",wake:%s,ntfy:"%s",alerts:%s,cdata:%s,cdataAt:%s,ics:"%s",ics2:"%s",tv:"%s",cgist:"%s",brainAt:%s};\n' "$(Q "$PAGES_URL")" "$(Q "$GIST_ID")" "$(Q "$GH_TOKEN")" "$(Q "$PASSPHRASE")" "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" \
+          COK=0; hub_cloud_allowed && COK=1
+          KAT=$(cat "$DIR/.keys_at" 2>/dev/null | tr -cd '0-9')
+          printf 'window.HUB_CLOUD={pages:"%s",gist:"%s",token:"%s",pass:"%s",pass0:"%s",legacy:%s,mon:"%s",cok:%s,keysAt:%s,wake:%s,ntfy:"%s",alerts:%s,cdata:%s,cdataAt:%s,ics:"%s",ics2:"%s",tv:"%s",cgist:"%s",brainAt:%s};\n' "$(Q "$PAGES_URL")" "$(Q "$GIST_ID")" "$(Q "$GH_TOKEN")" "$(Q "$PASSPHRASE")" "$(Q "$PASSPHRASE_OLD")" "$LEG" "$(Q "$MON_TOPIC")" "$COK" "${KAT:-0}" "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" \
               "$USE_CLOUD_DATA" "${CDA:-0}" "$(LK ICS_URL)" "$(LK ICS2_URL)" "$(LK TV_REF)" "$(LK CLOUD_GIST)" "${BA:-0}" > "$MESQ/cloud.js.tmp" && mv "$MESQ/cloud.js.tmp" "$MESQ/cloud.js" )
     else
-        printf 'window.HUB_CLOUD={pages:"",gist:"",token:"",pass:"",wake:%s,ntfy:"%s",alerts:%s};\n' "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" > "$MESQ/cloud.js"
+        printf 'window.HUB_CLOUD={pages:"",gist:"",token:"",pass:"",pass0:"",legacy:0,mon:"",cok:0,keysAt:0,wake:%s,ntfy:"%s",alerts:%s};\n' "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" > "$MESQ/cloud.js"
     fi
 }
 CURL_BIN=/usr/bin/curl; [ -x "$CURL_BIN" ] || CURL_BIN=curl
@@ -673,6 +799,7 @@ smart_step() {
             fi
         done < "$DIR/.away"
     fi
+    [ -n "$HUB_TEST_STEP" ] && STEP=$HUB_TEST_STEP      # tests only
 }
 
 GOV_SAVED=""
@@ -686,6 +813,8 @@ if [ "$HUB_TEST" != "1" ]; then
 fi
 
 # NB: never name a variable PPID - it is read-only in many shells
+# 10.9: the frontlight (0 = off). On only while the hub is awake for you; every standby turns it off.
+set_light() { [ "$HUB_TEST" = "1" ] && { echo "light $1" >> "${KT:-/tmp}/light.log" 2>/dev/null; return 0; }; lipc-set-prop com.lab126.powerd flIntensity "${1:-0}" 2>/dev/null; }
 freeze_powerd() { [ "$FREEZE_POWERD" = "1" ] || return 0; PD=$(pidof powerd 2>/dev/null); [ -n "$PD" ] && kill -STOP $PD 2>/dev/null; }
 thaw_powerd()   { PD=$(pidof powerd 2>/dev/null); [ -n "$PD" ] && kill -CONT $PD 2>/dev/null; }
 
@@ -807,7 +936,7 @@ suspend_for() {
         SLEPT=$((T1 - T0))
         WR=$(head -n 1 "$WAKE_REASON_F" 2>/dev/null | tr -d '\r' | cut -c1-60)
         if [ "$RC" -eq 0 ] && [ "$SLEPT" -ge $((REM - 10)) ]; then
-            log "woke on schedule after ${SLEPT}s${WR:+ (reason: $WR)}$([ "$ATTEMPTS" -gt 0 ] && echo " - suspended on try $((ATTEMPTS + 1))")"
+            [ "$SUSPEND_QUIET" = "1" ] || log "woke on schedule after ${SLEPT}s${WR:+ (reason: $WR)}$([ "$ATTEMPTS" -gt 0 ] && echo " - suspended on try $((ATTEMPTS + 1))")"
             RESULT=0; break
         fi
         if [ "$RC" -eq 0 ] && [ "$SLEPT" -ge 1 ]; then
@@ -822,6 +951,24 @@ suspend_for() {
     done
     thaw_powerd
     return $RESULT
+}
+
+# 10.9: standby clock "every minute": sleep minute by minute until the next real wake. Each tick wakes the
+# Kindle for ~3 s with no Wi-Fi and no touch screen: the page's own clock timer fires on resume and redraws
+# just the minute (partial e-ink update), then the Kindle sleeps again. Returns like suspend_for.
+minute_sleep() {
+    MS_T=$1; MS_N=0
+    while :; do
+        MS_NOW=$(date +%s); MS_REM=$((MS_T - MS_NOW))
+        if [ "$MS_REM" -le $(( ${HUB_TEST_MINUTE:-60} + 20 )) ]; then [ "$MS_N" -gt 0 ] && log "standby clock: $MS_N minute ticks"; suspend_for $((MS_REM - 3)); return $?; fi
+        MS_L=${HUB_TEST_MINUTE:-60}                 # (tests use a shorter "minute")
+        MS_S=$((MS_L - MS_NOW % MS_L)); [ "$MS_S" -lt $((MS_L / 3)) ] && MS_S=$((MS_S + MS_L))
+        SUSPEND_QUIET=1; suspend_for "$MS_S"; MS_R=$?; SUSPEND_QUIET=0
+        if [ "$MS_R" != "0" ]; then [ "$MS_N" -gt 0 ] && log "standby clock: $MS_N minute ticks"; return "$MS_R"; fi
+        MS_N=$((MS_N + 1))
+        sleep 2                                   # the page redraws the minute
+        still_owner || exit 0
+    done
 }
 
 # Used when real suspend is unavailable/refused and in "always" mode: wait for the next wake time
@@ -912,10 +1059,24 @@ while true; do
     lipc-set-prop com.lab126.powerd preventScreenSaver 1 2>/dev/null
 
     NOW=$(date +%s)
-    AWAKE_UNTIL=$((NOW + WAKE_WINDOW))
-    NEXT_WAKE_EPOCH=0
-    write_ui_state 0
-    log "awake (${WAKE_REASON}) for ${WAKE_WINDOW}s, battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
+    # 10.9: a timer wake is a QUICK wake: the page stays on its standby view (no flash, no touch screen
+    # waiting for nobody), data is refreshed, a due sync runs, the new frame is captured, back to sleep.
+    # Not while the page is starting or a fresh update still has to report in (that needs a full wake).
+    QUICK_ACTIVE=0
+    if [ "$QUICK_WAKE" = "1" ] && [ "$WAKE_REASON" = "timer" ] && [ "$FIRST" != "1" ] && [ "$BOOT" != "1" ] && [ ! -f "$DIR/.update/pending" ]; then QUICK_ACTIVE=1; fi
+    if [ "$QUICK_ACTIVE" = "1" ]; then
+        AWAKE_UNTIL=$((NOW + ${HUB_QUICK_SEC:-8}))
+        QUICK_NEXT=1; write_ui_state 1
+        log "quick wake (timer), battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
+    else
+        AWAKE_UNTIL=$((NOW + WAKE_WINDOW))
+        NEXT_WAKE_EPOCH=0
+        set_light "$FRONTLIGHT"
+        write_ui_state 0
+        log "awake (${WAKE_REASON}) for ${WAKE_WINDOW}s, battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
+        # 10.9: task manager / hub-mode probe (looks only), at most every 10 minutes, in the background
+        [ -f "$DIR/hub_sys.sh" ] && [ $((NOW - ${SYS_AT:-0})) -ge 600 ] && { SYS_AT=$NOW; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & }
+    fi
 
     # sync if due (3 min early-wake tolerance), on first start, but never retry more than every 15 min
     if [ "$FIRST" = "1" ] || [ $((NOW - LAST_SYNC)) -ge $((SYNC_EVERY_MIN * 60 - 180)) ]; then
@@ -977,13 +1138,20 @@ while true; do
     NEXT_WAKE_EPOCH=$((NOW + SECS))
     [ "$SMODE" != "fixed" ] && log "next wake $(fmt_epoch "$NEXT_WAKE_EPOCH") ($SMODE, every $((STEP / 60)) min)"
 
+    # 10.9: the next timer wake will be a quick one (the page reads this before it sleeps)
+    QUICK_NEXT=0; [ "$QUICK_WAKE" = "1" ] && [ ! -f "$DIR/.update/pending" ] && QUICK_NEXT=1
+    set_light 0
     write_ui_state 1
     write_log_js
-    sleep 6   # give the page time to draw the standby frame before it is captured
+    [ "$QUICK_ACTIVE" = "1" ] && sleep 3 || sleep 6   # give the page time to draw the standby frame before it is captured
+    QUICK_ACTIVE=0
 
     [ "$SCREENSAVER_MODE" != "off" ] && capture_and_freeze_display
 
-    if [ "$MODE" = "eco" ]; then
+    if [ "$MODE" = "eco" ] && [ "$CLOCK_MODE" = "min" ]; then
+        minute_sleep "$NEXT_WAKE_EPOCH"
+        SR=$?
+    elif [ "$MODE" = "eco" ]; then
         suspend_for $((SECS - 3))
         SR=$?
     else

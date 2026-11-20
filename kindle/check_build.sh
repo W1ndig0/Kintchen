@@ -21,4 +21,7 @@ if not parts or sum(len(p) for p in parts) < 100000: sys.exit("page script missi
 print("\n".join(parts))
 PY
 npx --yes acorn@8.14.0 --ecma5 --silent /tmp/page.js || { echo "PAGE SCRIPT DOES NOT PARSE (old Kindle browser = ES5 only)"; FAIL=1; }
+# 10.9: the page's own script files (not the generated data files) must be ES5 too, and v109.js must be there
+[ -s shiftcal/mesquite/v109.js ] || { echo "MISSING: mesquite/v109.js"; FAIL=1; }
+for J in shiftcal/mesquite/v109.js shiftcal/mesquite/qr.js; do npx --yes acorn@8.14.0 --ecma5 --silent "$J" || { echo "NOT ES5: $J"; FAIL=1; }; done
 [ "$FAIL" = "0" ] && echo "build check passed" || { echo "build check FAILED - manifest not updated"; exit 1; }

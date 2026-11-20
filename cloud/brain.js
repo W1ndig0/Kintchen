@@ -12,7 +12,9 @@
  *     the TV page) and bundle.txt (weather+news+recipes fetched here, so the Kindle downloads ONE file)
  *
  * The logs of a public repo are public: this script prints counts only, never item text.
- * Env: GIST_ID GIST_TOKEN HUB_PASS [NTFY_TOPIC] [NTFY_URL] [GH_API] [TZ_HOURS=-7] [BRAIN_NOW=epoch ms, tests]
+ * Env: GIST_ID GIST_TOKEN HUB_PASS [HUB_PASS_OLD] [NTFY_TOPIC] [NTFY_URL] [GH_API] [TZ_HOURS=-7] [BRAIN_NOW=epoch ms, tests]
+ *      10.9: HUB_PASS_OLD = the passphrase before a key change (Kindle: Settings > Security > MAKE NEW KEYS). While it
+ *      is set, things locked with it still open here and are re-locked with HUB_PASS. Delete it after FINISH.
  *      [SKIP_BUNDLE=1] [OFFLINE=1] [LAT LON]
  */
 "use strict";
@@ -20,7 +22,7 @@ const fs = require("fs"), path = require("path"), os = require("os"), cp = requi
 const HubData = require("./hubdata.js"), HubCrypt = HubData.HubCrypt, HubCal = HubData.HubCal, HubPantry = HubData.HubPantry;
 
 const API = process.env.GH_API || "https://api.github.com";
-const GIST = process.env.GIST_ID, TOKEN = process.env.GIST_TOKEN, PASS = process.env.HUB_PASS || "";
+const GIST = process.env.GIST_ID, TOKEN = process.env.GIST_TOKEN, PASS = process.env.HUB_PASS || "", PASS_OLD = process.env.HUB_PASS_OLD || "";
 const TOPIC = process.env.NTFY_TOPIC || "", NTFY = process.env.NTFY_URL || "https://ntfy.sh";
 const TZH = +(process.env.TZ_HOURS || -7);
 const NOW = +(process.env.BRAIN_NOW || Date.now());
@@ -41,18 +43,27 @@ const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
 function dayName(k) { return k === TODAY ? "Today" : k === TOMORROW ? "Tomorrow" : DAYS[new Date(Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10))).getUTCDay()]; }
 
 // ---------- GitHub ----------
+// 10.9: every network call has a time limit, so one stuck request can't eat the whole 8-minute run
+async function timed(url, opts, ms) {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
+    try { const r = await fetch(url, { ...(opts || {}), signal: ctl.signal }); const body = await r.text(); return { ok: r.ok, status: r.status, body }; }
+    finally { clearTimeout(t); }
+}
 async function gh(method, url, body) {
-    const r = await fetch(url.startsWith("http") ? url : API + url, {
-        method, headers: { Authorization: "Bearer " + TOKEN, Accept: "application/vnd.github+json", "User-Agent": "KitchenHubBrain", "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "Content-Type": "application/json" } : {}) },
-        body: body ? JSON.stringify(body) : undefined
-    });
+    let r;
+    try {
+        r = await timed(url.startsWith("http") ? url : API + url, {
+            method, headers: { Authorization: "Bearer " + TOKEN, Accept: "application/vnd.github+json", "User-Agent": "KitchenHubBrain", "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "Content-Type": "application/json" } : {}) },
+            body: body ? JSON.stringify(body) : undefined
+        }, 45000);
+    } catch (e) { throw new Error(method + " " + url.replace(/[0-9a-f]{20,}/g, "<id>") + " -> " + (e.name === "AbortError" ? "timed out" : "network error")); }
     if (!r.ok) throw new Error(method + " " + url.replace(/[0-9a-f]{20,}/g, "<id>") + " -> " + r.status);
-    return r.json();
+    return JSON.parse(r.body);
 }
 async function fileText(f) {
     if (!f) return null;
     if (!f.truncated && typeof f.content === "string") return f.content;
-    const r = await fetch(f.raw_url); return r.ok ? r.text() : null;
+    try { const r = await timed(f.raw_url, {}, 45000); return r.ok ? r.body : null; } catch (e) { return null; }
 }
 async function get(url, ms, opts) {
     if (OFFLINE) return null;
@@ -64,7 +75,7 @@ async function get(url, ms, opts) {
 // ---------- store helpers ----------
 let store = HubData.HEADER + "\n", storeChanged = false;
 function items(kind) {
-    return HubData.items(store, kind).map(it => { const t = HubCrypt.unlock(it.text, PASS); return { id: it.id, kind: it.kind, state: it.state, ts: it.ts, text: t === null ? null : t, raw: it.text }; });
+    return HubData.items(store, kind).map(it => { const t = HubCrypt.unlockAny(it.text, [PASS, PASS_OLD]); return { id: it.id, kind: it.kind, state: it.state, ts: it.ts, text: t === null ? null : t, raw: it.text }; });
 }
 function edit(id, kind, state, text) { store = HubData.edit(store, id, kind, state, PASS ? HubCrypt.lock(text, PASS) : text, NOW); storeChanged = true; }
 function newId() { return HubData.newId("c"); }
@@ -184,7 +195,7 @@ async function push(title, body, tags, prio) {
     if (!TOPIC) return false;
     if (OFFLINE && !process.env.NTFY_URL) return false;
     try {
-        const r = await fetch(NTFY + "/" + TOPIC, { method: "POST", body: body, headers: { Title: title.replace(/[^\x20-\x7e]/g, ""), Tags: tags || "fork_and_knife", Priority: String(prio || 3) } });
+        const r = await timed(NTFY + "/" + TOPIC, { method: "POST", body: body, headers: { Title: title.replace(/[^\x20-\x7e]/g, ""), Tags: tags || "fork_and_knife", Priority: String(prio || 3) } }, 20000);
         if (r.ok) pushes++;
         return r.ok;
     } catch (e) { return false; }
@@ -344,6 +355,16 @@ async function main() {
         let n = 0;
         HubData.items(store).forEach(it => { if (it.state !== "del" && !HubCrypt.isLocked(it.text)) { store = HubData.edit(store, it.id, it.kind, it.state, HubCrypt.lock(it.text, PASS), NOW); n++; } });
         if (n) { storeChanged = true; log("relocked " + n); }
+        // 10.9: after a key change, move things still locked with the old passphrase to the new one
+        if (PASS_OLD) {
+            let m = 0;
+            HubData.items(store).forEach(it => {
+                if (it.state === "del" || !HubCrypt.isLocked(it.text) || HubCrypt.unlock(it.text, PASS) !== null) return;
+                const t = HubCrypt.unlock(it.text, PASS_OLD);
+                if (t !== null) { store = HubData.edit(store, it.id, it.kind, it.state, HubCrypt.lock(t, PASS), NOW); m++; }
+            });
+            if (m) { storeChanged = true; log("moved " + m + " to the new passphrase"); }
+        }
     }
 
     // 3. requests from the phone
@@ -424,7 +445,7 @@ async function main() {
             if (it.state === "done" && ["cmd", "req", "msg", "pantry", "pkg", "wish", "goal"].indexOf(it.kind) >= 0) drop = old(it, 30);
             else if (it.kind === "chdone") drop = dated(it.id, 120);
             else if (it.kind === "billpd") drop = dated(it.id, 150);
-            else if (it.kind === "plan") { const t = HubCrypt.unlock(it.text, PASS); drop = !!(t && /^\d{4}-\d\d-\d\d/.test(t) && t.slice(0, 10) < addK(TODAY, -21)); }
+            else if (it.kind === "plan") { const t = HubCrypt.unlockAny(it.text, [PASS, PASS_OLD]); drop = !!(t && /^\d{4}-\d\d-\d\d/.test(t) && t.slice(0, 10) < addK(TODAY, -21)); }
             if (drop) { edit(it.id, it.kind, "del", ""); n++; }
         }
         if (n) log("tidied " + n + " old lines");
@@ -436,6 +457,7 @@ async function main() {
         const xget = process.env.EXTRAS_BASE ? (u, ms, o) => get(process.env.EXTRAS_BASE + "/ext/" + encodeURIComponent(u), ms, o) : get;   // tests
         const before = JSON.stringify(exState);
         EX = await require("./extras.js")({ items, push, sent, mark, NOW, TODAY, TOMORROW, HOUR, DOW, addK, get: xget, HubCal, decodeEnts, log, state: exState, pantryCfg });
+        try { EX.birds = await require("./birds.js")({ get: xget, NOW, TODAY, log, state: exState }); } catch (e) { log("birds failed: " + String(e.message || e).slice(0, 60)); }      // 10.9
         if (JSON.stringify(exState) !== before) cloudFiles["extras_state.json"] = { content: JSON.stringify(exState) };
         const exHash = require("crypto").createHash("sha1").update(JSON.stringify({ ...EX, ts: 0 })).digest("hex");
         if (exHash !== brain.exHash || !(cg && cg.files && cg.files["extra.js"])) {
@@ -447,9 +469,9 @@ async function main() {
     try {
         const cur = cloudFiles["bundle.txt"] ? cloudFiles["bundle.txt"].content : prevBundle;
         if (EX && Array.isArray(EX.deals) && cur && /\n@@END\n?$/.test(cur)) {
-            const all = EX.deals.concat(...((EX.week && EX.week.events) || []).map(e => e.deals || []));
-            const want = all.filter(d => d.img && /^img\/d[0-9a-f]{12}\.(jpg|png)$/.test(d.img) && /^https:\/\/\S+$/.test(d.src)).map(d => "@@IMG " + d.img + " " + d.src).filter((l, i, arr) => arr.indexOf(l) === i);
-            const kept = cur.replace(/\n@@END\n?$/, "").split("\n").filter(l => !/^@@IMG img\/d[0-9a-f]{12}\./.test(l));
+            const all = EX.deals.concat(...((EX.week && EX.week.events) || []).map(e => e.deals || []), EX.birds || []);      // 10.9: + bird photos
+            const want = all.filter(d => d.img && /^img\/[bd][0-9a-f]{12}\.(jpg|png)$/.test(d.img) && /^https:\/\/\S+$/.test(d.src)).map(d => "@@IMG " + d.img + " " + d.src).filter((l, i, arr) => arr.indexOf(l) === i);
+            const kept = cur.replace(/\n@@END\n?$/, "").split("\n").filter(l => !/^@@IMG img\/[bd][0-9a-f]{12}\./.test(l));
             const next = kept.concat(want).join("\n") + "\n@@END\n";
             if (next !== cur) { cloudFiles["bundle.txt"] = { content: next }; log("deals: " + EX.deals.length + " (" + want.length + " photos)"); }
         }

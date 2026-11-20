@@ -1,6 +1,6 @@
 // Keeps the app itself available with no signal (the list lives in localStorage). GitHub API calls are never cached.
-// 10.5: new cache name, so phones pick up the 10.5 shared code (secure IV, pantry table). 10.8: kh-v16 adds extra4.js (bottom tabs, deal cards, shift picker)
-var C = "kh-v16", FILES = ["./", "index.html", "hubdata.js", "extra.js", "extra2.js", "extra3.js", "extra4.js", "manifest.json", "tv.html"];
+// 10.5: new cache name, so phones pick up the 10.5 shared code (secure IV, pantry table). 10.8: kh-v16 adds extra4.js (bottom tabs, deal cards, shift picker) 10.9: kh-v17 (sealed pairing, new GitHub token, TV code).
+var C = "kh-v17", FILES = ["./", "index.html", "hubdata.js", "extra.js", "extra2.js", "extra3.js", "extra4.js", "manifest.json", "tv.html", "tvctl.js"];
 self.addEventListener("install", function(e) { e.waitUntil(caches.open(C).then(function(c) { return c.addAll(FILES); })); self.skipWaiting(); });
 self.addEventListener("activate", function(e) {
   e.waitUntil(caches.keys().then(function(ks) { return Promise.all(ks.filter(function(k) { return k !== C; }).map(function(k) { return caches.delete(k); })); })

@@ -34,18 +34,26 @@ b64d() {    # base64 file -> binary file: busybox, then openssl, then plain awk 
 }
 hashof() { sha256sum "$1" 2>/dev/null | cut -c1-64; }
 # 10.4: the book key (same as the phone and the cloud): SHA-256(K | "books"), K = SHA-256 x1000 of "kitchenhub|PASSPHRASE"
+# 10.9: made for one passphrase at a time (bookkey PASS -> KEY), cached per passphrase in $T/keys, so after a
+# key change books locked with the old passphrase (PASSPHRASE_OLD) still open.
+bookpasses() {      # the passphrases to try, newest first (the old built-in one only when cloud.conf has none)
+    ( PASSPHRASE="@unset@"; PASSPHRASE_OLD=""; [ -f "$DIR/cloud.conf" ] && . "$DIR/cloud.conf" >/dev/null 2>&1
+      [ "$PASSPHRASE" = "@unset@" ] && { HC_DIR=$DIR; . "$DIR/hub_common.sh" 2>/dev/null; PASSPHRASE=$(hc_legacy_pass); }      # no PASSPHRASE line (as before 10.9)
+      [ -z "$PASSPHRASE_OLD" ] && [ -s "$DIR/.pass_old" ] && PASSPHRASE_OLD=$(cat "$DIR/.pass_old")
+      printf '%s\n' "$PASSPHRASE" | tr -d '\r'; [ -n "$PASSPHRASE_OLD" ] && printf '%s\n' "$PASSPHRASE_OLD" | tr -d '\r' )
+}
 bookkey() {
-    # same passphrase the page uses (power_loop.sh write_cloud_js falls back to "Holy" when cloud.conf has none)
-    PASS=$( PASSPHRASE="Holy"; [ -f "$DIR/cloud.conf" ] && . "$DIR/cloud.conf" >/dev/null 2>&1; printf '%s' "$PASSPHRASE" | tr -d '\r' )
-    [ -n "$PASS" ] && [ -n "$OSSL" ] || return 1
-    PH=$(printf '%s' "$PASS" | sha256sum | cut -c1-64)
-    if [ -s "$T/key" ] && [ "$(cut -d' ' -f1 "$T/key")" = "$PH" ]; then KEY=$(cut -d' ' -f2 "$T/key"); return 0; fi
-    printf 'kitchenhub|%s' "$PASS" > "$T/k"; I=0
+    KEY=""; BK_PASS="$1"
+    [ -n "$BK_PASS" ] && [ -n "$OSSL" ] || return 1
+    PH=$(printf '%s' "$BK_PASS" | sha256sum | cut -c1-64)
+    KEY=$(grep "^$PH " "$T/keys" 2>/dev/null | head -1 | cut -d' ' -f2)
+    [ ${#KEY} = 64 ] && return 0
+    printf 'kitchenhub|%s' "$BK_PASS" > "$T/k"; I=0
     while [ "$I" -lt 1000 ]; do "$OSSL" dgst -sha256 -binary "$T/k" > "$T/k2" && mv "$T/k2" "$T/k" || return 1; I=$((I + 1)); done
     printf 'books' >> "$T/k"
     KEY=$("$OSSL" dgst -sha256 -binary "$T/k" | od -An -v -tx1 | tr -d ' \n'); rm -f "$T/k"
     [ "${#KEY}" = 64 ] || return 1
-    echo "$PH $KEY" > "$T/key"; chmod 600 "$T/key" 2>/dev/null; say "made the book key"
+    ( umask 077; echo "$PH $KEY" >> "$T/keys" ); rm -f "$T/key"; say "made the book key"
 }
 KEY=""
 # 1. books moved back to the cloud (or deleted): take them off the Kindle
@@ -69,25 +77,29 @@ if [ -n "$BASEU" ]; then
         SIZE=$2; SHA=$3; NP=$4; ENC=$5; IV=$6      # $1 = the format (the file name already ends in it)
         case "$NP" in ''|*[!0-9]*) FAILS="$FAILS$ID:not in the cloud yet,"; continue ;; esac
         [ -n "$FREE" ] && [ "$FREE" -lt $((SIZE / 1024 + 51200)) ] && { FAILS="$FAILS$ID:Kindle storage is full,"; say "no room for $FN"; continue; }
-        if [ "$ENC" = "a1" ] && [ -z "$KEY" ]; then
-            if ! bookkey; then
-                if [ -z "$OSSL" ]; then FAILS="$FAILS$ID:this Kindle has no openssl to unlock books,"; else FAILS="$FAILS$ID:locked - check PASSPHRASE in cloud.conf,"; fi
-                say "can't unlock $FN"; continue
-            fi
-        fi
-        : > "$T/b64"; OK=1; I=0
+        if [ "$ENC" = "a1" ] && [ -z "$OSSL" ]; then FAILS="$FAILS$ID:this Kindle has no openssl to unlock books,"; say "can't unlock $FN"; continue; fi
+        : > "$T/b64"; OK=1; I=0; UNL=""
         while [ "$I" -lt "$NP" ]; do
             kcurl -sf --connect-timeout 8 --max-time 120 "${BASEU}bk_$ID.p$I" >> "$T/b64" 2>/dev/null || { OK=0; break; }
             echo >> "$T/b64"; I=$((I + 1))
         done
         if [ "$OK" = "1" ] && b64d "$T/b64" "$T/book" && [ "$(wc -c < "$T/book" | tr -d ' ')" = "$SIZE" ]; then
-            if [ "$ENC" = "a1" ]; then "$OSSL" enc -d -aes-256-ctr -K "$KEY" -iv "$IV" -in "$T/book" -out "$T/plain" 2>/dev/null && mv "$T/plain" "$T/book" || OK=0; fi
+            if [ "$ENC" = "a1" ]; then      # 10.9: the newest passphrase first, then the one before the last key change
+                UNL=0
+                bookpasses > "$T/passes"
+                while IFS= read -r BP; do
+                    bookkey "$BP" || continue
+                    "$OSSL" enc -d -aes-256-ctr -K "$KEY" -iv "$IV" -in "$T/book" -out "$T/plain" 2>/dev/null || continue
+                    [ "$(hashof "$T/plain")" = "$SHA" ] && { mv "$T/plain" "$T/book"; UNL=1; break; }
+                done < "$T/passes"
+                rm -f "$T/passes" "$T/plain"
+                [ "$UNL" = "1" ] || { OK=0; FAILS="$FAILS$ID:locked with a passphrase this Kindle doesn't have,"; }
+            fi
         else OK=0; fi
         if [ "$OK" = "1" ] && [ "$(hashof "$T/book")" = "$SHA" ]; then
             mkdir -p "$LIB"; mv "$T/book" "$LIB/$FN" && echo "$ID	$FN" >> "$HAVE"; say "downloaded $FN ($SIZE bytes)"; N=$((N + 1))
         else
-            [ "$ENC" = "a1" ] && [ "$OK" = "1" ] && rm -f "$T/key"      # a wrong key (passphrase changed): make it again next time
-            FAILS="$FAILS$ID:download didn't check out - will try again,"; say "download of $FN failed, will retry"
+            [ "$UNL" = "0" ] || FAILS="$FAILS$ID:download didn't check out - will try again,"; say "download of $FN failed, will retry"
         fi
         rm -f "$T/b64" "$T/book" "$T/plain"
     done < "$WANT"

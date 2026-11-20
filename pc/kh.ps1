@@ -1,7 +1,7 @@
 <#
   Kitchen Hub from the PC (Windows PowerShell 5.1 or PowerShell 7).
 
-  First time:   powershell -ExecutionPolicy Bypass -File kh.ps1 pair "<pairing link from the phone app: Copy pairing link>"
+  First time:   powershell -ExecutionPolicy Bypass -File kh.ps1 pair     (then paste the pairing link from the phone app: Copy pairing link)
   Then:
      kh add milk eggs "paper towels"      add to the shopping list
      kh list                              what's on the list
@@ -26,7 +26,8 @@
      kh book https://site/article         send an article to the Kindle library (the cloud makes it a book)
      kh book 1342                         add a free classic from Project Gutenberg by its number
   Tip: make it a command:  Set-Alias kh "$HOME\KitchenHub\kh.ps1"  in your PowerShell profile.
-  Your settings live in %APPDATA%\KitchenHub\kh.json (the token is only stored there).
+  Your settings live in %APPDATA%\KitchenHub\kh.json. 10.9: the token and passphrase in it are locked to your
+  Windows account (DPAPI), so a copy of the file is useless anywhere else.
 #>
 param([Parameter(Position = 0)][string]$Cmd = "help", [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest)
 $ErrorActionPreference = "Stop"
@@ -95,7 +96,7 @@ function Items([string]$store, [string]$kind) {
     $it = [pscustomobject]@{ ts = [int64]$f[0]; id = $f[1]; kind = $f[2]; state = $f[3]; raw = (UnescT $f[4]) }
     if (-not $best.ContainsKey($it.id) -or $best[$it.id].ts -lt $it.ts) { $best[$it.id] = $it }
   }
-  $o = @(); foreach ($it in $best.Values) { if ($it.state -ne "del" -and (-not $kind -or $it.kind -eq $kind)) { $it | Add-Member -NotePropertyName text -NotePropertyValue (Unlock $it.raw $C.pass); $o += $it } }
+  $o = @(); foreach ($it in $best.Values) { if ($it.state -ne "del" -and (-not $kind -or $it.kind -eq $kind)) { $t = Unlock $it.raw $C.pass; if ($null -eq $t -and $C.pass0) { $t = Unlock $it.raw $C.pass0 }; $it | Add-Member -NotePropertyName text -NotePropertyValue $t; $o += $it } }      # 10.9: pass0 = the passphrase before a key change
   return ,($o | Sort-Object ts)
 }
 function NowMs { return [int64](([DateTimeOffset]::UtcNow).ToUnixTimeMilliseconds()) }
@@ -138,19 +139,58 @@ function Extras {
   return @{ g = $g; brain = $b; kindle = $k }
 }
 
+# ---------------- 10.9: secrets in kh.json are locked to your Windows account (DPAPI) ----------------
+# Only you, logged in on this PC, can unlock them; a copy of kh.json on another PC or account is useless.
+function Protect([string]$s) {
+  if (-not $s -or $s.StartsWith("dpapi:")) { return $s }
+  try { return "dpapi:" + (ConvertTo-SecureString $s -AsPlainText -Force | ConvertFrom-SecureString) } catch { return $s }
+}
+function Unprotect([string]$s) {
+  if (-not $s -or -not $s.StartsWith("dpapi:")) { return $s }
+  $ss = ConvertTo-SecureString $s.Substring(6)
+  $p = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ss)
+  try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($p) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($p) }
+}
+function SaveConf($c) {
+  New-Item -ItemType Directory -Force -Path $ConfDir | Out-Null
+  $o = [ordered]@{ gist = $c.gist; token = (Protect ([string]$c.token)); pass = (Protect ([string]$c.pass)); pass0 = (Protect ([string]$c.pass0)); mon = $c.mon; pages = $c.pages }
+  $o | ConvertTo-Json | Set-Content -Encoding UTF8 $ConfFile
+}
+
 # ---------------- commands ----------------
 if ($Cmd -eq "pair") {
+  # 10.9: the link is typed at a prompt, not on the command line, so it never lands in PowerShell's history
   $link = ($Rest -join " ")
-  if ($link -notmatch 'pair=([A-Za-z0-9]+)\.([A-Za-z0-9_]+)') { throw "Paste the pairing link (phone app: Copy pairing link)" }
-  $c = @{ gist = $Matches[1]; token = $Matches[2]; pass = ""; pages = "" }
-  if ($link -match '[&#?]k=([^&\s]+)') { $c.pass = [uri]::UnescapeDataString($Matches[1]) }
+  if ($link) { Write-Host "Tip: run 'kh pair' with no link next time and paste it at the prompt; a link on the command line stays in PowerShell's history (Clear-History, and the PSReadLine history file)." -ForegroundColor Yellow }
+  else { $sl = Read-Host -AsSecureString "Paste the pairing link (phone app: Copy pairing link)"; $p = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sl); try { $link = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($p) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($p) } }
+  $link = $link.Trim()
+  if ($link -match '[#&]pair2=([^&\s]+)') {
+    # 10.9: a sealed link: everything in it is locked with the code shown next to the QR (or on the phone that copied it)
+    $blob = [uri]::UnescapeDataString($Matches[1])
+    $code = (Read-Host "Code shown next to the QR (XXXXX-XXXXX)").ToUpper() -replace '[^0-9A-Z]', ''
+    $j = Unlock $blob ("pair|" + $code)
+    if ($null -eq $j -or $j -eq $blob) { throw "That code doesn't open this link. Nothing was changed." }
+    $p = $j | ConvertFrom-Json
+    if ([string]$p.g -notmatch '^[A-Za-z0-9]+$' -or [string]$p.t -notmatch '^[A-Za-z0-9_]+$') { throw "That link doesn't hold a pairing. Nothing was changed." }
+    $c = @{ gist = [string]$p.g; token = [string]$p.t; pass = [string]$p.k; pass0 = [string]$p.k0; mon = [string]$p.m; pages = "" }
+  } else {
+    if ($link -notmatch 'pair=([A-Za-z0-9]+)\.([A-Za-z0-9_]+)') { throw "That isn't a pairing link (phone app: Copy pairing link)" }
+    $c = @{ gist = $Matches[1]; token = $Matches[2]; pass = ""; pass0 = ""; mon = ""; pages = "" }
+    if ($link -match '[&#?]k=([^&\s]+)') { $c.pass = [uri]::UnescapeDataString($Matches[1]) }
+  }
   if ($link -match '^(https://[^#]+/)') { $c.pages = $Matches[1] }
-  New-Item -ItemType Directory -Force -Path $ConfDir | Out-Null
-  $c | ConvertTo-Json | Set-Content -Encoding UTF8 $ConfFile
+  SaveConf $c
   Write-Host "Paired. Try: kh list"; exit 0
 }
-if (-not (Test-Path $ConfFile)) { Write-Host "Not paired yet. Run: kh pair `"<pairing link>`" (phone app > Copy pairing link)"; exit 1 }
+if (-not (Test-Path $ConfFile)) { Write-Host "Not paired yet. Run: kh pair   (then paste the link from the phone app > Copy pairing link)"; exit 1 }
 $C = Get-Content -Raw $ConfFile | ConvertFrom-Json
+# 10.9: an older kh.json with the token in plain text is locked the first time it is read
+if (([string]$C.token -and -not ([string]$C.token).StartsWith("dpapi:")) -or ([string]$C.pass -and -not ([string]$C.pass).StartsWith("dpapi:"))) {
+  try { SaveConf $C; $C = Get-Content -Raw $ConfFile | ConvertFrom-Json } catch {}
+}
+$C.token = Unprotect ([string]$C.token); $C.pass = Unprotect ([string]$C.pass)
+if ($C.PSObject.Properties["pass0"]) { $C.pass0 = Unprotect ([string]$C.pass0) } else { $C | Add-Member -NotePropertyName pass0 -NotePropertyValue "" }
+if (-not $C.PSObject.Properties["mon"]) { $C | Add-Member -NotePropertyName mon -NotePropertyValue "" }
 $arg = ($Rest -join " ").Trim()
 
 switch ($Cmd) {
@@ -264,8 +304,12 @@ switch ($Cmd) {
   "tv" {
     $x = Extras; if (-not $x.brain -or -not $x.brain.tv) { throw "The cloud brain hasn't run yet" }
     if ([string]$C.pages -notmatch '^https://') { throw "No web address for your site in kh.json - pair again (kh pair)" }      # 10.5: only ever open a web page
-    $u = $C.pages + "tv.html#g=" + $x.brain.tv + "&k=" + [uri]::EscapeDataString($C.pass)
-    Start-Process $u; Write-Host "Opened. Press F11 for full screen; arrow keys change screens."
+    # 10.9: a sealed link (no passphrase in the address or the browser's history); the TV page asks for the code once
+    $abc = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; [byte[]]$rb = New-Object byte[] 10; (New-Object System.Security.Cryptography.RNGCryptoServiceProvider).GetBytes($rb)
+    $code = -join ($rb | ForEach-Object { $abc[$_ % $abc.Length] })
+    $seal = Lock ((@{ g = [string]$x.brain.tv; k = [string]$C.pass; k0 = [string]$C.pass0; m = [string]$C.mon } | ConvertTo-Json -Compress)) ("pair|" + $code)
+    Start-Process ($C.pages + "tv.html#tv2=" + [uri]::EscapeDataString($seal))
+    Write-Host ("Opened. On the TV page, type the code " + $code.Substring(0, 5) + "-" + $code.Substring(5) + " (once). Press F11 for full screen; arrow keys change screens.")
   }
   "cal" { $x = Extras; if (-not $x.brain -or -not $x.brain.ics) { throw "The cloud brain hasn't run yet" }; if ([string]$x.brain.ics -notmatch '^https://') { throw "The calendar link is not a web address" }; Start-Process ($x.brain.ics -replace '^https:', 'webcal:'); Write-Host $x.brain.ics }
   "selftest" { SelfTest; Write-Host "Crypto matches the fridge and phone." }

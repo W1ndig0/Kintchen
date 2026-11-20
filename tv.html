@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#0d0d0c">
 <title>Kitchen Hub TV</title>
 <style>
@@ -80,10 +82,11 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); 
 </div>
 <div id="setup">
   <h1 style="font-size:3vw">Kitchen Hub TV</h1>
-  <p>Open this page from the phone app (FRIDGE &rsaquo; Copy TV link) or from the fridge's Settings &rsaquo; Phone QR code.</p>
-  <p>Or type the code and passphrase:</p>
+  <p>Open this page from the phone app (FRIDGE &rsaquo; Copy TV link) or from the fridge's Settings &rsaquo; Security &rsaquo; TV / MONITOR.</p>
+  <div id="s-sealed" style="display:none"><p>Type the code shown with the link:</p><div><input id="s-c" placeholder="XXXXX-XXXXX" autocomplete="off" style="font-family:monospace;letter-spacing:.1em"></div></div>
+  <div id="s-manual"><p>Or type the code and passphrase:</p>
   <div><input id="s-g" placeholder="owner/cloudgistid"></div>
-  <div><input id="s-k" placeholder="passphrase" type="password"></div>
+  <div><input id="s-k" placeholder="passphrase" type="password"></div></div>
   <button id="s-go">Start</button>
   <p class="dim" style="font-size:1.4vw">Remote / keyboard: &larr; &rarr; change screen &middot; OK/Enter pause &middot; &darr; on the kitchen screen to cook a recipe &middot; D day/night colours.</p>
 </div>
@@ -94,6 +97,11 @@ var $ = function(id) { return document.getElementById(id); };
 function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function(c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 var CFG = {};
 try { CFG = JSON.parse(localStorage.getItem("kh_tv") || "{}"); } catch (e) {}
+// 10.9: a sealed link (#tv2=...) opens with the code shown next to it; the passphrase is never in the address
+var SEALED = "";
+(function() { var m = /[#&]tv2=([^&]+)/.exec(location.hash); if (m) { SEALED = decodeURIComponent(m[1]); history.replaceState(null, "", location.pathname); } })();
+// 10.9: during a key change, things locked with the passphrase from before (k0) still open
+function unlockTV(t) { var r = HubCrypt.unlock(t, CFG.k || ""); if (r === null && CFG.k0) r = HubCrypt.unlock(t, CFG.k0); return r; }
 (function() {
   var h = location.hash, g = /[#&]g=([A-Za-z0-9_.-]+\/[0-9A-Za-z]+)/.exec(h), k = /[#&]k=([^&]+)/.exec(h), raw = /[#&]raw=([^&]+)/.exec(h);
   if (g) { CFG.g = g[1]; if (k) CFG.k = decodeURIComponent(k[1]); if (raw) CFG.raw = decodeURIComponent(raw[1]); try { localStorage.setItem("kh_tv", JSON.stringify(CFG)); } catch (e) {} history.replaceState(null, "", location.pathname); }
@@ -110,10 +118,11 @@ function fmt(t) { if (!t) return ""; var h = +t.slice(0, 2), m = t.slice(3); ret
 function off(v) { return !v || /^\s*(off|x|-|vac|vacation|sick|stat|holiday)\s*$/i.test(v); }
 
 function load() {
+  if (SEALED) { $("setup").style.display = "block"; $("s-sealed").style.display = "block"; $("s-manual").style.display = "none"; $("s-c").focus(); return; }
   if (!CFG.g) { $("setup").style.display = "block"; return; }
   var u = (CFG.raw || "https://gist.githubusercontent.com") + "/" + CFG.g + "/raw/tv.json?t=" + Date.now();
   fetch(u, { cache: "no-store" }).then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function(j) {
-    var t = j.plain ? j.plain : JSON.parse(HubCrypt.unlock(j.locked, CFG.k || "") || "null");
+    var t = j.plain ? j.plain : JSON.parse(unlockTV(j.locked) || "null");
     if (!t) { $("f-r").textContent = "Wrong passphrase"; $("setup").style.display = "block"; return; }
     D = t; LAST = Date.now(); build();
   }).catch(function() { $("f-r").textContent = "Offline - showing the last data"; });
@@ -268,7 +277,15 @@ document.addEventListener("keydown", function(e) {
   e.preventDefault();
 });
 document.addEventListener("click", function(e) { if ($("setup").style.display === "block") return; if (e.clientX > innerWidth / 2) go(1); else go(-1); });
-$("s-go").addEventListener("click", function() { CFG.g = $("s-g").value.trim(); CFG.k = $("s-k").value; try { localStorage.setItem("kh_tv", JSON.stringify(CFG)); } catch (e) {} $("setup").style.display = "none"; load(); });
+$("s-go").addEventListener("click", function() {
+  if (SEALED) {
+    var p = HubCrypt.unseal(SEALED, $("s-c").value);
+    if (!p || !/^[A-Za-z0-9_.-]+\/[0-9A-Za-z]+$/.test(p.g || "")) { $("f-r").textContent = "That code doesn't open this link"; $("s-c").value = ""; return; }
+    CFG.g = p.g; CFG.k = p.k || ""; CFG.k0 = p.k0 || ""; CFG.m = p.m || ""; SEALED = "";
+    $("s-sealed").style.display = "none"; $("s-manual").style.display = "block";
+  } else { CFG.g = $("s-g").value.trim(); CFG.k = $("s-k").value; }
+  try { localStorage.setItem("kh_tv", JSON.stringify(CFG)); } catch (e) {} $("setup").style.display = "none"; load();
+});
 // optional photo frame: photos/list.json on your GitHub site (a public repo makes photos public!)
 fetch("photos/list.json", { cache: "no-store" }).then(function(r) { return r.ok ? r.json() : null; }).then(function(j) { if (j && j.length) { CFG.photos = j.map(function(p) { return "photos/" + p; }); } }).catch(function() {});
 setInterval(function() { if (!PAUSE && !COOK && D) go(1); }, 20000);
@@ -276,5 +293,6 @@ setInterval(function() { if (D) { var cur = document.querySelector(".slide.on");
 setInterval(load, 5 * 60000);
 load();
 </script>
+<script src="tvctl.js"></script>
 </body>
 </html>

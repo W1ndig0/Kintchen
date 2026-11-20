@@ -203,6 +203,7 @@ do_log() {
         [ -s "$DIR/.boot_fail" ] && { echo "== last failed start"; cat "$DIR/.boot_fail"; }
         echo "== power.log"; tail -n 220 "$DIR/power.log" 2>/dev/null
         echo "== sync.log"; tail -n 120 "$LOG" 2>/dev/null; echo "== hub.log"; tail -n 40 "$DIR/hub.log" 2>/dev/null
+        [ -s "$DIR/.sysprobe.txt" ] && { echo "== system (10.9 task manager / hub mode probe)"; cat "$DIR/.sysprobe.txt"; }
     } | sed 's/github_pat_[A-Za-z0-9_]*/<token>/g; s/ghp_[A-Za-z0-9]*/<token>/g' > "$T/lg.$$"
     { printf '{"files":{"kindle-log.txt":{"content":"'; jstr < "$T/lg.$$"; printf '"}}}'; } > "$T/p.$$"
     CODE=$(api PATCH "$API/gists/$CG" -H "Content-Type: application/json" --data-binary "@$T/p.$$")
@@ -240,6 +241,19 @@ do_sync() {
     write_js
 }
 
+# 10.9: the first connection to the cloud needs an authenticator code on the Kindle (Settings > Security).
+# Until then nothing is sent to or fetched from GitHub; lists keep working on the fridge alone.
+cloud_gate() {
+    HC_DIR=$DIR; HC_WHO=cloud
+    . "$DIR/hub_common.sh" 2>/dev/null || return 0
+    hub_cloud_allowed && return 0
+    echo "waiting for the authenticator code (Settings > Security)" > "$STF"; write_js
+    say "not connected yet: enter an authenticator code on the Kindle first (Settings > Security)"
+    return 1
+}
+case "$1" in
+    sync|status|log) [ -n "$GIST_ID" ] && [ -n "$GH_TOKEN" ] && { cloud_gate || exit 0; } ;;
+esac
 case "$1" in
     sync) do_sync ;;
     add)
