@@ -620,6 +620,8 @@ poll_settings_http() {
             cloud_ready && [ "$CLOUD_ON_WAKE" = "1" ] && ! sync_running && start_sync lists
         fi
     fi
+    # 10.9: Settings > System asks for a fresh look at CPU, memory and services
+    if [ "$(qv sysinfo)" = "1" ] && [ -f "$DIR/hub_sys.sh" ]; then SYS_AT=$NOWQ; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & fi
     # 10.9: power settings from Settings > Sleep
     V=$(qv quickwake); case "$V" in 0|1) QUICK_WAKE=$V; CHANGED=1; log "quick timer wakes: $V" ;; esac
     V=$(qv clockmode); case "$V" in 15|min) CLOCK_MODE=$V; CHANGED=1; log "standby clock: $V" ;; esac
@@ -1039,6 +1041,8 @@ while true; do
         set_light "$FRONTLIGHT"
         write_ui_state 0
         log "awake (${WAKE_REASON}) for ${WAKE_WINDOW}s, battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
+        # 10.9: task manager / hub-mode probe (looks only), at most every 10 minutes, in the background
+        [ -f "$DIR/hub_sys.sh" ] && [ $((NOW - ${SYS_AT:-0})) -ge 600 ] && { SYS_AT=$NOW; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & }
     fi
 
     # sync if due (3 min early-wake tolerance), on first start, but never retry more than every 15 min

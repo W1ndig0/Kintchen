@@ -413,3 +413,58 @@ buildSmartOpts = function() {
     chipRow("opt-light", [0, 4, 8, 12, 16, 20, 24], ["Off", "4", "8", "12", "16", "20", "24"], PWR.light, function(v) { PWR.light = v; sendPower("light=" + v); });
     if (typeof HVS !== "undefined") HVS.sig = "";
 };
+
+// ===================== 9. TASK MANAGER: Settings > System (was "Log") =====================
+// CPU, memory, the busiest processes and the Kindle's own services, from hub_sys.sh (it only looks).
+// The service list is also in the cloud log: hub mode will stop only services proven safe on this Kindle.
+(function() {
+    var tabs = $("hv-tabs").getElementsByTagName("div");
+    for (var i = 0; i < tabs.length; i++) if (tabs[i].getAttribute("data-tab") === "log") tabs[i].innerHTML = "System";
+    var pane = $("pane-log"), box = document.createElement("div");
+    box.id = "v9-sys"; box.style.marginBottom = ".6em";
+    pane.insertBefore(box, pane.firstChild);
+    var css = document.createElement("style");
+    css.innerHTML = ".tm-big { font-weight: 900; font-size: 1.6em; font-family: Georgia, serif; } .tm-cell { display: table-cell; padding-right: 1.4em; vertical-align: top; }" +
+        ".tm-bar { height: .45em; border: 2px solid #000; margin-top: .2em; width: 8em; } .tm-bar i { display: block; height: 100%; background: #000; }" +
+        ".tm-t { width: 100%; border-collapse: collapse; font-size: .8em; } .tm-t td { border-bottom: 1px solid #000; padding: .12em .4em .12em 0; }" +
+        ".tm-svc span { display: inline-block; border: 2px solid #000; padding: 0 .3em; margin: .12em .2em .12em 0; font-size: .75em; font-weight: bold; } .tm-svc span.off { border-style: dashed; font-weight: normal; }";
+    document.getElementsByTagName("head")[0].appendChild(css);
+})();
+function kb(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + " GB" : n >= 1024 ? Math.round(n / 1024) + " MB" : n + " kB"; }
+function upTxt(s) { var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? d + " d " + h + " h" : h ? h + " h " + m + " min" : m + " min"; }
+function bar(p) { p = Math.max(0, Math.min(100, p)); return "<div class='tm-bar'><i style='width:" + p + "%'></i></div>"; }
+function renderTaskManager() {
+    var box = $("v9-sys"), S = window.HUB_SYS, h = "";
+    if (!box) return;
+    h += "<div class='hv-row'><span class='hv-lbl'>Task manager</span> <span class='opt-btn' id='tm-ref'>REFRESH</span>" +
+         (S ? " <span class='hv-hint'>as of " + new Date(S.at * 1000).toTimeString().substring(0, 5) + "</span>" : "") + "</div>";
+    if (!S) { box.innerHTML = h + "<div class='hv-hint'>Measuring&hellip; (a second or two)</div>"; bindTap($("tm-ref"), tmRefresh); return; }
+    var used = S.memTotal - S.memAvail, mp = S.memTotal ? Math.round(used * 100 / S.memTotal) : 0;
+    var dp = S.disk && S.disk[0] ? Math.round((S.disk[0] - S.disk[1]) * 100 / S.disk[0]) : 0;
+    h += "<div style='display:table'>" +
+        "<div class='tm-cell'><div class='hv-lbl'>CPU</div><div class='tm-big'>" + S.cpu + "%</div>" + bar(S.cpu) + "<div class='hv-hint'>load " + esc(S.load) + "</div></div>" +
+        "<div class='tm-cell'><div class='hv-lbl'>Memory</div><div class='tm-big'>" + mp + "%</div>" + bar(mp) + "<div class='hv-hint'>" + kb(used) + " of " + kb(S.memTotal) + "</div></div>" +
+        "<div class='tm-cell'><div class='hv-lbl'>Storage</div><div class='tm-big'>" + dp + "%</div>" + bar(dp) + "<div class='hv-hint'>" + kb(S.disk ? S.disk[1] : 0) + " free</div></div>" +
+        "<div class='tm-cell'><div class='hv-lbl'>Battery</div><div class='tm-big'>" + (HUB.bat ? esc(HUB.bat) + "%" : "?") + "</div><div class='hv-hint'>" + (PWR.rate7 ? PWR.rate7 + "%/h lately" : "") + "<br>up " + upTxt(S.uptime) + "</div></div></div>";
+    h += "<div class='hv-lbl' style='margin-top:.5em'>Busiest and biggest</div><table class='tm-t'><tr><td><b>Program</b></td><td><b>CPU</b></td><td><b>Memory</b></td></tr>";
+    for (var i = 0; i < S.top.length && i < 8; i++) { var p = S.top[i]; h += "<tr><td>" + esc(p[1]) + "</td><td>" + p[3] + "%</td><td>" + kb(p[2]) + "</td></tr>"; }
+    h += "</table>";
+    if (S.svc && S.svc.length) {
+        var on = 0; for (i = 0; i < S.svc.length; i++) if (S.svc[i][1]) on++;
+        h += "<div class='hv-lbl' style='margin-top:.5em'>Kindle services &middot; " + on + " running of " + S.svc.length + "</div><div class='tm-svc'>";
+        for (i = 0; i < S.svc.length; i++) h += "<span class='" + (S.svc[i][1] ? "" : "off") + "'>" + esc(S.svc[i][0]) + "</span>";
+        h += "</div><div class='hv-hint'>Solid = running, dashed = stopped. Hub mode (coming next) will pause the ones the hub doesn't need; this list goes to your cloud log with SEND LOG so they can be checked first.</div>";
+    }
+    box.innerHTML = h;
+    bindTap($("tm-ref"), tmRefresh);
+    if (typeof HVS !== "undefined") HVS.sig = "";
+}
+function tmRefresh() {
+    sendPower("sysinfo=1", null);
+    setTimeout(function() { loadScript("sys.js", function() { if (HUB_OPEN && curTab === "log") renderTaskManager(); }); }, 3000);
+}
+var __selectTab109b = selectTab;
+selectTab = function(name) {
+    __selectTab109b(name);
+    if (name === "log") { loadScript("sys.js", function() { if (HUB_OPEN && curTab === "log") renderTaskManager(); }); renderTaskManager(); tmRefresh(); }
+};
