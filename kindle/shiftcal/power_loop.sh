@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.9"
+VERSION="10.9.1"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -463,9 +463,20 @@ poll_settings_http() {
     case "$REQ" in *"/save?"*) ;; *) return ;; esac
     QS=$(echo "$REQ" | sed -n 's#.* /save?\([^ ]*\) HTTP.*#\1#p')
     NOWQ=$(date +%s)
-    # 10.9: no key, no action (logged at most once a minute so a noisy device can't fill the log)
-    if [ "$(qv pk)" != "$PORT_KEY" ]; then
-        [ $((NOWQ - KEY_BAD_LOGGED)) -ge 60 ] && { log "settings port: a request without the right key was ignored"; KEY_BAD_LOGGED=$NOWQ; }
+    # 10.9: no key, no action (logged at most once a minute so a noisy device can't fill the log).
+    # 10.9.1: EXCEPT the page's "I'm up": start-up and a fresh update's health check must never depend on the
+    # key (10.9 rolled back on a Kindle where the page's key never matched). They change nothing else.
+    PKQ=$(qv pk)
+    if [ "$PKQ" != "$PORT_KEY" ]; then
+        if [ $((NOWQ - KEY_BAD_LOGGED)) -ge 60 ]; then
+            KEY_BAD_LOGGED=$NOWQ
+            if [ -z "$PKQ" ]; then log "settings port: a request with NO key (page key file not loaded?) - only start-up is let through"
+            else log "settings port: a request with the WRONG key (${#PKQ} chars, loop has ${#PORT_KEY}) - only start-up is let through"; fi
+        fi
+        [ "$BOOT" = "1" ] && boot_done
+        HV=$(cut -d' ' -f1 "$DIR/.update/pending" 2>/dev/null | tr -cd 'A-Za-z0-9.-')
+        [ -n "$HV" ] && sh "$DIR/hub_update.sh" health "$HV" && [ ! -f "$DIR/.update/pending" ] && log "update $HV confirmed by the page"
+        hub_port_key; PORT_KEY=$HC_PORT_KEY                      # rewrite portkey.js in case the page lost it
         return
     fi
     [ "$BOOT" = "1" ] && boot_done
@@ -628,7 +639,7 @@ poll_settings_http() {
         [ -n "$SCR" ] && [ ${#SCR} -le 1500 ] && screen_send "$SCR"
     fi
     # 10.9: Settings > System asks for a fresh look at CPU, memory and services
-    if [ "$(qv sysinfo)" = "1" ] && [ -f "$DIR/hub_sys.sh" ]; then SYS_AT=$NOWQ; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & fi
+    if [ "$(qv sysinfo)" = "1" ] && [ "$BOOT" != "1" ] && [ -f "$DIR/hub_sys.sh" ]; then SYS_AT=$NOWQ; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & fi
     # 10.9: power settings from Settings > Sleep
     V=$(qv quickwake); case "$V" in 0|1) QUICK_WAKE=$V; CHANGED=1; log "quick timer wakes: $V" ;; esac
     V=$(qv clockmode); case "$V" in 15|min) CLOCK_MODE=$V; CHANGED=1; log "standby clock: $V" ;; esac
@@ -684,7 +695,7 @@ ntfy_topic() {
     T=""; [ -f "$DIR/cloud.conf" ] && T=$(sed -n 's/^NTFY_TOPIC=//p' "$DIR/cloud.conf" | tr -cd 'A-Za-z0-9_-' | head -c 64)
     [ -n "$T" ] && { echo "$T"; return; }
     if [ ! -s "$DIR/.ntfy_topic" ]; then
-        R=$(od -An -tx1 -N10 /dev/urandom 2>/dev/null | tr -d ' \n')
+        R=$(head -c 10 /dev/urandom | od -An -v -tx1 2>/dev/null | tr -d ' \n')
         [ -n "$R" ] || R=$(date +%s)$$
         echo "kitchenhub-$R" > "$DIR/.ntfy_topic"
     fi
@@ -713,15 +724,15 @@ notify_phone() {
 # monitor topic, all from the Kindle's random source. The passphrase before this one is kept as
 # PASSPHRASE_OLD so everything locked with it still opens until the page has re-locked it and you tap
 # FINISH; the phone, PC and TV get the new keys from a new sealed pairing code on the Kindle.
-rand_b32() { od -An -tu1 -N"$1" /dev/urandom 2>/dev/null | awk 'BEGIN { A = "ABCDEFGHJKMNPQRSTUVWXYZ23456789" } { for (i = 1; i <= NF; i++) printf "%s", substr(A, $i % 31 + 1, 1) }'; }
+rand_b32() { head -c "$1" /dev/urandom | od -An -v -tu1 2>/dev/null | awk 'BEGIN { A = "ABCDEFGHJKMNPQRSTUVWXYZ23456789" } { for (i = 1; i <= NF; i++) printf "%s", substr(A, $i % 31 + 1, 1) }'; }
 rotate_keys() {
     [ -f "$DIR/cloud.conf" ] || { log "new keys: no cloud.conf"; return; }
     OLDP=$( PASSPHRASE="@unset@"; . "$DIR/cloud.conf" >/dev/null 2>&1; [ "$PASSPHRASE" = "@unset@" ] && PASSPHRASE=$(hc_legacy_pass); printf '%s' "$PASSPHRASE" )
     R=$(rand_b32 24)
     [ ${#R} = 24 ] || { log "new keys: no random source - nothing changed"; return; }
     NEWP=$(echo "$R" | sed 's/\(....\)/\1-/g; s/-$//')         # XXXX-XXXX-XXXX-XXXX-XXXX-XXXX (about 118 bits)
-    NTN="kitchenhub-$(od -An -tx1 -N10 /dev/urandom | tr -cd 'a-f0-9')"
-    MTN="khscreen-$(od -An -tx1 -N10 /dev/urandom | tr -cd 'a-f0-9')"
+    NTN="kitchenhub-$(head -c 10 /dev/urandom | od -An -v -tx1 | tr -cd 'a-f0-9')"
+    MTN="khscreen-$(head -c 10 /dev/urandom | od -An -v -tx1 | tr -cd 'a-f0-9')"
     # the old one goes in its own private file (any characters), not cloud.conf; FINISH deletes it
     [ -n "$OLDP" ] && ( umask 077; printf '%s' "$OLDP" > "$DIR/.pass_old" )
     hub_conf_set PASSPHRASE "$NEWP" || { rm -f "$DIR/.pass_old"; log "new keys: could not write cloud.conf"; return; }
@@ -735,7 +746,7 @@ rotate_keys() {
 mon_topic_init() {
     [ -f "$DIR/cloud.conf" ] || return 0
     grep -q '^MON_TOPIC=khscreen-[0-9a-f]\{20\}' "$DIR/cloud.conf" && return 0
-    MT="khscreen-$(od -An -tx1 -N10 /dev/urandom 2>/dev/null | tr -cd 'a-f0-9')"
+    MT="khscreen-$(head -c 10 /dev/urandom | od -An -v -tx1 2>/dev/null | tr -cd 'a-f0-9')"
     [ ${#MT} = 29 ] && hub_conf_set MON_TOPIC "$MT" && log "made the kitchen monitor's channel"
 }
 # 10.9: send one (already locked) command to the kitchen monitor. Wi-Fi stays on 90 s for the next tap.
@@ -1075,7 +1086,9 @@ while true; do
         write_ui_state 0
         log "awake (${WAKE_REASON}) for ${WAKE_WINDOW}s, battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
         # 10.9: task manager / hub-mode probe (looks only), at most every 10 minutes, in the background
-        [ -f "$DIR/hub_sys.sh" ] && [ $((NOW - ${SYS_AT:-0})) -ge 600 ] && { SYS_AT=$NOW; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & }
+        # 10.9.1: never while the page is starting (it runs hundreds of tiny programs; the CPU is at power-save speed)
+        [ "$BOOT" != "1" ] && [ "$FIRST" != "1" ] && [ -f "$DIR/hub_sys.sh" ] && [ $((NOW - ${SYS_AT:-$NOW})) -ge 600 ] && { SYS_AT=$NOW; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & }
+        SYS_AT=${SYS_AT:-$NOW}
     fi
 
     # sync if due (3 min early-wake tolerance), on first start, but never retry more than every 15 min
