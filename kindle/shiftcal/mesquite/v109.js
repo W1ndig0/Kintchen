@@ -746,5 +746,3 @@ FILLER_EXTRA.push(function() {
         esc(b.n) + "<div style='font:normal .45em Helvetica,Arial,sans-serif;margin-top:.2em'>" + esc(b.note) + "<br>Photo: " + esc(b.by) + " (" + esc(b.lic) + ")</div>"];
 });
 khNow("v109.js: finished");     // 10.9.2 black box
-// 10.9.2: the first status read, layout, redraw and wake are reported going in and coming out (black box)
-khWatch("applyState"); khWatch("relayout"); khWatch("renderAllTiles"); khWatch("onWake");

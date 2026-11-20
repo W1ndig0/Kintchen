@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.9.3"
+VERSION="10.9.4"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -445,6 +445,22 @@ num_or_empty() { case "$1" in ''|*[!0-9]*) echo "" ;; *) echo "$1" ;; esac; }
 
 # One ~1 s listen for a request from the page. Handles: touch=1, snooze=N (seconds; 1 = 5 min),
 # interval=, window=, ss= (0 off, 1 eips, 2 eips+slots), pillow=0/1/2, rotate=1.
+# 10.9.4: data.js didn't load on the page ("Parse error @ data.js:N"): describe line N once per start, so the
+# cause can be found from the log (length, invisible line-separator / control characters, how it starts/ends).
+data_js_diag() {
+    [ "${DJ_DIAG:-0}" = 1 ] && return; DJ_DIAG=1
+    DJF="$HUB_DIR/mesquite/data.js"; [ -f "$DJF" ] || { log "data.js: not there"; return; }
+    DJN=$(printf '%s' "$1" | sed -n 's/.*data\.js:\([0-9][0-9]*\).*/\1/p'); DJN=${DJN:-5}
+    sed -n "${DJN}p" "$DJF" > "$HUB_DIR/.dj_line"
+    DJL=$(wc -c < "$HUB_DIR/.dj_line" | tr -d ' ')
+    DJS=$(grep -c "$(printf '\342\200\250')\|$(printf '\342\200\251')" "$HUB_DIR/.dj_line")
+    DJC=$(tr -d '\n' < "$HUB_DIR/.dj_line" | tr -cd '\000-\010\013\014\016-\037' | wc -c | tr -d ' ')
+    DJA=$(cut -c1-70 "$HUB_DIR/.dj_line" | tr -cd ' -~'); DJE=$(tail -c 70 "$HUB_DIR/.dj_line" | tr -cd ' -~')
+    log "data.js line $DJN: $DJL bytes, $(wc -l < "$DJF" | tr -d ' ') lines in all, line separators: $DJS, control chars: $DJC"
+    log "data.js line $DJN starts: $DJA"
+    log "data.js line $DJN ends: $DJE"
+    rm -f "$HUB_DIR/.dj_line"
+}
 poll_settings_http() {
     if [ "$HAVE_NC" != "1" ]; then sleep 1; return; fi
     # 10.5: nc runs in the background with a watchdog. BusyBox nc only gives up on its own when nobody
@@ -475,6 +491,7 @@ poll_settings_http() {
         if [ "$PG_N" -le 40 ]; then
             [ -n "$PGL" ] && log "page start-up: $(urldecode "$PGL" | tr -cd 'A-Za-z0-9 :=.,/_()-' | cut -c1-120)"
             [ -n "$PGE" ] && log "page SCRIPT ERROR: $(urldecode "$PGE" | tr -cd 'A-Za-z0-9 :=.,/_()@#|<>[]-' | cut -c1-220)"
+            case "$PGE" in *data.js*) data_js_diag "$(urldecode "$PGE")" ;; esac
         fi
         return
     fi
