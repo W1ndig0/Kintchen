@@ -92,6 +92,21 @@ hc_tree() { for C in $(hc_children "$1"); do hc_tree "$C"; echo "$C"; done; }
 # stop a background job and everything it started (curl, sync_data.sh ...), so nothing keeps running
 hc_kill_tree() { hc_alive "$1" || return 0; HK="$(hc_tree "$1") $1"; hc_stop_pids 3 $HK >/dev/null; }
 
+# 10.9: the settings-port key. Made once from the Kindle's random source, kept in .port_key (private), and
+# given to the page as mesquite/portkey.js. Sets HC_PORT_KEY. run_hub.sh calls it before the page opens, so
+# the page always starts with the key; power_loop.sh calls it again (no change if the key exists).
+hub_port_key() {
+    HC_PORT_KEY=$(tr -cd 'a-f0-9' < "$HC_DIR/.port_key" 2>/dev/null | cut -c1-32)
+    if [ ${#HC_PORT_KEY} -lt 32 ]; then
+        HC_PORT_KEY=$(od -An -tx1 -N16 /dev/urandom 2>/dev/null | tr -cd 'a-f0-9' | cut -c1-32)
+        [ ${#HC_PORT_KEY} -lt 32 ] && HC_PORT_KEY=$( (date +%s; echo $$; cat /proc/uptime /proc/interrupts 2>/dev/null) | sha256sum | cut -c1-32)
+        ( umask 077; echo "$HC_PORT_KEY" > "$HC_DIR/.port_key" )
+        hc_log "made a new key for the settings port"
+    fi
+    HC_PK_JS="window.HUB_PORTKEY=\"$HC_PORT_KEY\";"
+    [ "$(cat "$HC_DIR/mesquite/portkey.js" 2>/dev/null)" = "$HC_PK_JS" ] || { echo "$HC_PK_JS" > "$HC_DIR/mesquite/portkey.js.tmp" && mv "$HC_DIR/mesquite/portkey.js.tmp" "$HC_DIR/mesquite/portkey.js"; }
+}
+
 # Put back what the loop changes while it runs. Safe to call any time; used after a KILL.
 hc_repair_system() {
     PD=$(pidof powerd 2>/dev/null)

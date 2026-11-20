@@ -1,1 +1,9 @@
 tests/fake/urls.log
+kindle/shiftcal/cloud.conf
+kindle/shiftcal/.port_key
+kindle/shiftcal/.totp
+kindle/shiftcal/mesquite/cloud.js
+kindle/shiftcal/mesquite/portkey.js
+kindle/shiftcal/mesquite/totp.js
+kindle/shiftcal/.ntfy_topic
+kh.json

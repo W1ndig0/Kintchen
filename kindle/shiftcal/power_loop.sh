@@ -81,10 +81,12 @@ load_conf() {
     USE_CLOUD_DATA=1
     SMART_SLEEP=1; HOME_MIN=15; AWAY_MIN=120; NIGHT_MIN=180; NIGHT_FROM=23; NIGHT_TO=6     # 10.6
     FREEZE_POWERD=1                    # 10.5: 0 = let powerd run while the Kindle sleeps (test for the wake freeze)
-    AUTO_UPDATE=1                      # 0 = only when you tap, 1 = check nightly and tell you (10.5 default), 2 = install at night (undone by itself if it fails)
+    LOCAL_ONLY=0                       # 10.9: 1 = the settings port listens on 127.0.0.1 only (needs an nc with -s; test first)
+    AUTO_UPDATE=1                      # 0 = only when you tap, 1 = check nightly and tell you (10.5 default), 2 = install at night (undone by itselfif it fails)
     [ -f "$CONF" ] && . "$CONF"
     case "$AUTO_UPDATE" in 0|1|2) ;; *) AUTO_UPDATE=1 ;; esac
     case "$FREEZE_POWERD" in 0|1) ;; *) FREEZE_POWERD=1 ;; esac
+    case "$LOCAL_ONLY" in 0|1) ;; *) LOCAL_ONLY=0 ;; esac
     case "$SMART_SLEEP" in 0|1) ;; *) SMART_SLEEP=1 ;; esac
     case "$HOME_MIN" in ''|*[!0-9]*) HOME_MIN=15 ;; esac;   [ "$HOME_MIN" -lt 5 ] && HOME_MIN=5
     case "$AWAY_MIN" in ''|*[!0-9]*) AWAY_MIN=120 ;; esac;  [ "$AWAY_MIN" -lt 15 ] && AWAY_MIN=15
@@ -121,6 +123,7 @@ PHONE_ALERTS=$PHONE_ALERTS
 USE_CLOUD_DATA=$USE_CLOUD_DATA
 AUTO_UPDATE=$AUTO_UPDATE
 FREEZE_POWERD=$FREEZE_POWERD
+LOCAL_ONLY=$LOCAL_ONLY
 SMART_SLEEP=$SMART_SLEEP
 HOME_MIN=$HOME_MIN
 AWAY_MIN=$AWAY_MIN
@@ -414,6 +417,14 @@ sync_running() { [ -n "$SYNC_PID" ] && kill -0 "$SYNC_PID" 2>/dev/null; }
 HAVE_NC=0
 NC_OUT="${TMPDIR:-/tmp}/kitchenhub_nc.$$"      # 10.5: in RAM, not on the flash storage
 command -v nc >/dev/null 2>&1 && HAVE_NC=1
+
+# 10.9: the settings port needs a key. Before 10.9 anything on the home Wi-Fi could stop the hub, roll back
+# an update, send phone alerts or (with notify=@file) mail a file off the Kindle. The key is made here once,
+# kept in .port_key (only this Kindle has it) and handed to the page in mesquite/portkey.js, which is never
+# served over the network (the port only ever answers "ok").
+# (hub_port_key, in hub_common.sh, also runs in run_hub.sh BEFORE the page opens)
+hub_port_key; PORT_KEY=$HC_PORT_KEY
+KEY_BAD_LOGGED=0
 qv() { echo "$QS" | tr '&' '\n' | sed -n "s/^$1=//p" | head -1; }
 num_or_empty() { case "$1" in ''|*[!0-9]*) echo "" ;; *) echo "$1" ;; esac; }
 
@@ -425,7 +436,8 @@ poll_settings_http() {
     # connects; a page that connects and then freezes (Kindle error box) kept the socket open and blocked
     # the loop forever - no standby, no auto-rollback, a Kindle that needed a reboot.
     : > "$NC_OUT"
-    printf 'HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' | nc -l -p 8765 -w 1 > "$NC_OUT" 2>/dev/null &
+    NC_BIND=""; [ "$LOCAL_ONLY" = "1" ] && NC_BIND="-s 127.0.0.1"
+    printf 'HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' | nc -l -p 8765 $NC_BIND -w 1 > "$NC_OUT" 2>/dev/null &
     NCP=$!
     ( sleep 5; kill "$NCP" 2>/dev/null ) >/dev/null 2>&1 &
     NCW=$!
@@ -437,9 +449,14 @@ poll_settings_http() {
     fi
     REQ=$(head -1 "$NC_OUT" 2>/dev/null)
     case "$REQ" in *"/save?"*) ;; *) return ;; esac
-    [ "$BOOT" = "1" ] && boot_done
     QS=$(echo "$REQ" | sed -n 's#.* /save?\([^ ]*\) HTTP.*#\1#p')
     NOWQ=$(date +%s)
+    # 10.9: no key, no action (logged at most once a minute so a noisy device can't fill the log)
+    if [ "$(qv pk)" != "$PORT_KEY" ]; then
+        [ $((NOWQ - KEY_BAD_LOGGED)) -ge 60 ] && { log "settings port: a request without the right key was ignored"; KEY_BAD_LOGGED=$NOWQ; }
+        return
+    fi
+    [ "$BOOT" = "1" ] && boot_done
     CHANGED=0
     # a request id the page repeats on retries: handle each id once, echo it back through state.js
     RID=$(num_or_empty "$(qv rid)")
@@ -631,8 +648,13 @@ notify_phone() {
         trap - EXIT INT TERM
         WAS=$(lipc-get-prop com.lab126.wifid cmState 2>/dev/null)
         if wifi_on; then
-            C=$(kcurl -s --connect-timeout 8 --max-time 20 -o /dev/null -w '%{http_code}' -H "Title: Kitchen Hub" -H "Tags: alarm_clock" -H "Priority: high" -d "$1" "https://ntfy.sh/$TOPIC" 2>/dev/null)
-            log "phone alert sent ($C): $1"
+            # 10.9: the text goes in from our own temp file. With -d "$1", a message starting with @ made curl
+            # send a FILE (e.g. cloud.conf) instead. A file (not stdin) because kcurl may try more than once.
+            NF=$(mktemp 2>/dev/null) || NF="/tmp/kh_ntfy.$$"
+            ( umask 077; printf '%s' "$1" > "$NF" )
+            C=$(kcurl -s --connect-timeout 8 --max-time 20 -o /dev/null -w '%{http_code}' -H "Title: Kitchen Hub" -H "Tags: alarm_clock" -H "Priority: high" --data-binary "@$NF" "https://ntfy.sh/$TOPIC" 2>/dev/null)
+            rm -f "$NF"
+            log "phone alert sent ($C): $(printf '%s' "$1" | cut -c1-80)"
         else log "phone alert: no Wi-Fi"; fi
         [ "$WAS" = "CONNECTED" ] || sync_running || wifi_off
     ) &

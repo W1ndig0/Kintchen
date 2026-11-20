@@ -991,6 +991,7 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
 <script src="qr.js"></script>
 <script src="hub_items.js"></script>
 <script src="cloud.js"></script>
+<script src="portkey.js"></script>
 <script src="horo.js"></script>
 <script src="data.js"></script>
 <script>
@@ -2731,7 +2732,7 @@ function idleHomeCheck() {
 // Requests carry a request id. The loop echoes the last id it handled in state.js, which is how the
 // page knows a save landed even when the tiny nc "web server" reply never reaches the browser
 // (your 9.2 log showed every save arriving four times for exactly that reason). Repeats are ignored by the loop.
-var RID_SEQ = Math.floor(Math.random() * 80000) + 10000, PENDING = {};
+var RID_SEQ = Math.floor(Math.random() * 80000) + 10000, PENDING = {}, PK_LOADING = false;
 function sendPower(q, done) {
     var rid = (q.indexOf("touch=") === 0) ? "" : String(++RID_SEQ), tries = 0, fin = false;
     function end(r) { if (fin) return; fin = true; if (rid) delete PENDING[rid]; if (done) done(r); }
@@ -2743,7 +2744,9 @@ function sendPower(q, done) {
         var answered = false;
         try {
             var x = new XMLHttpRequest();
-            x.open("GET", POWER_URL + "?" + q + (rid ? "&rid=" + rid : "") + "&t=" + new Date().getTime(), true);
+            // 10.9: every request carries the settings-port key (mesquite/portkey.js, made on this Kindle)
+            if (!window.HUB_PORTKEY && !PK_LOADING) { PK_LOADING = true; loadScript("portkey.js", function() { PK_LOADING = false; }); }
+            x.open("GET", POWER_URL + "?" + q + (rid ? "&rid=" + rid : "") + "&pk=" + (window.HUB_PORTKEY || "") + "&t=" + new Date().getTime(), true);
             x.onreadystatechange = function() {
                 if (x.readyState !== 4 || answered) return;
                 answered = true;
@@ -3785,7 +3788,16 @@ PRESET_ORDER.push("family");
 // ---------- the store ----------
 var STORE = HubData.HEADER + "\n", ITEMS_AT = 0, CLOUD_ST = "", CLOUD_PEND = 0;
 try { var cachedItems = window.localStorage.getItem("pg_items_v95"); if (cachedItems) STORE = HubData.merge([cachedItems]); } catch (e) {}
-function storeSave() { try { if (STORE.length < 250000) window.localStorage.setItem("pg_items_v95", STORE); } catch (e) {} }
+// 10.9: the cache used to stop saving above 250,000 characters without a word. Now a big store is cached
+// without its deleted items (hub.tsv on the Kindle keeps those for other devices), and a failure is recorded
+// for Settings > Task manager instead of being ignored.
+var STORE_CACHE_ERR = "";
+function storeSave() {
+    var s = STORE;
+    if (s.length >= 250000) s = s.split("\n").filter(function(l) { return l.split("\t")[3] !== "del"; }).join("\n");
+    try { window.localStorage.setItem("pg_items_v95", s); STORE_CACHE_ERR = ""; }
+    catch (e) { STORE_CACHE_ERR = "the Kindle's page storage is full (" + Math.round(s.length / 1024) + " KB of items)"; }
+}
 // Items as plain text. With a passphrase (cloud.conf PASSPHRASE) the stored text is locked; it is
 // unlocked here, and anything locked with a different passphrase shows as "(locked)".
 function passKey() { return (window.HUB_CLOUD && window.HUB_CLOUD.pass) || ""; }
@@ -3808,12 +3820,44 @@ function queueLines(lines) {
     clearTimeout(sendTimer);
     sendTimer = setTimeout(flushLines, 250);
 }
+// 10.9: ONE batch at a time. The loop's listener takes one message at a time, and before 10.9 every batch
+// went at once and a batch that never got through was simply dropped (the edit stayed on this screen but
+// never reached hub.tsv, the cloud or the phone). Now the next batch waits for the answer, a failed batch
+// goes back to the front of the queue and is tried again (every 20 s, and at the next items reload).
+var SEND_BUSY = false, SEND_FAILS = 0, sendRetryTimer = 0;
 function flushLines() {
-    while (SEND_Q.length) {
-        var batch = [], len = 0;
-        while (SEND_Q.length && (len + SEND_Q[0].length < 2600 || !batch.length)) { len += SEND_Q[0].length + 1; batch.push(SEND_Q.shift()); }
-        try { sendPower("item=" + encodeURIComponent(batch.join("\n"))); } catch (e) {}
+    if (SEND_BUSY || !SEND_Q.length) return;
+    var batch = [], len = 0;
+    while (SEND_Q.length && (len + SEND_Q[0].length < 2600 || !batch.length)) { len += SEND_Q[0].length + 1; batch.push(SEND_Q.shift()); }
+    SEND_BUSY = true;
+    try {
+        sendPower("item=" + encodeURIComponent(batch.join("\n")), function(r) {
+            SEND_BUSY = false;
+            if (r === "ok") { SEND_FAILS = 0; flushLines(); return; }
+            SEND_Q = batch.concat(SEND_Q); SEND_FAILS++;
+            clearTimeout(sendRetryTimer); sendRetryTimer = setTimeout(flushLines, 20000);
+        });
+    } catch (e) { SEND_BUSY = false; SEND_Q = batch.concat(SEND_Q); }
+}
+// 10.9: after hub_items.js loads, anything this page has that the Kindle file lacks (or has an older
+// version of) is sent again. Each line is retried at most 3 times per page start, so a line the loop
+// refuses can never loop forever.
+var RESENT = {};
+function resendMissing(fileLines) {
+    var have = {}, i, it, todo = [];
+    for (i = 0; i < fileLines.length; i++) { it = HubData.parseLine(fileLines[i]); if (it && (!have[it.id] || it.ts > have[it.id])) have[it.id] = it.ts; }
+    var lines = STORE.split("\n"), queued = {};
+    for (i = 0; i < SEND_Q.length; i++) queued[SEND_Q[i]] = 1;
+    for (i = 0; i < lines.length; i++) {
+        it = HubData.parseLine(lines[i]);
+        if (!it || queued[it.line]) continue;
+        if (have[it.id] !== undefined && have[it.id] >= it.ts) continue;
+        if (it.state === "del" && have[it.id] === undefined) continue;      // deleted here and never there: nothing to tell
+        var n = RESENT[it.line] || 0;
+        if (n >= 3) continue;
+        RESENT[it.line] = n + 1; todo.push(it.line);
     }
+    if (todo.length) { diagOnce("resending " + todo.length + " item line(s) the Kindle file was missing"); queueLines(todo); }
 }
 function lineOf(id) {
     var lines = STORE.split("\n");
@@ -3827,6 +3871,7 @@ function applyItems() {
     CLOUD_ST = d.st || ""; CLOUD_PEND = d.pending ? 1 : 0;
     STORE = HubData.merge([STORE, d.lines.join("\n")]);
     storeSave();
+    resendMissing(d.lines);
     relockPlain();
     renderItemsUI();
 }
@@ -5037,7 +5082,7 @@ function renderFront() {
     var fsz = fitText(main, 9, FS * 1.5), guard = 0;
     while (fsz < FS * 0.8 && guard++ < 8) {
         if (more && more.childNodes.length > 2) more.removeChild(more.lastChild);
-        else if (body && body.innerHTML.length > 160) body.innerHTML = body.innerHTML.substring(0, Math.floor(body.innerHTML.length * 0.75)).replace(/\s+\S*$/, "") + "&hellip;";
+        else if (body && (body.textContent || "").length > 160) { var bt = body.textContent.replace(/…$/, ""); body.textContent = bt.substring(0, Math.floor(bt.length * 0.75)).replace(/\s+\S*$/, "") + "…"; }     // 10.9: cut the text, not the HTML (no stray "&am")
         else break;
         fsz = fitText(main, 9, FS * 1.5);
     }

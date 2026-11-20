@@ -18,4 +18,6 @@ loops() { for d in /proc/[0-9]*; do case "$(tr '\0' ' ' 2>/dev/null < $d/cmdline
 pages() { $KH_TESTS/stub/pidof mesquite | wc -w; }
 waitfor() { i=0; while [ $i -lt $2 ]; do eval "$1" && return 0; sleep 1; i=$((i+1)); done; return 1; }
 loops() { for d in /proc/[0-9]*; do case "$(tr '\0' ' ' 2>/dev/null < $d/cmdline)" in *"$HUB_DIR/power_loop.sh"*) pp=$(awk '{print $4}' $d/stat 2>/dev/null); case "$(tr '\0' ' ' 2>/dev/null < /proc/$pp/cmdline)" in *"$HUB_DIR/power_loop.sh"*) ;; *) echo ${d#/proc/} ;; esac ;; esac; done | wc -l; }
-ping_page() { for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do R=$(busybox wget -q -T 2 -O- "http://127.0.0.1:8765/save?$1&t=$(date +%s%N)" 2>/dev/null); [ "$R" = ok ] && { echo ok; return 0; }; sleep 1; done; echo none; }
+ping_page() { for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do R=$(busybox wget -q -T 2 -O- "http://127.0.0.1:8765/save?$1&pk=$(cat "$HUB_DIR/.port_key" 2>/dev/null)&t=$(date +%s%N)" 2>/dev/null); [ "$R" = ok ] && { echo ok; return 0; }; sleep 1; done; echo none; }
+# 10.9: the same request WITHOUT the settings-port key (a stranger on the Wi-Fi)
+ping_nokey() { for i in 1 2 3 4 5 6 7 8 9 10; do R=$(busybox wget -q -T 2 -O- "http://127.0.0.1:8765/save?$1&t=$(date +%s%N)" 2>/dev/null); [ "$R" = ok ] && { echo ok; return 0; }; sleep 1; done; echo none; }

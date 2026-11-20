@@ -41,18 +41,27 @@ const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
 function dayName(k) { return k === TODAY ? "Today" : k === TOMORROW ? "Tomorrow" : DAYS[new Date(Date.UTC(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10))).getUTCDay()]; }
 
 // ---------- GitHub ----------
+// 10.9: every network call has a time limit, so one stuck request can't eat the whole 8-minute run
+async function timed(url, opts, ms) {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
+    try { const r = await fetch(url, { ...(opts || {}), signal: ctl.signal }); const body = await r.text(); return { ok: r.ok, status: r.status, body }; }
+    finally { clearTimeout(t); }
+}
 async function gh(method, url, body) {
-    const r = await fetch(url.startsWith("http") ? url : API + url, {
-        method, headers: { Authorization: "Bearer " + TOKEN, Accept: "application/vnd.github+json", "User-Agent": "KitchenHubBrain", "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "Content-Type": "application/json" } : {}) },
-        body: body ? JSON.stringify(body) : undefined
-    });
+    let r;
+    try {
+        r = await timed(url.startsWith("http") ? url : API + url, {
+            method, headers: { Authorization: "Bearer " + TOKEN, Accept: "application/vnd.github+json", "User-Agent": "KitchenHubBrain", "X-GitHub-Api-Version": "2022-11-28", ...(body ? { "Content-Type": "application/json" } : {}) },
+            body: body ? JSON.stringify(body) : undefined
+        }, 45000);
+    } catch (e) { throw new Error(method + " " + url.replace(/[0-9a-f]{20,}/g, "<id>") + " -> " + (e.name === "AbortError" ? "timed out" : "network error")); }
     if (!r.ok) throw new Error(method + " " + url.replace(/[0-9a-f]{20,}/g, "<id>") + " -> " + r.status);
-    return r.json();
+    return JSON.parse(r.body);
 }
 async function fileText(f) {
     if (!f) return null;
     if (!f.truncated && typeof f.content === "string") return f.content;
-    const r = await fetch(f.raw_url); return r.ok ? r.text() : null;
+    try { const r = await timed(f.raw_url, {}, 45000); return r.ok ? r.body : null; } catch (e) { return null; }
 }
 async function get(url, ms, opts) {
     if (OFFLINE) return null;
@@ -184,7 +193,7 @@ async function push(title, body, tags, prio) {
     if (!TOPIC) return false;
     if (OFFLINE && !process.env.NTFY_URL) return false;
     try {
-        const r = await fetch(NTFY + "/" + TOPIC, { method: "POST", body: body, headers: { Title: title.replace(/[^\x20-\x7e]/g, ""), Tags: tags || "fork_and_knife", Priority: String(prio || 3) } });
+        const r = await timed(NTFY + "/" + TOPIC, { method: "POST", body: body, headers: { Title: title.replace(/[^\x20-\x7e]/g, ""), Tags: tags || "fork_and_knife", Priority: String(prio || 3) } }, 20000);
         if (r.ok) pushes++;
         return r.ok;
     } catch (e) { return false; }
