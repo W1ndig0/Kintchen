@@ -3,6 +3,7 @@
 #   GIST_ID     your list gist id (same as cloud.conf on the Kindle)
 #   GIST_TOKEN  a token that can read/write gists (same as cloud.conf GH_TOKEN, or a new one)
 #   HUB_PASS    your passphrase (the same one as PASSPHRASE in cloud.conf - never write it in this file)
+#   HUB_PASS_OLD  (10.9, optional) only while changing keys: the passphrase before MAKE NEW KEYS. Delete after FINISH.
 #   NTFY_TOPIC  the phone alert topic (Kindle Settings > Phone shows it)
 name: kitchen-cloud
 on:
@@ -28,6 +29,7 @@ jobs:
           GIST_ID: ${{ secrets.GIST_ID }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
           HUB_PASS: ${{ secrets.HUB_PASS }}
+          HUB_PASS_OLD: ${{ secrets.HUB_PASS_OLD }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           POSTAL: ${{ vars.POSTAL }}
         run: node cloud/brain.js

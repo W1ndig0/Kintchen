@@ -12,7 +12,9 @@
  *     the TV page) and bundle.txt (weather+news+recipes fetched here, so the Kindle downloads ONE file)
  *
  * The logs of a public repo are public: this script prints counts only, never item text.
- * Env: GIST_ID GIST_TOKEN HUB_PASS [NTFY_TOPIC] [NTFY_URL] [GH_API] [TZ_HOURS=-7] [BRAIN_NOW=epoch ms, tests]
+ * Env: GIST_ID GIST_TOKEN HUB_PASS [HUB_PASS_OLD] [NTFY_TOPIC] [NTFY_URL] [GH_API] [TZ_HOURS=-7] [BRAIN_NOW=epoch ms, tests]
+ *      10.9: HUB_PASS_OLD = the passphrase before a key change (Kindle: Settings > Security > MAKE NEW KEYS). While it
+ *      is set, things locked with it still open here and are re-locked with HUB_PASS. Delete it after FINISH.
  *      [SKIP_BUNDLE=1] [OFFLINE=1] [LAT LON]
  */
 "use strict";
@@ -20,7 +22,7 @@ const fs = require("fs"), path = require("path"), os = require("os"), cp = requi
 const HubData = require("./hubdata.js"), HubCrypt = HubData.HubCrypt, HubCal = HubData.HubCal, HubPantry = HubData.HubPantry;
 
 const API = process.env.GH_API || "https://api.github.com";
-const GIST = process.env.GIST_ID, TOKEN = process.env.GIST_TOKEN, PASS = process.env.HUB_PASS || "";
+const GIST = process.env.GIST_ID, TOKEN = process.env.GIST_TOKEN, PASS = process.env.HUB_PASS || "", PASS_OLD = process.env.HUB_PASS_OLD || "";
 const TOPIC = process.env.NTFY_TOPIC || "", NTFY = process.env.NTFY_URL || "https://ntfy.sh";
 const TZH = +(process.env.TZ_HOURS || -7);
 const NOW = +(process.env.BRAIN_NOW || Date.now());
@@ -73,7 +75,7 @@ async function get(url, ms, opts) {
 // ---------- store helpers ----------
 let store = HubData.HEADER + "\n", storeChanged = false;
 function items(kind) {
-    return HubData.items(store, kind).map(it => { const t = HubCrypt.unlock(it.text, PASS); return { id: it.id, kind: it.kind, state: it.state, ts: it.ts, text: t === null ? null : t, raw: it.text }; });
+    return HubData.items(store, kind).map(it => { const t = HubCrypt.unlockAny(it.text, [PASS, PASS_OLD]); return { id: it.id, kind: it.kind, state: it.state, ts: it.ts, text: t === null ? null : t, raw: it.text }; });
 }
 function edit(id, kind, state, text) { store = HubData.edit(store, id, kind, state, PASS ? HubCrypt.lock(text, PASS) : text, NOW); storeChanged = true; }
 function newId() { return HubData.newId("c"); }
@@ -353,6 +355,16 @@ async function main() {
         let n = 0;
         HubData.items(store).forEach(it => { if (it.state !== "del" && !HubCrypt.isLocked(it.text)) { store = HubData.edit(store, it.id, it.kind, it.state, HubCrypt.lock(it.text, PASS), NOW); n++; } });
         if (n) { storeChanged = true; log("relocked " + n); }
+        // 10.9: after a key change, move things still locked with the old passphrase to the new one
+        if (PASS_OLD) {
+            let m = 0;
+            HubData.items(store).forEach(it => {
+                if (it.state === "del" || !HubCrypt.isLocked(it.text) || HubCrypt.unlock(it.text, PASS) !== null) return;
+                const t = HubCrypt.unlock(it.text, PASS_OLD);
+                if (t !== null) { store = HubData.edit(store, it.id, it.kind, it.state, HubCrypt.lock(t, PASS), NOW); m++; }
+            });
+            if (m) { storeChanged = true; log("moved " + m + " to the new passphrase"); }
+        }
     }
 
     // 3. requests from the phone
@@ -433,7 +445,7 @@ async function main() {
             if (it.state === "done" && ["cmd", "req", "msg", "pantry", "pkg", "wish", "goal"].indexOf(it.kind) >= 0) drop = old(it, 30);
             else if (it.kind === "chdone") drop = dated(it.id, 120);
             else if (it.kind === "billpd") drop = dated(it.id, 150);
-            else if (it.kind === "plan") { const t = HubCrypt.unlock(it.text, PASS); drop = !!(t && /^\d{4}-\d\d-\d\d/.test(t) && t.slice(0, 10) < addK(TODAY, -21)); }
+            else if (it.kind === "plan") { const t = HubCrypt.unlockAny(it.text, [PASS, PASS_OLD]); drop = !!(t && /^\d{4}-\d\d-\d\d/.test(t) && t.slice(0, 10) < addK(TODAY, -21)); }
             if (drop) { edit(it.id, it.kind, "del", ""); n++; }
         }
         if (n) log("tidied " + n + " old lines");

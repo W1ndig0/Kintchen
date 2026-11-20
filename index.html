@@ -87,10 +87,11 @@ body.store #open .box { width: 30px; height: 30px; }
 <div id="tabs" hidden><span data-tab="list" class="sel">LIST</span><span data-tab="cal">CALENDAR</span><span data-tab="recipes">RECIPES</span><span data-tab="board">BOARD</span><span data-tab="deals">DEALS</span><span data-tab="home">HOME</span><span data-tab="books">BOOKS</span><span data-tab="fridge">FRIDGE</span></div></header>
 <main>
   <section id="setup" hidden>
-    <p>Scan the pairing code in the fridge's Settings with your camera.</p>
+    <p>Scan the pairing code in the fridge's Settings › Security with your camera, then type the code shown next to it.</p>
     <p>Using the Home Screen app? It keeps its own storage, so paste the pairing link here
        (on an already-paired phone or in Safari: <b>Copy pairing link</b> at the bottom of the list).</p>
-    <label>Pairing link<input id="s-link" autocomplete="off" placeholder="https://…#pair=…"></label>
+    <label>Pairing link<input id="s-link" autocomplete="off" placeholder="https://…#pair2=…"></label>
+    <div id="s-codebox" hidden><label>Code shown next to the QR<input id="s-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXXX-XXXXX" style="font-family:monospace;letter-spacing:.1em"></label></div>
     <details><summary>Or enter the details</summary>
     <label>Gist ID<input id="s-gist" autocomplete="off"></label>
     <label>Token<input id="s-tok" autocomplete="off" type="password"></label></details>
@@ -104,7 +105,7 @@ body.store #open .box { width: 30px; height: 30px; }
     <h2>Coming up</h2>
     <ul id="soon"></ul>
     <p class="row" style="margin-top:28px"><button class="btn ghost" id="copy">Copy pairing link</button><span id="copied"></span></p>
-    <p class="sub">The link carries your passphrase, so only open it on your own devices.</p>
+    <p class="sub">The link is locked: it only works together with the code shown when you copy it. Send the code separately.</p>
   </section>
   <section id="app-c" hidden>
     <div id="c-pay"></div>
@@ -217,22 +218,41 @@ function relockPlain() {
   HubData.items(store).forEach(function(it) { if (it.state !== "del" && !HubCrypt.isLocked(it.text)) { store = HubData.edit(store, it.id, it.kind, it.state, HubCrypt.lock(it.text, pk())); n++; } });
   if (n) ls.set(K.store, store);
 }
+// 10.9: during a key change, things locked with the passphrase from before (cfg.k0) still open
+(function() {
+  var plainUnlock = HubCrypt.unlock;
+  HubCrypt.unlock = function(text, pass) {
+    var r = plainUnlock(text, pass);
+    if (r === null && cfg && cfg.k0 && pass === (cfg.k || "")) r = plainUnlock(text, cfg.k0);
+    return r;
+  };
+})();
+// 10.9: a sealed pairing link (#pair2=...) carries everything locked with a one-time code shown next to the QR
+// (on the Kindle, or on the phone that copied it). Old open links (#pair=GIST.TOKEN&k=...) still work.
+var SEALED = "";
 function readPair(text) {
+  var s = /[#&]pair2=([^&\s]+)/.exec(text || "");
+  if (s) { SEALED = decodeURIComponent(s[1]); return null; }
   var k = /[&#?]k=([^&\s]+)/.exec(text || "");
   var m = /pair=([A-Za-z0-9]+)\.([A-Za-z0-9_]+)(?:&api=([^&\s]+))?/.exec(text || "");
   var w = /[&#?]who=(p[12])/.exec(text || "");
   return m ? { gist: m[1], token: m[2], api: m[3] ? decodeURIComponent(m[3]) : "https://api.github.com", k: k ? decodeURIComponent(k[1]) : "", who: w ? w[1] : "p1" } : null;
 }
+function openSealed(code) {
+  var p = HubCrypt.unseal(SEALED, code);
+  if (!p || !/^[A-Za-z0-9]+$/.test(p.g || "") || !/^[A-Za-z0-9_]+$/.test(p.t || "")) return null;
+  return { gist: p.g, token: p.t, api: p.a || "https://api.github.com", k: p.k || "", k0: p.k0 || "", who: p.w === "p2" ? "p2" : "p1", ntfy: p.n || "", mon: p.m || "" };
+}
 (function() {
   var c = readPair(location.hash);
-  if (c) { cfg = c; ls.set(K.cfg, JSON.stringify(cfg)); history.replaceState(null, "", location.pathname); }
+  if (c) { cfg = c; ls.set(K.cfg, JSON.stringify(cfg)); }
+  if (c || SEALED) history.replaceState(null, "", location.pathname);
 })();
-// 10.4: the copied link now carries the passphrase (&k=) and whose phone it is (&who=). Without them a Home Screen copy of the app
-// could not unlock a single item ("(locked)" everywhere) and thought it was always person one.
-function pairLink() {
-  return location.origin + location.pathname + "#pair=" + cfg.gist + "." + cfg.token +
-    (cfg.api !== "https://api.github.com" ? "&api=" + encodeURIComponent(cfg.api) : "") +
-    (cfg.k ? "&k=" + encodeURIComponent(cfg.k) : "") + (cfg.who === "p2" ? "&who=p2" : "");
+// 10.9: "Copy pairing link" makes a sealed link and a new code; the code is shown here, never put in the link
+function pairLink(code) {
+  var p = { g: cfg.gist, t: cfg.token, k: cfg.k || "", k0: cfg.k0 || "", w: cfg.who === "p2" ? "p2" : "p1", n: cfg.ntfy || "", m: cfg.mon || "" };
+  if (cfg.api && cfg.api !== "https://api.github.com") p.a = cfg.api;
+  return location.origin + location.pathname + "#pair2=" + encodeURIComponent(HubCrypt.seal(p, code));
 }
 
 function edit(id, state, text) {
@@ -337,6 +357,7 @@ function render() {
   status();
 }
 function status() {
+  if (SEALED) { $("status").className = ""; $("status").textContent = "Type the code shown next to the QR"; return; }      // 10.9
   var n = Object.keys(pendingIds()).length, t = ls.get(K.synced), el = $("status");
   var when = t ? new Date(+t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "never";
   el.className = (lastErr || n) ? "warn" : "";
@@ -666,15 +687,21 @@ $("clear").addEventListener("click", function() {
   ls.set(K.store, store); render(); syncSoon(300);
 });
 $("s-save").addEventListener("click", function() {
-  var c = readPair($("s-link").value) ||
-    ($("s-gist").value.trim() && $("s-tok").value.trim() ? { gist: $("s-gist").value.trim(), token: $("s-tok").value.trim(), api: "https://api.github.com" } : null);
+  var c = readPair($("s-link").value);
+  if (!c && SEALED) {
+    c = openSealed($("s-code").value);
+    if (!c) { $("status").textContent = $("s-code").value.trim() ? "That code doesn't open this link" : "Type the code shown next to the QR"; $("s-code").focus(); return; }
+  }
+  if (!c) c = $("s-gist").value.trim() && $("s-tok").value.trim() ? { gist: $("s-gist").value.trim(), token: $("s-tok").value.trim(), api: "https://api.github.com" } : null;
   if (!c) { $("status").textContent = "That link doesn't look right"; return; }
-  cfg = c; ls.set(K.cfg, JSON.stringify(cfg)); boot();
+  SEALED = ""; cfg = c; ls.set(K.cfg, JSON.stringify(cfg)); boot();
 });
+$("s-link").addEventListener("input", function() { readPair($("s-link").value); $("s-codebox").hidden = !SEALED; });
 $("copy").addEventListener("click", function() {
-  var link = pairLink(), done = function(t) { $("copied").textContent = t; setTimeout(function() { $("copied").textContent = ""; }, 4000); };
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(function() { done("Copied"); }, function() { prompt("Copy this link", link); });
-  else prompt("Copy this link", link);
+  var code = HubCrypt.pairCode(10), shown = code.slice(0, 5) + "-" + code.slice(5), link = pairLink(code);
+  var done = function() { $("copied").innerHTML = "Copied. Code: <b style='font-family:monospace;font-size:18px'>" + shown + "</b> &mdash; send it separately (it's not in the link)."; };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(done, function() { prompt("Copy this link (code: " + shown + ")", link); done(); });
+  else { prompt("Copy this link (code: " + shown + ")", link); done(); }
 });
 var WAKE = null;
 function keepAwake() { if (navigator.wakeLock) navigator.wakeLock.request("screen").then(function(w) { WAKE = w; }, function() {}); }
@@ -692,7 +719,11 @@ setInterval(function() { if (!document.hidden) sync(); }, 20000);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function() {});
 
 function boot() {
-  $("setup").hidden = !!cfg; $("app").hidden = !cfg; $("add").hidden = !cfg; $("tabs").hidden = !cfg;
+  // 10.9: a sealed link that just arrived waits for its code, even on a phone that is already paired
+  var waiting = !!SEALED;
+  $("setup").hidden = !!cfg && !waiting; $("app").hidden = !cfg || waiting; $("add").hidden = !cfg || waiting; $("tabs").hidden = !cfg || waiting;
+  $("s-codebox").hidden = !waiting;
+  if (waiting) { $("status").textContent = "Type the code shown next to the QR"; $("s-code").focus(); return; }
   if (cfg) { render(); sync(); } else $("status").textContent = "Not connected";
 }
 boot();
