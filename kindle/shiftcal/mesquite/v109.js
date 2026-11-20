@@ -581,7 +581,7 @@ var FILLER_EXTRA = [];            // other parts of 10.9 (the bird of the hour) 
 var FILLER_MEMO = { at: 0, v: null };
 function fillerCards() {           // 10.9.1: worked out at most once a minute (the packer asks many times per layout)
     var t = new Date().getTime();
-    if (FILLER_MEMO.v && t - FILLER_MEMO.at < 60000) return FILLER_MEMO.v;
+    if (FILLER_MEMO.v) return FILLER_MEMO.v;      // 10.10: decided once per wake (v1010.js clears it on wake)
     FILLER_MEMO.v = fillerCardsNow(); FILLER_MEMO.at = t;
     return FILLER_MEMO.v;
 }

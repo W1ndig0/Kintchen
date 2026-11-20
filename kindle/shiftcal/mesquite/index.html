@@ -20,6 +20,14 @@ function khSay(q, tries) {      // the loop listens one request at a time: a mis
     } catch (e) { again(); }
 }
 function khMark(s) { KH_STAGE = s; }
+// 10.10: one shared 2.5 s timer instead of ten separate ones: each job runs when its time is due. Fewer
+// wake-ups of the browser's script engine while the hub is awake (it stops completely while the Kindle sleeps).
+var KH_JOBS = [];
+function khEvery(ms, fn) { KH_JOBS.push({ ms: ms, fn: fn, at: new Date().getTime() }); }
+setInterval(function() {
+    var t = new Date().getTime();
+    for (var i = 0; i < KH_JOBS.length; i++) { var j = KH_JOBS[i]; if (t - j.at >= j.ms - 300) { j.at = t; try { j.fn(); } catch (e) {} } }
+}, 2500);
 // 10.9.4: steps are only remembered (they used to be sent synchronously, one by one: that made start-up ~9 s
 // slower and set off the Kindle browser's "JavaScript execution exceeded timeout"). Errors are still sent.
 function khNow(s) { KH_STAGE = s; }
@@ -1598,6 +1606,7 @@ function syncNow() {
 }
 // If the background loop has not delivered fresh data for 3 hours, let the page try once (max every 2 h)
 function maybeFallbackSync() {
+    return;      // 10.10: syncing is SYNC / the daily session only (the loop); the page no longer fetches by itself
     var now = new Date().getTime(), last = Math.max(lastShellTs * 1000, lastXhrOk), js = 0;
     try { js = parseInt(window.localStorage.getItem("pg_js_sync") || "0", 10); } catch (e) {}
     if (now - last > 3 * 3600000 && now - js > 2 * 3600000) syncNow();
@@ -1649,7 +1658,7 @@ function exitHub() {
 khMark("main: v9.2 CHROME tiles, sysbar, settings");
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.9.4";
+var VERSION = "10.10";
 var DIAG_SENT = {};      // 10.9.3: set up here, before anything at start-up can call diagOnce (see diagOnce)
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
@@ -2017,7 +2026,7 @@ function layout() {
     var showMast = LAYOUT.mast !== 0 || EDIT;
     setCls(document.body, "hide-mast", !showMast);
     MAST_H = showMast ? Math.round(FS * 2.1) : 0;
-    SYSBAR_H = Math.round(FS * 4.1) + 4;      // 9.9: room for a label under every button
+    SYSBAR_H = Math.round(FS * (HUB.sleeping ? 4.1 : 6.1)) + 4;      // 10.10: buttons 50% bigger (9.9: room for a label under every button)
     $("masthead").style.height = MAST_H + "px";
     $("sysbar").style.height = SYSBAR_H + "px";
     var bullH = bulletinHeight();
@@ -2624,7 +2633,8 @@ function saveCfg() { try { window.localStorage.setItem("pg_hub_cfg", JSON.string
 
 function pollState() { loadScript("state.js", function(ok) { if (ok && window.HUB_STATE) applyState(window.HUB_STATE); }); }
 function schedulePoll() {
-    var wait = (!HUB.sleeping && secsLeft() < 25) ? 1000 : 2000;
+    var busy = false; for (var k in PENDING) if (PENDING.hasOwnProperty(k)) { busy = true; break; }
+    var wait = (!HUB.sleeping && (busy || secsLeft() < 25 || new Date().getTime() - lastTouchAt < 6000)) ? 1000 : 5000;      // 10.10: was 1-2 s always
     setTimeout(function() { pollState(); schedulePoll(); }, wait);
 }
 function shellNow() { return nowSec() + HUB.skew; }
@@ -2700,7 +2710,7 @@ function refreshSysbar(force) {
     var upd = lastUpdated || HUB.upd || "";
     if (upd !== SB.upd) { SB.upd = upd; $("sync-t").innerHTML = upd ? esc(upd) : "--"; }
     var frac = (dark || !HUB.seen) ? 0 : clamp(secsLeft() / Math.max(120, HUB.win), 0, 1);
-    var q = Math.round(frac * 50) / 50;
+    var q = Math.round(frac * 24) / 24;      // 10.10: 24 steps (one e-ink update every ~5 s), the whole bar is the timer
     if (q !== SB.rule) { SB.rule = q; $("countdown-rule").style.width = (q * 100) + "%"; }
     renderSysbarContext();
 }
@@ -6083,7 +6093,7 @@ function renderAuto() {
 }
 function autoDismiss() { if (AUTO.mode) AUTO.dismissed[autoKey(AUTO.mode)] = 1; $("auto-view").style.display = "none"; AUTO.mode = ""; lastTouchAt = new Date().getTime(); }
 bindTap($("auto-view"), function() { if (!consumed($("auto-view"))) autoDismiss(); });
-setInterval(function() { try { autoCheck(); } catch (e) {} }, 15000);
+khEvery(15000, function() { try { autoCheck(); } catch (e) {} });
 
 // night screen: replaces the front page while asleep at night
 var __front96 = renderFront;
@@ -6221,7 +6231,7 @@ function cfgRestore() {
     return true;
 }
 // 10.1.2: timers freeze while the Kindle sleeps, so a 6-hour setInterval almost never fired. Check the wall clock each awake minute instead.
-setInterval(function() { try { var t = new Date().getTime(), last = +(window.localStorage.getItem("pg_cfg_bkat") || 0); if (window.HUB_CLOUD && window.HUB_CLOUD.gist && (t - last > 6 * 3600000 || t < last)) { cfgBackup(false); window.localStorage.setItem("pg_cfg_bkat", String(t)); } } catch (e) {} }, 60000);
+khEvery(60000, function() { try { var t = new Date().getTime(), last = +(window.localStorage.getItem("pg_cfg_bkat") || 0); if (window.HUB_CLOUD && window.HUB_CLOUD.gist && (t - last > 6 * 3600000 || t < last)) { cfgBackup(false); window.localStorage.setItem("pg_cfg_bkat", String(t)); } } catch (e) {} });
 
 // hook: every items refresh runs the commands and refreshes chores
 var __itemsUI = renderItemsUI;
@@ -7150,7 +7160,7 @@ function loadExtra(cb) {
 }
 loadExtra();
 var __applyShell100 = applyShellData;
-applyShellData = function() { var r = __applyShell100.apply(this, arguments); loadExtra(); return r; };
+applyShellData = function() { var was = lastShellTs, r = __applyShell100.apply(this, arguments); if (lastShellTs !== was || !window.HUB_EXTRA) loadExtra(); return r; };      // 10.10: only when data changed
 
 function recs(kind) {
     var its = itemsOf(kind), out = [];
@@ -8066,7 +8076,7 @@ setTimeout(function() { sendPower("health=" + encodeURIComponent(VERSION)); }, 2
 })();
 (function() {      // and again on every wake while an update is on probation
     var last = 0;
-    setInterval(function() { var S = window.HUB_STATE || {}; if (S.updPending && new Date().getTime() - last > 60000) { last = new Date().getTime(); sendPower("health=" + encodeURIComponent(VERSION)); } }, 15000);
+    khEvery(15000, function() { var S = window.HUB_STATE || {}; if (S.updPending && new Date().getTime() - last > 60000) { last = new Date().getTime(); sendPower("health=" + encodeURIComponent(VERSION)); } });
 })();
 
 // ---------- Settings > Phone: update center ----------
@@ -8475,7 +8485,6 @@ var lastTick = new Date().getTime(), burstUntil = lastTick + 120000, lastDataChe
 function tick() {
     var t = new Date().getTime();
     if (t - lastTick > 30000) { burstUntil = t + 120000; onWake(); }   // just came back from suspend
-    if (BUSY_LABEL === "SYNCING") { reloadDataScript(); reloadItemsScript(); }
     lastTick = t;
     updateClock(false);
     timerTick();
@@ -8483,14 +8492,10 @@ function tick() {
     refreshSysbar(false);
     idleHomeCheck();
     if (HUB_OPEN && curTab === "system") renderStatusTable();
-    if (t < burstUntil || t - lastDataCheck > 60000) {
-        lastDataCheck = t;
-        reloadDataScript();
-        reloadItemsScript();
-        maybeFallbackSync();
-    }
+    // 10.10: data.js / hub_items.js are re-read only when a sync or edit burst finished (state.js "dataN"),
+    // not every 4 s for 2 minutes after a wake and every 60 s after that
 }
-setInterval(tick, 4000);
+khEvery(4000, tick);      // 10.10: on the shared timer
 
 /* ---------------- HubPantry (10.4): the pantry rules every device shares ----------------
  * Settings live in the list as cfg item "pantry" (JSON):
@@ -8911,7 +8916,7 @@ XVA.pinRemove = function(w) { pinCurrent(w, function() { var P = pinsCfg(); dele
 XVA.pinMins = function(m) { var P = pinsCfg(); P.mins = +m; cfgSave("pins", P); renderXV(); };
 XVA.pinLockNow = function() { lockAll(); lockRefresh(); renderXV(); };
 // relock on time (checked every 10 s) and at standby
-setInterval(function() { if (HUB.sleeping) lockAll(); lockRefresh(); }, 10000);
+khEvery(10000, function() { if (HUB.sleeping) lockAll(); lockRefresh(); });
 lockRefresh();
 
 
@@ -8983,14 +8988,14 @@ function renderRail() {
         railItem("home", "Home", "apps", cur === "home") + "<div class='rl-open'>";
     if (RAIL.open.length) h += "<div class='rl-h'>OPEN</div>";
     for (i = 0; i < RAIL.open.length; i++) h += railItem(RAIL.open[i].k, RAIL.open[i].n, RAIL.open[i].ic, cur === RAIL.open[i].k);
-    h += "</div><div class='rl-foot' data-k='hide'>HIDE &lsaquo;</div>";
+    h += "</div><div class='rl-foot' data-k='apps'>" + railIcon("apps").replace(/%fg/g, "#000").replace(/%bg/g, "#fff") + "APPS</div>";      // 10.10: APPS here, no HIDE (the rail hides when the hub sleeps)
     if (h === RAIL.sig) return;           // e-ink: repaint only when something changed
     RAIL.sig = h; rl.innerHTML = h;
     var its = rl.getElementsByTagName("div");
     for (i = 0; i < its.length; i++) if (its[i].getAttribute("data-k")) (function(el) { bindTap(el, function() { railTap(el.getAttribute("data-k")); }); })(its[i]);
 }
 function railTap(k) {
-    if (k === "hide") { FEEL.rail = 0; saveFeel(); relayout(); return; }
+    if (k === "apps") { if (currentView !== "apps") openApps(); return; }
     if (k === railKey()) return;
     var to = null;
     for (var i = 0; i < RAIL.open.length; i++) if (RAIL.open[i].k === k) to = RAIL.open[i];
@@ -9013,7 +9018,7 @@ appList = function() {
 };
 ICONS.rail = "<rect x='10' y='14' width='22' height='72' fill='%c'/><rect x='40' y='14' width='50' height='32' fill='none' stroke='%c' stroke-width='7'/><rect x='40' y='54' width='50' height='32' fill='none' stroke='%c' stroke-width='7'/>";
 IC_LABEL.rail = "RAIL";
-setInterval(renderRail, 20000);      // the clock (only repaints when the minute changes)
+khEvery(20000, renderRail);      // the clock (only repaints when the minute changes)
 relayout();
 
 khMark("main: 10.6: SETTINGS REFRESH, SMART WAKE SCHEDULE, RAIL ");
@@ -9063,7 +9068,7 @@ function hvScrollBy(dy) { var w = $("hv-wrap"); if (w) hvScrollTo(w.scrollTop + 
     w.addEventListener("mouseup", function(e) { up(e.clientY); }, false);
     bindTap($("hv-sup"), function() { hvScrollBy(-$("hv-wrap").clientHeight * 0.8); });
     bindTap($("hv-sdn"), function() { hvScrollBy($("hv-wrap").clientHeight * 0.8); });
-    setInterval(function() { if (HUB_OPEN) hvScrollUpdate(); }, 1500);      // panes change size as they load
+    khEvery(2500, function() { if (HUB_OPEN) hvScrollUpdate(); });      // panes change size as they load (10.10: shared timer)
 })();
 var __layoutHub106 = layoutHub;
 layoutHub = function() { __layoutHub106(); HVS.sig = ""; hvScrollUpdate(); };
@@ -9181,7 +9186,7 @@ onWake = function() { __onWake106(); setTimeout(sendAway, 6000); };
 var __itemsUI106 = renderItemsUI;
 renderItemsUI = function() { __itemsUI106(); setTimeout(sendAway, 3000); };      // a shift added or changed
 setTimeout(sendAway, 15000);
-setInterval(function() { if (!HUB.sleeping) sendAway(); }, 30 * 60000);      // new days come into the week
+khEvery(30 * 60000, function() { if (!HUB.sleeping) sendAway(); });      // new days come into the week
 
 // ---------- the side rail sleeps with the hub: the standby picture gets the whole screen ----------
 var __railLayout106 = railLayout;
@@ -9219,7 +9224,7 @@ function shuffleStep() {
     ROT.cur = nx;
     renderTileById(nx);
 }
-setInterval(shuffleStep, 2500);      // 10.8: was every second; shuffles are 10 s or more apart, and fewer wake-ups save battery
+khEvery(2500, shuffleStep);      // 10.8: was every second; shuffles are 10 s or more apart, and fewer wake-ups save battery
 khMark("main: 10.7: DEALS PAGE");
 // =====================  10.7: DEALS PAGE  =====================
 // The cloud brain sends EX.deals: wishlist items on sale first, then similar items on sale (same searches,
@@ -9507,7 +9512,7 @@ var __renderCtx108 = renderSysbarContext;
 renderSysbarContext = function() { __renderCtx108(); sbFit(); };
 var __layout108 = layout;
 layout = function() { __layout108(); sbFit(); };
-setInterval(function() { if (!HUB.sleeping) sbFit(); else if (SBR.on) sbPut(false); }, 20000);
+// (10.10: the status lives in the rail now; no 20 s re-measure - see v1010.js)
 var __applyState108 = applyState;
 applyState = function(st) { __applyState108(st); if (HUB.sleeping && SBR.on) sbPut(false); else if (!HUB.sleeping && !SBR.on) sbFit(); };      // asleep: the status belongs to the black bar
 sbFit();
@@ -9607,5 +9612,6 @@ TILE_RENDER.horo = function(T) {
 khNow("main: finished");     // 10.9.2 black box
 </script>
 <script src="v109.js"></script>
+<script src="v1010.js"></script>
 </body>
 </html>

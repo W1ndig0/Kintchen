@@ -62,6 +62,21 @@ function runBrain(port, env, ms) {
     const r2 = await runBrain(port, { HUB_PASS: NEW });
     const b1 = HubData.items(gists.main.files["hub.tsv"].content).filter(it => it.id === "b1")[0];
     check(r2.code === 0 && HubCrypt.unlock(b1.text, OLD) === "cheese", "no HUB_PASS_OLD: old-locked item left as it was");
+    // 10.10: the extras go inside the Kindle's package, and the package gets a new time only when it changed
+    const cid = Object.keys(gists).find(k => k !== "main" && gists[k].files["tv.json"]);
+    const pkg = "@@KH-BUNDLE 1795000000\n@@FILE mesquite/data.js\nwindow.HUB_DATA = {ts: 1};\n@@IMG img/d0123456789ab.jpg https://example.com/a.jpg\n@@END\n";
+    gists[cid].files["bundle.txt"] = { content: pkg };
+    delete gists[cid].files["extra.js"];
+    const r4 = await runBrain(port, { HUB_PASS: NEW, BRAIN_NOW: String(Date.UTC(2026, 10, 20, 18)) });
+    const nb = (gists[cid].files["bundle.txt"] || {}).content || "";
+    const nowS = Math.floor(Date.UTC(2026, 10, 20, 18) / 1000);
+    check(r4.code === 0 && /\n@@FILE mesquite\/extra\.js\nwindow\.HUB_EXTRA_LOCKED = /.test(nb) && /\n@@END\n$/.test(nb), "extras are inside the package, which still ends with @@END");
+    check(nb.split("\n")[0] === "@@KH-BUNDLE " + nowS, "a changed package gets a new time on its first line (what the Kindle checks)");
+    check(/\n@@FILE mesquite\/data\.js\nwindow\.HUB_DATA = \{ts: 1\};\n/.test(nb), "the rest of the package is kept");
+    check((nb.match(/@@FILE mesquite\/extra\.js/g) || []).length === 1, "only one copy of the extras");
+    const r5 = await runBrain(port, { HUB_PASS: NEW, BRAIN_NOW: String(Date.UTC(2026, 10, 20, 18, 30)) });
+    const nb2 = gists[cid].files["bundle.txt"].content;
+    check(r5.code === 0 && nb2.split("\n")[0] === "@@KH-BUNDLE " + nowS, "nothing changed 30 min later: same package, same time (the Kindle downloads nothing)");
     srv.close();
     // a GitHub that never answers: the run ends with an error instead of hanging until the 8-minute limit
     const hang = await fakeGitHub({}, { hang: true });

@@ -1,4 +1,6 @@
-# Kitchen Hub cloud brain. Runs every 15 minutes (GitHub may start it a few minutes late; that's normal).
+# Kitchen Hub cloud brain. Runs every 30 minutes (GitHub may start it a few minutes late; that's normal).
+# 10.10: the Kindle's package is rebuilt every 2 hours; the runs in between only send phone reminders (~15 s).
+# Free on a public repo; if the repo were private: ~48 short runs a day = ~1,440 of the 2,000 free minutes a month.
 # Needs repository secrets (Settings > Secrets and variables > Actions > New repository secret):
 #   GIST_ID     your list gist id (same as cloud.conf on the Kindle)
 #   GIST_TOKEN  a token that can read/write gists (same as cloud.conf GH_TOKEN, or a new one)
@@ -8,7 +10,7 @@
 name: kitchen-cloud
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7,37 * * * *"
   workflow_dispatch: {}
 permissions:
   contents: write          # only used once a month to keep the schedule alive (see the last step)

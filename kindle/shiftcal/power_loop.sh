@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.9.4"
+VERSION="10.10"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -86,6 +86,20 @@ load_conf() {
     CLOCK_MODE=15                      # 10.9: standby clock: 15 = exact at each wake (:00 :15 :30 :45), min = new minute every minute
     LIGHT_AWAKE=keep                   # 10.9.2: keep = the hub never touches the frontlight (as before 10.9);
                                        #         0-24 = this light while awake, off while it sleeps
+    # 10.10: sleep, sync and battery settings (Settings > Sleep). See UPDATE_10.10.txt.
+    SLEEP_CLOCK=min                    # standby clock: min = every minute (time only), 15 = every 15 min, hour, off
+    NIGHT_CLOCK=same                   # at night (NIGHT_FROM-NIGHT_TO): same = like the day, hour = the hour only, off
+    NIGHT_DEGHOST=1                    # a full (flashing) redraw each hour at night clears e-ink ghosting from the ticks
+    HOURLY_REFRESH=1                   # the standby page is redrawn on the hour (news, countdowns, new day)
+    WX_ANIM=1                          # ~10 s weather animation + bird of the hour on the hourly redraw
+    TIMER_TICK=0                       # 1 = a running kitchen timer counts down on the standby screen every minute
+    SYNC_MODE=manual                   # cloud data: manual (SYNC only) or every 2 / 6 / 12 hours
+    EDIT_PUSH=now                      # Kindle edits to the cloud: now (short Wi-Fi burst) or sync (with the next sync)
+    LISTS_ON_WAKE=0                    # 1 = fetch phone list changes on every button press (Wi-Fi each time)
+    DAILY_SESSION=1                    # one Wi-Fi session a day: clock check, phone commands, new data if any, update check, report
+    DAILY_HOUR=3
+    LOWBATT_SAVER=1                    # below 15%: clock every 15 min, no animation
+    CLOCK_DRAW=auto                    # auto = the loop draws the digits when the Kindle can; page = the page redraws the minute
     AUTO_UPDATE=1                      # 0 = only when you tap, 1 = check nightly and tell you (10.5 default), 2 = install at night (undone by itselfif it fails)
     [ -f "$CONF" ] && . "$CONF"
     case "$AUTO_UPDATE" in 0|1|2) ;; *) AUTO_UPDATE=1 ;; esac
@@ -93,6 +107,17 @@ load_conf() {
     case "$LOCAL_ONLY" in 0|1) ;; *) LOCAL_ONLY=0 ;; esac
     case "$QUICK_WAKE" in 0|1) ;; *) QUICK_WAKE=1 ;; esac
     case "$CLOCK_MODE" in 15|min) ;; *) CLOCK_MODE=15 ;; esac
+    case "$SLEEP_CLOCK" in min|15|hour|off) ;; *) SLEEP_CLOCK=min ;; esac
+    case "$NIGHT_CLOCK" in same|hour|off) ;; *) NIGHT_CLOCK=same ;; esac
+    case "$SYNC_MODE" in manual|2|6|12) ;; *) SYNC_MODE=manual ;; esac
+    case "$EDIT_PUSH" in now|sync) ;; *) EDIT_PUSH=now ;; esac
+    case "$CLOCK_DRAW" in auto|page) ;; *) CLOCK_DRAW=auto ;; esac
+    for V in NIGHT_DEGHOST HOURLY_REFRESH WX_ANIM DAILY_SESSION LOWBATT_SAVER; do
+        eval "case \"\$$V\" in 0|1) ;; *) $V=1 ;; esac"
+    done
+    case "$TIMER_TICK" in 1) ;; *) TIMER_TICK=0 ;; esac
+    case "$LISTS_ON_WAKE" in 1) ;; *) LISTS_ON_WAKE=0 ;; esac
+    case "$DAILY_HOUR" in ''|*[!0-9]*) DAILY_HOUR=3 ;; esac; [ "$DAILY_HOUR" -gt 23 ] && DAILY_HOUR=3
     # (10.9 had FRONTLIGHT=0 as its default, which turned the light OFF at every start and wake; that old
     #  setting is ignored, so nobody gets a dark screen they never asked for)
     case "$LIGHT_AWAKE" in keep) ;; ''|*[!0-9]*) LIGHT_AWAKE=keep ;; *) [ "$LIGHT_AWAKE" -gt 24 ] && LIGHT_AWAKE=24 ;; esac
@@ -133,6 +158,19 @@ USE_CLOUD_DATA=$USE_CLOUD_DATA
 AUTO_UPDATE=$AUTO_UPDATE
 FREEZE_POWERD=$FREEZE_POWERD
 LOCAL_ONLY=$LOCAL_ONLY
+SLEEP_CLOCK=$SLEEP_CLOCK
+NIGHT_CLOCK=$NIGHT_CLOCK
+NIGHT_DEGHOST=$NIGHT_DEGHOST
+HOURLY_REFRESH=$HOURLY_REFRESH
+WX_ANIM=$WX_ANIM
+TIMER_TICK=$TIMER_TICK
+SYNC_MODE=$SYNC_MODE
+EDIT_PUSH=$EDIT_PUSH
+LISTS_ON_WAKE=$LISTS_ON_WAKE
+DAILY_SESSION=$DAILY_SESSION
+DAILY_HOUR=$DAILY_HOUR
+LOWBATT_SAVER=$LOWBATT_SAVER
+CLOCK_DRAW=$CLOCK_DRAW
 QUICK_WAKE=$QUICK_WAKE
 CLOCK_MODE=$CLOCK_MODE
 LIGHT_AWAKE=$LIGHT_AWAKE
@@ -248,6 +286,8 @@ write_ui_state() {
     [ "$SLEEPING" = "1" ] && [ "$NEXT_WAKE_EPOCH" -gt 0 ] && NEXT_STR=$(fmt_epoch "$NEXT_WAKE_EPOCH")
     B_NOW=$(battery_pct)
     case "$SCREENSAVER_MODE" in off) SS_LEGACY=0 ;; eips_slots) SS_LEGACY=2 ;; *) SS_LEGACY=1 ;; esac
+    WS_NOW=$(date +%s); is_night_at "$WS_NOW" && SMODE=night || SMODE=home
+    SC_BY_NOW=page; [ "$SLEEPING" = "1" ] && SC_BY_NOW=$(clock_by)      # 10.10: who draws the standby minute
     cat > "$STATE_JS.tmp" <<EOT
 window.HUB_STATE = {
     v: "$VERSION",
@@ -275,7 +315,11 @@ window.HUB_STATE = {
     where: "${SMODE:-fixed}", aways: $(grep -c . "$DIR/.away" 2>/dev/null || echo 0),
     snoozeUntil: 0,
     quick: ${QUICK_NEXT:-0}, quickWake: $QUICK_WAKE, clockMode: "$CLOCK_MODE", frontlight: $([ "$LIGHT_AWAKE" = keep ] && echo -1 || echo "$LIGHT_AWAKE"),
-    rate7: ${RATE7:-0}, hours7: ${HRS7:-0}, wakesPerDay: ${WPD:-0}
+    rate7: ${RATE7:-0}, hours7: ${HRS7:-0}, wakesPerDay: ${WPD:-0},
+    sleepClock: "$SLEEP_CLOCK", nightClock: "$NIGHT_CLOCK", nightDeghost: $NIGHT_DEGHOST, hourly: $HOURLY_REFRESH, wxAnim: $WX_ANIM,
+    timerTick: $TIMER_TICK, timerEnd: ${TIMER_END:-0}, syncMode: "$SYNC_MODE", editPush: "$EDIT_PUSH", listsOnWake: $LISTS_ON_WAKE,
+    daily: $DAILY_SESSION, dailyHour: $DAILY_HOUR, lowSaver: $LOWBATT_SAVER, clockDraw: "$CLOCK_DRAW", clockBy: "$SC_BY_NOW",
+    dataN: ${DATA_N:-0}
 };
 EOT
     mv "$STATE_JS.tmp" "$STATE_JS"
@@ -325,16 +369,83 @@ write_stocks_js() {
 }
 urldecode() { printf '%b' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/+/ /g' -e 's/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')"; }     # 10.5: a typed backslash stays a backslash
 
-wifi_on() {
+wifi_on() {     # $1 = seconds to wait (default WIFI_TIMEOUT)
     lipc-set-prop com.lab126.cmd wirelessEnable 1 2>/dev/null
-    T=0
-    while [ "$T" -lt "$WIFI_TIMEOUT" ]; do
+    T=0; WIFI_T0=$(date +%s); en_add wifi_n
+    while [ "$T" -lt "${1:-$WIFI_TIMEOUT}" ]; do
         [ "$(lipc-get-prop com.lab126.wifid cmState 2>/dev/null)" = "CONNECTED" ] && return 0
         sleep 2; T=$((T+2))
     done
     return 1
 }
-wifi_off() { lipc-set-prop com.lab126.cmd wirelessEnable 0 2>/dev/null; }
+wifi_off() {
+    lipc-set-prop com.lab126.cmd wirelessEnable 0 2>/dev/null
+    if [ -n "$WIFI_T0" ]; then en_add wifi_s $(( $(date +%s) - WIFI_T0 )); WIFI_T0=""; fi
+}
+
+# ---------- 10.10: the energy report (one line a day in power.log, mesquite/energy.js for the page, and in the
+# log/status the phone reads). Counters live in .energy as "key value" lines for the current day.
+EN_F="$DIR/.energy"
+en_add() {      # en_add key amount   (safe from the background syncs: one small append, summed when read)
+    echo "$1 ${2:-1}" >> "$EN_F" 2>/dev/null
+}
+en_sum() { awk -v k="$1" '$1 == k { s += $2 } END { print s + 0 }' "$EN_F" 2>/dev/null || echo 0; }
+en_day_check() {      # a new day: write yesterday's report, start again
+    ED=$(date +%Y-%m-%d)
+    [ -f "$EN_F" ] || { echo "day $ED" > "$EN_F"; return; }
+    OD=$(sed -n 's/^day //p' "$EN_F" | head -1)
+    [ "$OD" = "$ED" ] && return
+    en_report "$OD"
+    echo "day $ED" > "$EN_F"
+    echo "$(battery_pct)" > "$DIR/.energy_b0"
+}
+en_report() {     # $1 = the day the counters belong to
+    awk -v day="${1:-today}" -v b0="$(cat "$DIR/.energy_b0" 2>/dev/null)" -v b1="$(battery_pct)" -v rate="${RATE7:-0}" -v left="$(awk -v h="${HRS7:-0}" 'BEGIN { printf "%.1f", h / 24 }')" '
+        $1 != "day" { s[$1] += $2 }
+        END {
+            ta = s["tick_cs"] / 100; tn = s["ticks"] + 0; avg = tn ? ta / tn : 0
+            bat = "battery " (b0 == "" ? "?" : b0) "%->" (b1 == "" ? "?" : b1) "%"
+            if (b0 != "" && b1 != "" && b0 + 0 > b1 + 0) bat = bat " (" (b0 - b1) "% used"; else if (b0 != "" && b1 != "" && b1 + 0 > b0 + 0) bat = bat " (charged"; else bat = bat " ("
+            if (rate + 0 > 0 && left + 0 > 0) bat = bat (bat ~ /\($/ ? "" : ", ") sprintf("7-day %.2f%%/h, ~%.1f days left", rate, left)
+            bat = bat ")"; sub(/ \(\)$/, "", bat)
+            printf "energy %s: %s | %d button wakes (%d min awake) | %d hourly redraws | %d clock ticks (avg %.1f s, %d slow) | Wi-Fi %d times, %.1f min | %d syncs, %d edit bursts, %d daily\n",
+                day, bat, s["wake_btn"], s["awake_s"] / 60, s["hourly"], tn, avg, s["slow"], s["wifi_n"], s["wifi_s"] / 60, s["syncs"], s["bursts"], s["daily"]
+        }' "$EN_F" > "$DIR/.energy_last" 2>/dev/null
+    [ -s "$DIR/.energy_last" ] || return
+    log "$(cat "$DIR/.energy_last")"
+    { printf 'window.HUB_ENERGY = {line: "'; tr -d '"\\\n' < "$DIR/.energy_last"; printf '", at: %s};\n' "$(date +%s)"; } > "$MESQ/energy.js.tmp" && mv "$MESQ/energy.js.tmp" "$MESQ/energy.js"
+}
+# seconds since boot with hundredths, from the kernel (no program started): for timing the clock ticks
+uptime_cs() { read -r UP_A UP_B < /proc/uptime 2>/dev/null; UP_A=${UP_A:-0}; case "$UP_A" in *.*) echo "${UP_A%.*}${UP_A#*.}" ;; *) echo "${UP_A}00" ;; esac; }
+
+# ---------- 10.10: the Kindle's clock, checked against a web server's time in the daily session (Wi-Fi is
+# rarely on now, and a minute-accurate standby clock shows drift). Only fixes 20 s - 1 day differences.
+clock_check() {
+    HD=$(kcurl -sI --connect-timeout 6 --max-time 10 https://api.github.com 2>/dev/null | tr -d '\r' | sed -n 's/^[Dd]ate: *//p' | head -1)
+    [ -n "$HD" ] || { log "clock check: no time from the server"; return; }
+    SE=$(date -u -D '%a, %d %b %Y %H:%M:%S' -d "${HD% GMT}" +%s 2>/dev/null)
+    case "$SE" in ''|*[!0-9]*) log "clock check: could not read \"$HD\""; return ;; esac
+    LE=$(date +%s); DF=$((SE - LE)); AD=${DF#-}
+    if [ "$AD" -ge 20 ] && [ "$AD" -lt 86400 ]; then
+        if [ "$HUB_TEST" != "1" ]; then date -u -s "@$SE" >/dev/null 2>&1 || date -u -s "$(date -u -d "@$SE" '+%Y-%m-%d %H:%M:%S')" >/dev/null 2>&1; command -v hwclock >/dev/null 2>&1 && hwclock -w -u >/dev/null 2>&1; fi
+        log "clock check: the Kindle was ${DF}s off - corrected"
+    else log "clock check: ok (${DF}s)"; fi
+}
+
+# ---------- 10.10: what the Kindle's screen tool can do (logged once per version): placing a picture at a
+# position (needed for the loop-drawn clock digits and the weather animation) and the fast no-flash mode.
+probe_eips() {
+    [ "$(cat "$DIR/.sleepcaps_v" 2>/dev/null)" = "$VERSION" ] && return
+    EH=$(eips -h 2>&1; eips 2>&1); EH=$(printf '%s' "$EH" | tr -cd 'A-Za-z0-9 _<>|=.,:/()\n-' | head -c 1500)
+    EX=0; EW=0
+    printf '%s' "$EH" | grep -q -- '-x' && printf '%s' "$EH" | grep -q -- '-y' && EX=1
+    printf '%s' "$EH" | grep -qi -- '-w\|waveform' && EW=1
+    printf 'EIPS_XY=%s\nEIPS_W=%s\n' "$EX" "$EW" > "$DIR/.sleepcaps"
+    echo "$VERSION" > "$DIR/.sleepcaps_v"
+    log "screen tool: place pictures at x,y: $([ "$EX" = 1 ] && echo yes || echo NO) | fast mode: $([ "$EW" = 1 ] && echo yes || echo NO)"
+    log "screen tool says: $(printf '%s' "$EH" | tr '\n' ' ' | cut -c1-300)"
+}
+
 
 # Sync in a background subshell; result lands in .last_sync, which the main loop re-reads.
 SYNC_PID=""
@@ -345,41 +456,57 @@ log_due() {      # 10.7: something failed (launch, rollback, update), the page n
     LU=$(cat "$DIR/.log_up_at" 2>/dev/null | tr -cd '0-9')
     [ -z "$LU" ] || [ $(( $(date +%s) - LU )) -ge 86400 ]
 }
-start_sync() {   # $1 = "lists": only exchange the lists with the gist (quick)
+start_sync() {   # 10.10: "" = full SYNC (you asked) | lists = edit burst (lists only, short) | daily = the 3 am session
     if [ "$BOOT" = "1" ]; then BOOT_SYNC=1; [ "$1" = "lists" ] || BOOT_FULL=1; return; fi   # 10.4.1: after the page is up
     [ "$1" = "lists" ] || LAST_SYNC_TRY=$(date +%s)
+    case "$1" in lists) en_add bursts ;; daily) en_add daily ;; *) en_add syncs ;; esac
     (
         # $$ in a subshell is the parent's pid: without this the EXIT trap would run cleanup() here
         trap - EXIT INT TERM
-        if wifi_on; then
-            if [ "$1" != "lists" ]; then
-                USE_CLOUD_DATA=$USE_CLOUD_DATA /bin/sh "$DIR/sync_data.sh"
-                NOWS=$(date +%s)
-                echo "$NOWS" > "$LAST_SYNC_F"
-                log "sync done at $(fmt_epoch "$NOWS")"
-            fi
+        SY0=$(date +%s)
+        # an edit burst waits 20 s for Wi-Fi at most (the edit is safe on the Kindle and goes with the next one)
+        if wifi_on "$([ "$1" = "lists" ] && echo 20 || echo "$WIFI_TIMEOUT")"; then
+            [ "$1" = "daily" ] && clock_check
             if cloud_ready; then
                 N=0
                 while [ "$N" -lt 3 ]; do
                     rm -f "$DIR/.cloud_dirty"
-                    sh "$DIR/hub_cloud.sh" sync
+                    nice -n 10 sh "$DIR/hub_cloud.sh" sync          # 10.10: low priority, so the screen stays quick
                     [ -f "$DIR/.cloud_dirty" ] || break     # an edit arrived mid-sync: go again before Wi-Fi drops
                     N=$((N + 1))
                 done
-                write_cloud_js                                # 9.8.5: the cloud brain's links (TV, calendar) for the page
-                # 10.3: the book cloud - fetch books you put on the Kindle, remove ones you moved back
-                { [ -s "$DIR/.books_want" ] || [ -s "$DIR/.books_have" ]; } && sh "$DIR/hub_books.sh"
-                # 10.7: the log goes to your private cloud gist once a day, and on the next full sync after something went wrong
-                if [ "$1" != "lists" ] && log_due; then
+            fi
+            if [ "$1" != "lists" ]; then
+                # weather, news, deals ... in one package; the daily session only takes it if the brain made a new one
+                USE_CLOUD_DATA=$USE_CLOUD_DATA ONLY_IF_NEW=$([ "$1" = "daily" ] && echo 1 || echo 0) nice -n 10 /bin/sh "$DIR/sync_data.sh"
+                NOWS=$(date +%s)
+                echo "$NOWS" > "$LAST_SYNC_F"
+                log "$([ "$1" = "daily" ] && echo "daily session" || echo "sync") done at $(fmt_epoch "$NOWS")"
+                if cloud_ready; then
+                    write_cloud_js                                # 9.8.5: the cloud brain's links (TV, calendar) for the page
+                    # 10.3: the book cloud - fetch books you put on the Kindle, remove ones you moved back
+                    { [ -s "$DIR/.books_want" ] || [ -s "$DIR/.books_have" ]; } && nice -n 10 sh "$DIR/hub_books.sh"
+                fi
+                # 10.10: the nightly update check rides along with the daily session (no Wi-Fi of its own)
+                if [ "$1" = "daily" ] && [ "$AUTO_UPDATE" != "0" ] && grep -q 'PAGES_URL="*http' "$DIR/cloud.conf" 2>/dev/null; then
+                    date +%Y-%m-%d > "$DIR/.update_auto_day"
+                    if [ "$AUTO_UPDATE" = "2" ] && [ ! -f "$DIR/.update/pending" ]; then
+                        sh "$DIR/hub_update.sh" auto && { log "night update installed - restarting the hub"; echo "night update installed" > "$DIR/.relaunch"; }
+                    else sh "$DIR/hub_update.sh" check; fi
+                fi
+                # the log (with the energy report) goes to your cloud gist with every sync and the daily session
+                if cloud_ready && { [ "$1" = "daily" ] || [ -z "$1" ] || log_due; }; then
+                    [ "$1" = "daily" ] && [ -f "$DIR/hub_sys.sh" ] && sh "$DIR/hub_sys.sh" >/dev/null 2>&1      # one system snapshot a day for the log
                     LU0=$(cat "$DIR/.log_up_at" 2>/dev/null)
                     sh "$DIR/hub_cloud.sh" log
                     [ "$(cat "$DIR/.log_up_at" 2>/dev/null)" != "$LU0" ] && rm -f "$DIR/.log_want"
                 fi
             fi
         else
-            log "wifi did not connect within ${WIFI_TIMEOUT}s"
+            log "wifi did not connect within $([ "$1" = "lists" ] && echo 20 || echo "$WIFI_TIMEOUT")s$([ "$1" = "lists" ] && echo ' - the edit goes with the next one')"
         fi
         wifi_off
+        [ "$1" = "lists" ] && log "edit burst: $(( $(date +%s) - SY0 ))s"
     ) &
     SYNC_PID=$!
 }
@@ -418,7 +545,7 @@ start_job() {     # 9.8.5: update-check | update-install | logup | status  (same
                     date +%Y-%m-%d > "$DIR/.update_auto_day"
                     sh "$DIR/hub_update.sh" auto
                     [ "$?" = "0" ] && { log "night update installed - restarting the hub"; echo "night update installed" > "$DIR/.relaunch"; } ;;
-                logup) sh "$DIR/hub_cloud.sh" log ;;
+                logup) [ -f "$DIR/hub_sys.sh" ] && sh "$DIR/hub_sys.sh" >/dev/null 2>&1; sh "$DIR/hub_cloud.sh" log ;;      # 10.10: the system snapshot only for SEND LOG
                 status) sh "$DIR/hub_cloud.sh" status ;;
             esac
         else log "$1: no Wi-Fi"; fi
@@ -440,7 +567,8 @@ command -v nc >/dev/null 2>&1 && HAVE_NC=1
 hub_port_key; PORT_KEY=$HC_PORT_KEY
 hub_totp_init
 KEY_BAD_LOGGED=0
-qv() { echo "$QS" | tr '&' '\n' | sed -n "s/^$1=//p" | head -1; }
+# 10.10: pure shell (was echo | tr | sed | head: ~150 programs started per tap, the main reason taps felt slow)
+qv() { case "&$QS" in *"&$1="*) QV_T="&$QS"; QV_T=${QV_T#*"&$1="}; printf '%s\n' "${QV_T%%&*}" ;; esac; }
 num_or_empty() { case "$1" in ''|*[!0-9]*) echo "" ;; *) echo "$1" ;; esac; }
 
 # One ~1 s listen for a request from the page. Handles: touch=1, snooze=N (seconds; 1 = 5 min),
@@ -541,7 +669,7 @@ poll_settings_http() {
     if [ -n "$ITM" ]; then
         sh "$DIR/hub_cloud.sh" add "$ITM" 2>/dev/null
         touch "$DIR/.cloud_dirty"
-        cloud_ready && CLOUD_DUE=$((NOWQ + 12))             # a quick lists sync shortly after the last edit
+        cloud_ready && [ "$EDIT_PUSH" = "now" ] && CLOUD_DUE=$((NOWQ + 12))     # a short lists-only burst after the last edit
         NEWU=$((NOWQ + 90)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
     fi
     if [ "$(qv cloudsync)" = "1" ]; then
@@ -552,9 +680,9 @@ poll_settings_http() {
     fi
     V=$(num_or_empty "$(qv cloudwake)")
     if [ -n "$V" ]; then
-        case "$V" in 1) CLOUD_ON_WAKE=1 ;; *) CLOUD_ON_WAKE=0 ;; esac
+        case "$V" in 1) LISTS_ON_WAKE=1 ;; *) LISTS_ON_WAKE=0 ;; esac
         CHANGED=1; write_cloud_js
-        log "lists on button wake: $CLOUD_ON_WAKE"
+        log "lists on button wake: $LISTS_ON_WAKE"
     fi
     RQ=$(qv rsearch)
     if [ -n "$RQ" ]; then
@@ -660,7 +788,7 @@ poll_settings_http() {
         # 10.9: a tap during a quick wake turns it into a full one (page, light, lists from the phone)
         if [ "$QUICK_ACTIVE" = "1" ]; then
             QUICK_ACTIVE=0; WAKE_REASON=touch; set_light "$LIGHT_AWAKE"; write_ui_state 0; log "tapped during a quick wake - full wake"
-            cloud_ready && [ "$CLOUD_ON_WAKE" = "1" ] && ! sync_running && start_sync lists
+            cloud_ready && [ "$LISTS_ON_WAKE" = "1" ] && ! sync_running && start_sync lists
         fi
     fi
     # 10.9: a command for the kitchen monitor, locked by the page with your passphrase ("~" + base64url)
@@ -673,8 +801,23 @@ poll_settings_http() {
     # 10.9: Settings > System asks for a fresh look at CPU, memory and services
     if [ "$(qv sysinfo)" = "1" ] && [ "$BOOT" != "1" ] && [ -f "$DIR/hub_sys.sh" ]; then SYS_AT=$NOWQ; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & fi
     # 10.9: power settings from Settings > Sleep
-    V=$(qv quickwake); case "$V" in 0|1) QUICK_WAKE=$V; CHANGED=1; log "quick timer wakes: $V" ;; esac
-    V=$(qv clockmode); case "$V" in 15|min) CLOCK_MODE=$V; CHANGED=1; log "standby clock: $V" ;; esac
+    # 10.10: Settings > Sleep (each saved at once)
+    V=$(qv sleepclock);  case "$V" in min|15|hour|off) SLEEP_CLOCK=$V; CHANGED=1; log "standby clock: $V" ;; esac
+    V=$(qv nightclock);  case "$V" in same|hour|off) NIGHT_CLOCK=$V; CHANGED=1; log "night clock: $V" ;; esac
+    V=$(qv nightdeghost); case "$V" in 0|1) NIGHT_DEGHOST=$V; CHANGED=1 ;; esac
+    V=$(qv hourly);      case "$V" in 0|1) HOURLY_REFRESH=$V; CHANGED=1; log "hourly redraw: $V" ;; esac
+    V=$(qv wxanim);      case "$V" in 0|1) WX_ANIM=$V; CHANGED=1 ;; esac
+    V=$(qv timertick);   case "$V" in 0|1) TIMER_TICK=$V; CHANGED=1 ;; esac
+    V=$(qv syncmode);    case "$V" in manual|2|6|12) SYNC_MODE=$V; CHANGED=1; log "sync: $V" ;; esac
+    V=$(qv editpush);    case "$V" in now|sync) EDIT_PUSH=$V; CHANGED=1; log "Kindle edits: $V" ;; esac
+    V=$(qv daily);       case "$V" in 0|1) DAILY_SESSION=$V; CHANGED=1; log "daily session: $V" ;; esac
+    V=$(qv lowsaver);    case "$V" in 0|1) LOWBATT_SAVER=$V; CHANGED=1 ;; esac
+    V=$(qv clockdraw);   case "$V" in auto|page) CLOCK_DRAW=$V; CHANGED=1; log "clock drawn by: $V" ;; esac
+    V=$(qv clockmode);   case "$V" in min) SLEEP_CLOCK=min; CHANGED=1 ;; 15) SLEEP_CLOCK=15; CHANGED=1 ;; esac      # (10.9 pages)
+    V=$(num_or_empty "$(qv timerend)"); [ -n "$V" ] && TIMER_END=$V      # a kitchen timer started (0 = stopped)
+    # where the standby page put its clock digits and weather picture (screen pixels), for the sleep clock
+    V=$(qv sclk); case "$V" in [sml]_*) printf '%s\n' "$V" | tr '_' ' ' | tr -cd 'a-z0-9 \n' > "$DIR/.sleep_geo" ;; none) rm -f "$DIR/.sleep_geo" ;; esac
+    V=$(qv swx);  case "$V" in [a-z]*_*) printf '%s\n' "$V" | tr '_' ' ' | tr -cd 'a-z0-9 \n' > "$DIR/.sleep_wx" ;; none) rm -f "$DIR/.sleep_wx" ;; esac
     V=$(qv light)
     if [ "$V" = "keep" ]; then LIGHT_AWAKE=keep; CHANGED=1; log "frontlight: left to the Kindle"
     elif [ -n "$(num_or_empty "$V")" ]; then [ "$V" -gt 24 ] && V=24; LIGHT_AWAKE=$V; CHANGED=1; set_light "$V"; log "frontlight: $V"; fi
@@ -814,10 +957,10 @@ write_cloud_js() {
           CDA=$(cat "$DIR/.cloud_data_at" 2>/dev/null | tr -cd '0-9'); BA=$(LK BRAIN_AT | tr -cd '0-9')
           COK=0; hub_cloud_allowed && COK=1
           KAT=$(cat "$DIR/.keys_at" 2>/dev/null | tr -cd '0-9')
-          printf 'window.HUB_CLOUD={pages:"%s",gist:"%s",token:"%s",pass:"%s",pass0:"%s",legacy:%s,mon:"%s",cok:%s,keysAt:%s,wake:%s,ntfy:"%s",alerts:%s,cdata:%s,cdataAt:%s,ics:"%s",ics2:"%s",tv:"%s",cgist:"%s",brainAt:%s};\n' "$(Q "$PAGES_URL")" "$(Q "$GIST_ID")" "$(Q "$GH_TOKEN")" "$(Q "$PASSPHRASE")" "$(Q "$PASSPHRASE_OLD")" "$LEG" "$(Q "$MON_TOPIC")" "$COK" "${KAT:-0}" "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" \
+          printf 'window.HUB_CLOUD={pages:"%s",gist:"%s",token:"%s",pass:"%s",pass0:"%s",legacy:%s,mon:"%s",cok:%s,keysAt:%s,wake:%s,ntfy:"%s",alerts:%s,cdata:%s,cdataAt:%s,ics:"%s",ics2:"%s",tv:"%s",cgist:"%s",brainAt:%s};\n' "$(Q "$PAGES_URL")" "$(Q "$GIST_ID")" "$(Q "$GH_TOKEN")" "$(Q "$PASSPHRASE")" "$(Q "$PASSPHRASE_OLD")" "$LEG" "$(Q "$MON_TOPIC")" "$COK" "${KAT:-0}" "$LISTS_ON_WAKE" "$NT" "$PHONE_ALERTS" \
               "$USE_CLOUD_DATA" "${CDA:-0}" "$(LK ICS_URL)" "$(LK ICS2_URL)" "$(LK TV_REF)" "$(LK CLOUD_GIST)" "${BA:-0}" > "$MESQ/cloud.js.tmp" && mv "$MESQ/cloud.js.tmp" "$MESQ/cloud.js" )
     else
-        printf 'window.HUB_CLOUD={pages:"",gist:"",token:"",pass:"",pass0:"",legacy:0,mon:"",cok:0,keysAt:0,wake:%s,ntfy:"%s",alerts:%s};\n' "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" > "$MESQ/cloud.js"
+        printf 'window.HUB_CLOUD={pages:"",gist:"",token:"",pass:"",pass0:"",legacy:0,mon:"",cok:0,keysAt:0,wake:%s,ntfy:"%s",alerts:%s};\n' "$LISTS_ON_WAKE" "$NT" "$PHONE_ALERTS" > "$MESQ/cloud.js"
     fi
 }
 CURL_BIN=/usr/bin/curl; [ -x "$CURL_BIN" ] || CURL_BIN=curl
@@ -904,7 +1047,7 @@ stop_and_exit() {
     exec /bin/sh "$DIR/stop_hub.sh"
 }
 
-paint_eink() { eips -g "$1" >/dev/null 2>&1; }
+paint_eink() { if [ "${PAINT_FULL:-0}" = "1" ]; then eips -f -g "$1"; else eips -g "$1"; fi >/dev/null 2>&1; }      # 10.10: full (flashing) on the hourly redraw: clears ghosting
 
 paint_screensaver_slots() {
     [ -d "$SS_DIR" ] || { log "screensaver dir $SS_DIR missing"; return 1; }
@@ -998,22 +1141,138 @@ suspend_for() {
     return $RESULT
 }
 
-# 10.9: standby clock "every minute": sleep minute by minute until the next real wake. Each tick wakes the
-# Kindle for ~3 s with no Wi-Fi and no touch screen: the page's own clock timer fires on resume and redraws
-# just the minute (partial e-ink update), then the Kindle sleeps again. Returns like suspend_for.
-minute_sleep() {
-    MS_T=$1; MS_N=0
-    while :; do
-        MS_NOW=$(date +%s); MS_REM=$((MS_T - MS_NOW))
-        if [ "$MS_REM" -le $(( ${HUB_TEST_MINUTE:-60} + 20 )) ]; then [ "$MS_N" -gt 0 ] && log "standby clock: $MS_N minute ticks"; suspend_for $((MS_REM - 3)); return $?; fi
-        MS_L=${HUB_TEST_MINUTE:-60}                 # (tests use a shorter "minute")
-        MS_S=$((MS_L - MS_NOW % MS_L)); [ "$MS_S" -lt $((MS_L / 3)) ] && MS_S=$((MS_S + MS_L))
-        SUSPEND_QUIET=1; suspend_for "$MS_S"; MS_R=$?; SUSPEND_QUIET=0
-        if [ "$MS_R" != "0" ]; then [ "$MS_N" -gt 0 ] && log "standby clock: $MS_N minute ticks"; return "$MS_R"; fi
-        MS_N=$((MS_N + 1))
-        sleep 2                                   # the page redraws the minute
-        still_owner || exit 0
+# =====================  10.10: THE SLEEP CLOCK  =====================
+# While the hub sleeps the Kindle wakes for a moment each minute (or 15 min) and the loop draws only the clock
+# digits that changed, straight onto the screen (pictures in mesquite/art, the same ones the page uses, so they
+# match). No page work, no Wi-Fi. On the hour the standby page is redrawn (full refresh: clears ghosting) and the
+# weather animation plays. Everything here is arithmetic on the clock: no programs started per decision.
+ART="$MESQ/art"
+is_night_at() {      # $1 = epoch
+    NL=$(( ($1 - 25200) % 86400 )); NF=$((NIGHT_FROM * 3600)); NT=$((NIGHT_TO * 3600))
+    if [ "$NF" -gt "$NT" ]; then [ "$NL" -ge "$NF" ] || [ "$NL" -lt "$NT" ]; elif [ "$NF" -lt "$NT" ]; then [ "$NL" -ge "$NF" ] && [ "$NL" -lt "$NT" ]; else return 1; fi
+}
+clk_at() {           # the standby clock mode at epoch $1: min | 15 | hour | off
+    if is_night_at "$1" && [ "$NIGHT_CLOCK" != "same" ]; then CLK_M=$NIGHT_CLOCK; else CLK_M=$SLEEP_CLOCK; fi
+}
+saver_on() { [ "$LOWBATT_SAVER" = "1" ] && [ "$CHG" != "1" ] && [ -n "$B" ] && [ "$B" -lt 15 ] 2>/dev/null; }
+hourly_wanted() {    # is there an hourly redraw at epoch $1?
+    clk_at "$1"
+    if is_night_at "$1"; then
+        case "$CLK_M" in hour) return 0 ;; min|15) [ "$NIGHT_DEGHOST" = "1" ] ;; *) return 1 ;; esac
+    else
+        [ "$HOURLY_REFRESH" = "1" ] || [ "$CLK_M" = "hour" ]
+    fi
+}
+tick_secs() {        # seconds between clock ticks at epoch $1 (0 = no ticks)
+    clk_at "$1"
+    case "$CLK_M" in min) TK=60 ;; 15) TK=900 ;; *) TK=0 ;; esac
+    [ "$TK" = "60" ] && saver_on && TK=900
+    [ "$TIMER_TICK" = "1" ] && [ "${TIMER_END:-0}" -gt "$1" ] && TK=60
+    [ -n "$HUB_TEST_TICK" ] && [ "$TK" != "0" ] && TK=$HUB_TEST_TICK      # tests only (a short "minute")
+}
+tick_label() { tick_secs "$1"; case "$TK" in 60) echo "every minute ($(clock_by))" ;; 900) echo "every 15 min ($(clock_by))" ;; *) echo "$CLK_M (no ticks)" ;; esac; }
+clock_by() {         # who draws the minute: the loop (pictures at x,y) or the page (it redraws itself)
+    if [ "$CLOCK_DRAW" = "auto" ] && grep -q '^EIPS_XY=1' "$DIR/.sleepcaps" 2>/dev/null && [ -s "$DIR/.sleep_geo" ] && [ -d "$ART/clk" ] &&
+       ! { [ "$TIMER_TICK" = "1" ] && [ "${TIMER_END:-0}" -gt "$(date +%s)" ]; }; then echo loop; else echo page; fi
+}
+next_wake() {        # NEXT_WAKE_EPOCH + NW_WHY from the hourly redraws, the daily session and a chosen sync interval
+    NWN=$1; NW=0; NW_WHY=""
+    NH=$(( (NWN / 3600 + 1) * 3600 )); NI=0
+    while [ "$NI" -lt 24 ]; do T=$((NH + NI * 3600)); if hourly_wanted "$T"; then NW=$T; NW_WHY="hourly redraw"; break; fi; NI=$((NI + 1)); done
+    if [ "$DAILY_SESSION" = "1" ]; then
+        DL=$(( (NWN - 25200) % 86400 )); DD=$(( (DAILY_HOUR * 3600 - DL + 86400) % 86400 )); [ "$DD" -lt 60 ] && DD=$((DD + 86400))
+        T=$((NWN + DD)); if [ "$NW" = "0" ] || [ "$T" -lt "$NW" ]; then NW=$T; NW_WHY="daily session"; fi
+    fi
+    if [ "$SYNC_MODE" != "manual" ]; then
+        T=$((LAST_SYNC + SYNC_MODE * 3600)); [ "$T" -lt $((NWN + 600)) ] && T=$((NWN + 600))
+        if [ "$NW" = "0" ] || [ "$T" -lt "$NW" ]; then NW=$T; NW_WHY="sync every ${SYNC_MODE} h"; fi
+    fi
+    [ "$NW" = "0" ] && { NW=$((NWN + 21600)); NW_WHY="nothing planned"; }
+    [ "$NW" -lt $((NWN + 60)) ] && NW=$((NWN + 60))
+    [ -n "$HUB_TEST_STEP" ] && { NW=$((NWN + HUB_TEST_STEP)); NW_WHY="test step"; }      # tests only
+    NEXT_WAKE_EPOCH=$NW
+}
+clock_glyphs() {     # the six clock slots for now: hour (2), colon, minutes (2), am/pm  - e.g. "b 9 c 0 5 pm"
+    set -- $(date '+%I %M %p')
+    CH1=${1%?}; CH2=${1#?}; [ "$CH1" = "0" ] && CH1=b
+    CM1=${2%?}; CM2=${2#?}
+    case "$3" in [Pp]*) CAP=pm ;; *) CAP=am ;; esac
+    echo "$CH1 $CH2 c $CM1 $CM2 $CAP"
+}
+draw_clock_tick() {  # redraw only the slots whose digit changed (usually one)
+    NEWG=$(clock_glyphs)
+    [ "$NEWG" = "$CLK_LAST" ] && return 0
+    read -r GSZ GROT X1 Y1 X2 Y2 X3 Y3 X4 Y4 X5 Y5 X6 Y6 < "$DIR/.sleep_geo" || return 1
+    set -- $NEWG; G1=$1 G2=$2 G3=$3 G4=$4 G5=$5 G6=$6
+    set -- $CLK_LAST; O1=$1 O2=$2 O3=$3 O4=$4 O5=$5 O6=$6
+    for SL in 1 2 3 4 5 6; do
+        eval "GN=\$G$SL; GO=\$O$SL; GX=\$X$SL; GY=\$Y$SL"
+        [ "$GN" = "$GO" ] && continue
+        F="$ART/clk/$GSZ/$GROT/$GN.png"
+        [ -f "$F" ] && eips -g "$F" -x "$GX" -y "$GY" >/dev/null 2>&1
     done
+    CLK_LAST=$NEWG
+}
+nap() { usleep "$1" 2>/dev/null || sleep 1; }      # $1 microseconds
+play_wx_anim() {     # ~10 s simple loop of the current weather over the standby weather picture, then a still frame
+    [ -s "$DIR/.sleep_wx" ] && grep -q '^EIPS_XY=1' "$DIR/.sleepcaps" 2>/dev/null || return 0
+    read -r WK WROT WX WY < "$DIR/.sleep_wx" || return 0
+    WD="$ART/wx/$WK/$WROT"; [ -f "$WD/s.png" ] || return 0
+    WFL="-w du"; grep -q '^EIPS_W=1' "$DIR/.sleepcaps" || WFL=""
+    WT0=$(date +%s); WN=0
+    while [ $(( $(date +%s) - WT0 )) -lt 10 ]; do
+        for WFR in 1 2 3 4 5 6 7 8; do
+            [ -f "$WD/$WFR.png" ] || continue
+            # the fast mode can be refused on some firmware: then the frames are drawn the normal way
+            eips -g "$WD/$WFR.png" -x "$WX" -y "$WY" $WFL >/dev/null 2>&1 || { [ -n "$WFL" ] && { WFL=""; sed -i 's/^EIPS_W=1/EIPS_W=0/' "$DIR/.sleepcaps"; log "fast screen mode refused - animation uses the normal mode"; }; }
+            WN=$((WN + 1)); nap 120000
+        done
+    done
+    eips -g "$WD/s.png" -x "$WX" -y "$WY" >/dev/null 2>&1
+    log "weather animation: $WK, $WN frames"
+}
+tick_suspend() {     # one RTC sleep until epoch $1; returns 0 = alarm, 2 = woke early (power button), 1 = refused
+    echo 0 > "$RTC" 2>/dev/null; echo "$1" > "$RTC" 2>/dev/null
+    [ "$(cat "$RTC" 2>/dev/null)" = "$1" ] || return 1
+    TS0=$(date +%s); do_suspend; TRC=$?; TS1=$(date +%s)
+    echo 0 > "$RTC" 2>/dev/null
+    [ "$TRC" = "0" ] && [ "$TS1" -ge $(( $1 - 2 )) ] && return 0
+    [ "$TRC" = "0" ] && [ $((TS1 - TS0)) -ge 1 ] && return 2
+    return 1
+}
+sleep_clock() {      # sleep until epoch $1, ticking the standby clock; returns like suspend_for
+    SC_END=$1
+    tick_secs "$(date +%s)"
+    [ "$TK" = "0" ] && { suspend_for $((SC_END - $(date +%s) - 3)); return $?; }
+    RTC=$(rtc_path); [ -z "$RTC" ] && { log "no RTC wake alarm available"; return 1; }
+    SC_BY=$(clock_by); SC_N=0; SC_CS=0; SC_SLOW=0; SC_FAIL=0
+    freeze_powerd                                   # once for the whole sleep, not around every tick
+    [ "$HUB_TEST" = "1" ] || sync
+    while :; do
+        NOWT=$(date +%s)
+        tick_secs "$NOWT"
+        if [ "$TK" = "0" ]; then NB=$SC_END; else NB=$(( (NOWT / TK + 1) * TK )); fi
+        [ $((NB + 20)) -ge "$SC_END" ] && NB=$SC_END
+        if [ $((NB - NOWT)) -lt 3 ]; then [ "$NB" = "$SC_END" ] && { SC_R=0; break; }; NB=$((NB + TK)); fi
+        [ -n "$SC_TA" ] && { SC_TB=$(uptime_cs); SC_D=$((SC_TB - SC_TA)); SC_CS=$((SC_CS + SC_D)); [ "$SC_D" -gt 500 ] && SC_SLOW=$((SC_SLOW + 1)); SC_TA=""; }
+        tick_suspend "$NB"; SC_R=$?
+        if [ "$SC_R" = "1" ]; then
+            SC_FAIL=$((SC_FAIL + 1)); [ "$SC_FAIL" -ge 3 ] && break
+            sleep 3; continue
+        fi
+        SC_FAIL=0
+        [ "$SC_R" = "2" ] && break
+        [ "$NB" = "$SC_END" ] && { SC_R=0; break; }
+        SC_TA=$(uptime_cs); SC_N=$((SC_N + 1))
+        if [ "$SC_BY" = "loop" ]; then draw_clock_tick; else sleep 2; fi      # the page redraws the minute itself
+        still_owner || { thaw_powerd; exit 0; }
+    done
+    thaw_powerd
+    if [ "$SC_N" -gt 0 ]; then
+        en_add ticks "$SC_N"; en_add tick_cs "$SC_CS"; [ "$SC_SLOW" -gt 0 ] && en_add slow "$SC_SLOW"
+        log "standby clock: $SC_N ticks ($SC_BY, avg $(awk -v c="$SC_CS" -v n="$SC_N" 'BEGIN { printf "%.1f", c / n / 100 }') s awake$([ "$SC_SLOW" -gt 0 ] && echo ", $SC_SLOW slow"))"
+    fi
+    case "$SC_R" in 0) return 0 ;; 2) log "woke early - treating as power button"; return 2 ;; *) log "clock ticks: the Kindle refused to sleep"; return 1 ;; esac
 }
 
 # Used when real suspend is unavailable/refused and in "always" mode: wait for the next wake time
@@ -1038,6 +1297,15 @@ echo $$ > "$PIDF"
 load_conf
 read_last_sync
 log "start v$VERSION pid $$ (interval ${INTERVAL_MIN}m, window ${WAKE_WINDOW}s, screenshot=${SCREENSAVER_MODE}, hide-statusbar=${PILLOW_DISABLE}, nc=${HAVE_NC}, battery $(battery_pct)%)"
+# 10.10: the clock digit and weather animation pictures ship as one archive (one download in an update)
+if [ -f "$DIR/sleepart.tar" ] && { [ ! -f "$ART/.v" ] || [ "$DIR/sleepart.tar" -nt "$ART/.v" ]; }; then
+    rm -rf "$ART.new"; mkdir -p "$ART.new"
+    if tar -xf "$DIR/sleepart.tar" -C "$ART.new" 2>/dev/null && [ -d "$ART.new/clk" ]; then
+        rm -rf "$ART"; mv "$ART.new" "$ART"; touch "$ART/.v"; log "sleep clock pictures ready ($(find "$ART" -name '*.png' | wc -l) pictures)"
+    else rm -rf "$ART.new"; log "sleep clock pictures: the archive could not be unpacked - the page draws the clock"; fi
+fi
+probe_eips
+en_day_check
 kill_stray_nc
 apply_pillow
 write_stocks_js
@@ -1104,40 +1372,43 @@ while true; do
     lipc-set-prop com.lab126.powerd preventScreenSaver 1 2>/dev/null
 
     NOW=$(date +%s)
-    # 10.9: a timer wake is a QUICK wake: the page stays on its standby view (no flash, no touch screen
-    # waiting for nobody), data is refreshed, a due sync runs, the new frame is captured, back to sleep.
-    # Not while the page is starting or a fresh update still has to report in (that needs a full wake).
-    QUICK_ACTIVE=0
-    if [ "$QUICK_WAKE" = "1" ] && [ "$WAKE_REASON" = "timer" ] && [ "$FIRST" != "1" ] && [ "$BOOT" != "1" ] && [ ! -f "$DIR/.update/pending" ]; then QUICK_ACTIVE=1; fi
+    en_day_check
+    # 10.10: a timer wake is the HOURLY REDRAW (and, at DAILY_HOUR, the daily Wi-Fi session): the page stays on its
+    # standby view, the new frame is captured, the weather animation plays, the minute clock goes on. Button =
+    # full hub. Not while the page is starting or a fresh update still has to report in (that needs a full wake).
+    QUICK_ACTIVE=0; HOURLY_NOW=0
+    if [ "$WAKE_REASON" = "timer" ] && [ "$FIRST" != "1" ] && [ "$BOOT" != "1" ] && [ ! -f "$DIR/.update/pending" ]; then QUICK_ACTIVE=1; fi
     if [ "$QUICK_ACTIVE" = "1" ]; then
         AWAKE_UNTIL=$((NOW + ${HUB_QUICK_SEC:-8}))
+        hourly_wanted "$NOW" && { HOURLY_NOW=1; en_add hourly; }
         QUICK_NEXT=1; write_ui_state 1
-        log "quick wake (timer), battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
+        log "$([ "$HOURLY_NOW" = 1 ] && echo "hourly redraw" || echo "timer wake"), battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
     else
-        AWAKE_UNTIL=$((NOW + WAKE_WINDOW))
+        AWAKE_UNTIL=$((NOW + WAKE_WINDOW)); AWAKE_T0=$NOW
         NEXT_WAKE_EPOCH=0
         set_light "$LIGHT_AWAKE"
         write_ui_state 0
+        case "$WAKE_REASON" in button|touch) en_add wake_btn ;; esac
         log "awake (${WAKE_REASON}) for ${WAKE_WINDOW}s, battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
-        # 10.9: task manager / hub-mode probe (looks only), at most every 10 minutes, in the background
-        # 10.9.1: never while the page is starting (it runs hundreds of tiny programs; the CPU is at power-save speed)
-        [ "$BOOT" != "1" ] && [ "$FIRST" != "1" ] && [ -f "$DIR/hub_sys.sh" ] && [ $((NOW - ${SYS_AT:-$NOW})) -ge 600 ] && { SYS_AT=$NOW; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & }
-        SYS_AT=${SYS_AT:-$NOW}
+        # (10.10: the task-manager probe only runs while Settings > System is open, or for SEND LOG)
     fi
 
-    # sync if due (3 min early-wake tolerance), on first start, but never retry more than every 15 min
-    if [ "$FIRST" = "1" ] || [ $((NOW - LAST_SYNC)) -ge $((SYNC_EVERY_MIN * 60 - 180)) ]; then
-        if [ $((NOW - LAST_SYNC_TRY)) -ge 900 ] || [ "$FIRST" = "1" ]; then start_sync; fi
+    # 10.10: no automatic syncs unless you chose them (Settings > Sleep > Sync). First start: only if the data is
+    # over 6 hours old. Never retried more than every 15 min.
+    if [ "$FIRST" = "1" ]; then
+        [ $((NOW - LAST_SYNC)) -ge 21600 ] && start_sync
+    elif [ "$SYNC_MODE" != "manual" ] && [ $((NOW - LAST_SYNC)) -ge $((SYNC_MODE * 3600 - 180)) ] && [ $((NOW - LAST_SYNC_TRY)) -ge 900 ]; then
+        start_sync
     fi
-    # woken by hand with no full sync due: still fetch list changes from the phone (quick)
-    if ! sync_running && cloud_ready && [ "$CLOUD_ON_WAKE" = "1" ]; then
-        case "$WAKE_REASON" in button|touch|start) start_sync lists ;; esac
+    # 10.10: the daily session (one Wi-Fi session: clock check, phone/Siri/PC commands + lists, new cloud data if
+    # any, update check, energy report + log). On the first timer wake at or after DAILY_HOUR each day.
+    if [ "$DAILY_SESSION" = "1" ] && [ "$WAKE_REASON" = "timer" ] && [ "$(date +%H | sed 's/^0//')" -ge "$DAILY_HOUR" ] && [ "$(cat "$DIR/.daily_day" 2>/dev/null)" != "$(date +%Y-%m-%d)" ]; then
+        date +%Y-%m-%d > "$DIR/.daily_day"
+        if sync_running; then log "daily session waits for the running sync"; else log "daily session"; start_sync daily; fi
     fi
-    # 10.2: once a day after 2 am, check GitHub for an update (and install it if you chose that)
-    if [ "$AUTO_UPDATE" != "0" ] && [ "$(date +%H)" -ge 2 ] && [ "$(cat "$DIR/.update_auto_day" 2>/dev/null)" != "$(date +%Y-%m-%d)" ] && grep -q 'PAGES_URL="*http' "$DIR/cloud.conf" 2>/dev/null; then
-        J="update-check"; [ "$AUTO_UPDATE" = "2" ] && [ ! -f "$DIR/.update/pending" ] && J="update-auto"
-        [ "$J" = "update-check" ] && date +%Y-%m-%d > "$DIR/.update_auto_day"
-        if sync_running; then echo "$J" > "$DIR/.job_next"; else log "job: $J (nightly)"; start_job "$J"; fi
+    # woken by hand: phone list changes only if you asked for that (Settings > Sleep)
+    if ! sync_running && cloud_ready && [ "$LISTS_ON_WAKE" = "1" ]; then
+        case "$WAKE_REASON" in button|touch) start_sync lists ;; esac
     fi
     CLOUD_DUE=0
     FIRST=0
@@ -1161,11 +1432,12 @@ while true; do
             CLOUD_DUE=0
             sync_running || start_sync lists
         fi
-        read_last_sync
-        if [ "$LAST_SYNC" != "$SEEN_SYNC" ]; then SEEN_SYNC="$LAST_SYNC"; write_ui_state 0; fi
+        # 10.10: a sync or edit burst finished: the page re-reads its data once (no timers re-reading it)
+        if sync_running; then SYNC_WAS=1; elif [ "$SYNC_WAS" = "1" ]; then SYNC_WAS=0; DATA_N=$((DATA_N + 1)); read_last_sync; SEEN_SYNC="$LAST_SYNC"; write_ui_state "$([ "$QUICK_ACTIVE" = 1 ] && echo 1 || echo 0)"; fi
         still_owner || { log "another loop owns $PIDF - exiting"; exit 0; }
     done
     SYNC_PID=""
+    [ "$QUICK_ACTIVE" != "1" ] && [ -n "$AWAKE_T0" ] && { en_add awake_s $(( $(date +%s) - AWAKE_T0 )); AWAKE_T0=""; }
 
     # 10.2: a fresh update must hear from the page; after two whole awake windows of silence it is undone
     if [ -f "$DIR/.update/pending" ]; then
@@ -1178,28 +1450,25 @@ while true; do
     fi
 
     NOW=$(date +%s)
-    smart_step                                   # 10.6: home / work / night interval
-    SECS=$((STEP - (NOW % STEP)))
-    [ "$SECS" -lt 60 ] && SECS=$((SECS + STEP))
-    if [ "$BOUND" -gt 0 ] && [ $((NOW + SECS)) -gt "$BOUND" ]; then SECS=$((BOUND - NOW)); [ "$SECS" -lt 60 ] && SECS=60; fi    # wake when the shift / night ends
-    NEXT_WAKE_EPOCH=$((NOW + SECS))
-    [ "$SMODE" != "fixed" ] && log "next wake $(fmt_epoch "$NEXT_WAKE_EPOCH") ($SMODE, every $((STEP / 60)) min)"
+    next_wake "$NOW"
+    log "next wake $(fmt_epoch "$NEXT_WAKE_EPOCH") ($NW_WHY); standby clock: $(tick_label "$NOW")"
 
-    # 10.9: the next timer wake will be a quick one (the page reads this before it sleeps)
-    QUICK_NEXT=0; [ "$QUICK_WAKE" = "1" ] && [ ! -f "$DIR/.update/pending" ] && QUICK_NEXT=1
+    QUICK_NEXT=1
     [ "$LIGHT_AWAKE" != keep ] && set_light 0      # only if you chose a light level for the hub
     write_ui_state 1
     write_log_js
     [ "$QUICK_ACTIVE" = "1" ] && sleep 3 || sleep 6   # give the page time to draw the standby frame before it is captured
-    QUICK_ACTIVE=0
 
-    [ "$SCREENSAVER_MODE" != "off" ] && capture_and_freeze_display
+    if [ "$SCREENSAVER_MODE" != "off" ]; then
+        PAINT_FULL=$HOURLY_NOW capture_and_freeze_display
+        # 10.10: the weather animation (~10 s) over the standby weather picture, on the hourly redraw
+        [ "$HOURLY_NOW" = "1" ] && [ "$WX_ANIM" = "1" ] && ! saver_on && play_wx_anim
+    fi
+    QUICK_ACTIVE=0; HOURLY_NOW=0
+    CLK_LAST=$(clock_glyphs)                   # what the page just drew; ticks only redraw digits that change
 
-    if [ "$MODE" = "eco" ] && [ "$CLOCK_MODE" = "min" ]; then
-        minute_sleep "$NEXT_WAKE_EPOCH"
-        SR=$?
-    elif [ "$MODE" = "eco" ]; then
-        suspend_for $((SECS - 3))
+    if [ "$MODE" = "eco" ]; then
+        sleep_clock "$NEXT_WAKE_EPOCH"
         SR=$?
     else
         SR=1
