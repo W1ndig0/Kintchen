@@ -468,3 +468,182 @@ selectTab = function(name) {
     __selectTab109b(name);
     if (name === "log") { loadScript("sys.js", function() { if (HUB_OPEN && curTab === "log") renderTaskManager(); }); renderTaskManager(); tmRefresh(); }
 };
+
+// ===================== 10. SMARTER LAYOUT: space where it's needed, filler cards, live boosts =====================
+//  * spare grid cells go first to tiles whose content didn't fit (measured after drawing, at most every 10 min)
+//  * an empty shopping list and an idle timer shrink to the smallest size
+//  * leftover cells show small filler cards (tomorrow's shift, sunset, the next holiday or event) instead of
+//    stretching a random tile
+//  * live boosts: a running timer, rain or a storm in the next 3 hours, a shift within 2 hours make that tile
+//    a size bigger (up to two tiles, kept at least 30 minutes so the screen doesn't jump every wake)
+// Settings > Look: "Smart space" and "Filler cards" (both on). Nothing changes while you edit the layout.
+var SPACE = { need: {}, measuredAt: 0, relaidAt: 0, boost: [], boostUntil: 0, boostSig: "" };
+function spaceOn() { return FEEL.space !== 0 && !EDIT && !PEEKED; }
+function fillersOn() { return FEEL.fillers !== 0 && spaceOn(); }
+function tileEmpty(id) {
+    if (id === "shop") { var a = itemsOf("shop"); for (var i = 0; i < a.length; i++) if (a[i].state === "open") return false; return true; }
+    if (id === "timer") return !(TIMER.end > new Date().getTime()) && !TIMER.done;
+    return false;
+}
+function rainSoon() {
+    if (!WX || !WX.hourly || !WX.hourly.time) return false;
+    var i0 = wxNowIndex(), h = WX.hourly, p = h.precipitation_probability || [], c = h.weather_code || [];
+    if (i0 < 0) return false;
+    for (var i = i0; i < i0 + 3 && i < h.time.length; i++) if ((p[i] || 0) >= 60 || (c[i] || 0) >= 95) return true;
+    return false;
+}
+function shiftSoon() {
+    try {
+        var up = upcomingShifts(1);
+        if (!up.length || up[0].i !== 0) return false;
+        var ps = parseShift(up[0].v); if (!ps) return false;
+        var n = getBCNow(), mins = n.getUTCHours() * 60 + n.getUTCMinutes(), d = ps.start - mins;
+        return d >= 0 && d <= 120;
+    } catch (e) { return false; }
+}
+function boostSignals() {
+    var ids = [], now = new Date().getTime();
+    if (TIMER.end > now || TIMER.done) ids.push("timer");
+    if (rainSoon()) ids.push("wx");
+    if (shiftSoon()) ids.push("shifts");
+    return ids;
+}
+var __eff109 = effectiveList;
+effectiveList = function(list, cols, rows, ok) {
+    var keep = FEEL.dyn, l, i, j;
+    FEEL.dyn = 0;
+    try { l = __eff109(list, cols, rows, ok); } finally { FEEL.dyn = keep; }
+    if (EDIT || PEEKED) return l;
+    if (spaceOn()) for (i = 0; i < l.length; i++) if (!l[i].hid && SIZE_KEYS.indexOf(l[i].sz) > 0 && tileEmpty(l[i].id)) l[i] = { id: l[i].id, sz: "S", hid: 0 };
+    if (!FEEL.dyn) return l;
+    var now = new Date().getTime(), want = [], seen = {}, cand = (SPACE.boostUntil > now ? SPACE.boost : []).concat(boostSignals(), dayPart()[3]);
+    for (i = 0; i < cand.length; i++) if (!seen[cand[i]]) { seen[cand[i]] = 1; want.push(cand[i]); }
+    var boosted = [];
+    for (j = 0; j < want.length && boosted.length < 2; j++) {
+        for (i = 0; i < l.length; i++) if (l[i].id === want[j] && !l[i].hid) break;
+        if (i === l.length) continue;
+        var s = SIZE_KEYS.indexOf(l[i].sz);
+        if (s < 0 || s >= 2) continue;                       // missing, or already big
+        var base = packTiles(l, cols, rows, LAYOUT.fill !== 0, ok), trial = [];
+        for (var k = 0; k < l.length; k++) trial.push({ id: l[k].id, sz: l[k].sz, hid: l[k].hid });
+        trial[i].sz = SIZE_KEYS[s + 1];
+        var t2 = packTiles(trial, cols, rows, LAYOUT.fill !== 0, ok), lost = false;
+        for (k = 0; k < l.length; k++) if (!l[k].hid && base[l[k].id] && !base[l[k].id].nofit && t2[l[k].id] && t2[l[k].id].nofit) lost = true;
+        if (!lost && t2[l[i].id] && t2[l[i].id].got === trial[i].sz) { l = trial; boosted.push(want[j]); }
+    }
+    var sig = boosted.join(",");
+    if (sig !== SPACE.boostSig) { SPACE.boostSig = sig; SPACE.boost = boosted; SPACE.boostUntil = now + 30 * 60000; }
+    return l;
+};
+// the packer: place every tile without stretching, then hand out the spare cells in this order:
+// tiles that overflowed, then filler cards (up to 3), then everyone else as before (down, then right)
+var __pack109 = packTiles;
+packTiles = function(list, cols, rows, fill, ok) {
+    if (!fill || !spaceOn()) return __pack109(list, cols, rows, fill, ok);
+    var out = __pack109(list, cols, rows, false, ok), occ = [], r, c, i, id;
+    for (r = 0; r < rows; r++) { occ[r] = []; for (c = 0; c < cols; c++) occ[r][c] = 0; }
+    function free(c0, r0, w, h) {
+        if (c0 + w > cols || r0 + h > rows) return false;
+        for (var rr = r0; rr < r0 + h; rr++) for (var cc = c0; cc < c0 + w; cc++) if (occ[rr][cc]) return false;
+        return true;
+    }
+    function mark(c0, r0, w, h, v) { for (var rr = r0; rr < r0 + h; rr++) for (var cc = c0; cc < c0 + w; cc++) occ[rr][cc] = v; }
+    var placed = [];
+    for (i = 0; i < list.length; i++) { id = list[i].id; var p = out[id]; if (p && !p.hidden && !p.nofit && p.w) { mark(p.c, p.r, p.w, p.h, id); placed.push(id); } }
+    function grow(id) {
+        var p = out[id];
+        while (free(p.c, p.r + p.h, p.w, 1)) { mark(p.c, p.r + p.h, p.w, 1, id); p.h++; p.grew = 1; }
+        while (free(p.c + p.w, p.r, 1, p.h)) { mark(p.c + p.w, p.r, 1, p.h, id); p.w++; p.grew = 1; }
+    }
+    for (i = 0; i < placed.length; i++) if (SPACE.need[placed[i]] === 2) grow(placed[i]);
+    out.__fillers = [];
+    if (fillersOn()) {
+        var cards = fillerCards().length;
+        for (r = 0; r < rows && out.__fillers.length < Math.min(cards, 3); r++) for (c = 0; c < cols && out.__fillers.length < Math.min(cards, 3); c++)
+            if (!occ[r][c]) { occ[r][c] = "__filler"; out.__fillers.push([c, r]); }
+    }
+    for (i = 0; i < placed.length; i++) if (SPACE.need[placed[i]] !== 2 && !tileEmpty(placed[i])) grow(placed[i]);
+    for (i = 0; i < placed.length; i++) grow(placed[i]);          // last resort: better a roomy empty tile than a blank hole
+    var empty = 0;
+    for (r = 0; r < rows; r++) for (c = 0; c < cols; c++) if (!occ[r][c]) empty++;
+    out.__empty = empty;
+    return out;
+};
+// filler cards: small, only when there's something worth saying
+var FILLER_EXTRA = [];            // other parts of 10.9 (the bird of the hour) add card makers here
+function fillerCards() {
+    var out = [], i;
+    try {
+        var up = upcomingShifts(3);
+        for (i = 0; i < up.length; i++) if (up[i].i === 1) { out.push(["TOMORROW", esc(shortShift(up[i].v))]); break; }
+    } catch (e) {}
+    var d = WX && WX.daily;
+    if (d && d.sunset && d.sunrise) {
+        var n = getBCNow(), mins = n.getUTCHours() * 60 + n.getUTCMinutes();
+        out.push(mins < isoMin(d.sunset[0]) ? ["SUNSET", fmtClock(d.sunset[0])] : ["SUNRISE", fmtClock(d.sunrise[1] || d.sunrise[0])]);
+    }
+    try {
+        var k = todayKey();
+        for (i = 1; i <= 45; i++) { var hk = addDays(k, i), hol = HubCal.holiday(hk); if (hol) { out.push([i === 1 ? "TOMORROW" : "IN " + i + " DAYS", esc(hol)]); break; } }
+    } catch (e) {}
+    try {
+        var ne = nextEvents(4);
+        for (i = 0; i < ne.length; i++) if (ne[i].i >= 1) { out.push([ne[i].i === 1 ? "TOMORROW" : prettyDay(ne[i].d).split(",")[0].toUpperCase(), esc(ne[i].e.title)]); break; }
+    } catch (e) {}
+    for (i = 0; i < FILLER_EXTRA.length; i++) { try { var x = FILLER_EXTRA[i](); if (x) out.push(x); } catch (e) {} }
+    return out;
+}
+var __placeTiles109 = placeTiles;
+placeTiles = function() {
+    __placeTiles109();
+    var old = document.getElementsByClassName ? document.getElementsByClassName("v9-filler") : [], i;
+    while (old.length) old[0].parentNode.removeChild(old[0]);
+    var F = PLACED && PLACED.__fillers;
+    if (!F || !F.length) return;
+    var ok = orientKey(), g = GRID_DIMS[ok], cols = g[0], rows = g[1], GW = W - tagReserve().r, cards = fillerCards();
+    for (i = 0; i < F.length && i < cards.length; i++) {
+        var c = F[i][0], r = F[i][1], el = document.createElement("div");
+        var x = Math.round(c * GW / cols), x2 = Math.round((c + 1) * GW / cols), y = GRID_Y + Math.round(r * GRID_H / rows), y2 = GRID_Y + Math.round((r + 1) * GRID_H / rows);
+        el.className = "tile sz-s v9-filler";
+        el.style.borderRightWidth = (c + 1 < cols) ? "3px" : "0"; el.style.borderBottomWidth = (r + 1 < rows) ? "3px" : "0";
+        el.innerHTML = "<div class='v9-fin'><div class='v9-fk'>" + cards[i][0] + "</div><div class='v9-fv'>" + cards[i][1] + "</div></div>";
+        ($("t-clock") ? $("t-clock").parentNode : $("root")).appendChild(el);      // with the tiles (inside the stage, beside the rail)
+        place(el, x, y, x2 - x, y2 - y);
+        try { fitText(el.firstChild, 9, FS * 2.2); } catch (e) {}
+    }
+};
+(function() {
+    var css = document.createElement("style");
+    css.innerHTML = ".v9-filler { display: block; overflow: hidden; } .v9-fin { position: absolute; left: 8%; right: 8%; top: 10%; bottom: 10%; display: table; width: 84%; height: 80%; }" +
+        ".v9-fk { font-family: Helvetica, Arial, sans-serif; font-weight: 900; letter-spacing: .14em; font-size: .7em; margin-bottom: .3em; }" +
+        ".v9-fv { font-family: Georgia, serif; font-weight: bold; line-height: 1.15; }";
+    document.getElementsByTagName("head")[0].appendChild(css);
+})();
+// after drawing: which tiles didn't fit (they get spare cells at the next layout)
+var __renderAll109 = renderAllTiles;
+renderAllTiles = function() {
+    __renderAll109();
+    var now = new Date().getTime();
+    if (!spaceOn() || HUB.sleeping || now - SPACE.measuredAt < 120000) return;
+    SPACE.measuredAt = now;
+    var changed = false;
+    for (var i = 0; i < TILE_IDS.length; i++) {
+        var id = TILE_IDS[i], p = PLACED[id];
+        if (!p || p.hidden || p.nofit || !p.w) continue;
+        var n = 0; try { n = overflowing($("t-" + id)) ? 2 : 0; } catch (e) {}
+        if ((SPACE.need[id] || 0) !== n) { SPACE.need[id] = n; changed = true; }
+    }
+    if (changed && now - SPACE.relaidAt > 10 * 60000) { SPACE.relaidAt = now; setTimeout(relayout, 50); }
+};
+// Settings > Look
+var __feel109 = buildFeelOpts;
+buildFeelOpts = function() {
+    __feel109();
+    var pane = $("pane-feel"), box = $("v9-space");
+    if (!pane) return;
+    if (!box) { box = document.createElement("div"); box.id = "v9-space"; pane.appendChild(box); }
+    box.innerHTML = "<div class='hv-row'><div class='hv-lbl'>Smart space</div><div id='opt-space'></div><div class='hv-hint'>Spare room goes to tiles whose content didn't fit; an empty shopping list or idle timer shrinks. Needs Fill gaps on (Tiles tab).</div></div>" +
+        "<div class='hv-row'><div class='hv-lbl'>Filler cards</div><div id='opt-fillers'></div><div class='hv-hint'>Small cards in leftover space: tomorrow's shift, sunset, the next holiday or event.</div></div>";
+    chipRow("opt-space", [1, 0], ["On", "Off"], FEEL.space === 0 ? 0 : 1, function(v) { FEEL.space = v; saveFeel(); SPACE.need = {}; relayout(); });
+    chipRow("opt-fillers", [1, 0], ["On", "Off"], FEEL.fillers === 0 ? 0 : 1, function(v) { FEEL.fillers = v; saveFeel(); relayout(); });
+};
