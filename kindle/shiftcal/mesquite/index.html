@@ -992,6 +992,7 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
 <script src="hub_items.js"></script>
 <script src="cloud.js"></script>
 <script src="portkey.js"></script>
+<script src="totp.js"></script>
 <script src="horo.js"></script>
 <script src="data.js"></script>
 <script>
@@ -3531,7 +3532,35 @@ var HubCrypt = (function() {
     }
     function isLocked(text) { return String(text).charAt(0) === "~"; }
     function hex(b) { var s = ""; for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? "0" : "") + b[i].toString(16); return s; }
-    return { sha256: sha256, utf8: utf8, lock: lock, unlock: unlock, isLocked: isLocked, hex: hex };
+    // 10.9: during a key change, text locked with the old passphrase must still open. keys: [new, old, ...]
+    function unlockAny(text, keys) {
+        if (String(text).charAt(0) !== "~") return text;
+        for (var i = 0; i < keys.length; i++) if (keys[i]) { var r = unlock(text, keys[i]); if (r !== null) return r; }
+        return null;
+    }
+    // 10.9: random bytes from the system's secure source; where an old browser has none (the Kindle), a
+    // SHA-256 of a secret the device already holds (extra) plus time and a counter, so nobody else can predict it
+    var rseq = 0;
+    function randomBytes(n, extra) {
+        var out = [], i, cr = null;
+        try { cr = typeof crypto !== "undefined" ? crypto : (typeof window !== "undefined" ? window.crypto || window.msCrypto : null); } catch (e) { cr = null; }
+        if (cr && cr.getRandomValues) { var a = new Uint8Array(n); cr.getRandomValues(a); for (i = 0; i < n; i++) out.push(a[i]); return out; }
+        while (out.length < n) out = out.concat(sha256(utf8(String(extra || "") + "|" + new Date().getTime() + "|" + Math.random() + "|" + (++rseq))));
+        return out.slice(0, n);
+    }
+    // 10.9: sealed pairing links. The link carries the gist, token and passphrase locked with a one-time code
+    // that is shown NEXT TO the QR, never inside it: a copied, forwarded or photographed link alone opens nothing.
+    var CODE_ABC = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";      // no 0/O, 1/I/L
+    function pairCode(n, extra) { var b = randomBytes(n || 10, extra), s = ""; for (var i = 0; i < b.length; i++) s += CODE_ABC.charAt(b[i] % CODE_ABC.length); return s; }
+    function normCode(c) { return String(c || "").toUpperCase().replace(/[^0-9A-Z]/g, ""); }
+    function seal(obj, code) { return lock(JSON.stringify(obj), "pair|" + normCode(code)); }
+    function unseal(blob, code) {
+        var t = unlock(String(blob || ""), "pair|" + normCode(code));
+        if (t === null || t === String(blob)) return null;
+        try { var o = JSON.parse(t); return o && typeof o === "object" ? o : null; } catch (e) { return null; }
+    }
+    return { sha256: sha256, utf8: utf8, lock: lock, unlock: unlock, unlockAny: unlockAny, isLocked: isLocked, hex: hex,
+             randomBytes: randomBytes, pairCode: pairCode, normCode: normCode, seal: seal, unseal: unseal };
 })();
 
 /* ---------------- HubCal: shifts, events, Canada/BC statutory holidays ----------------

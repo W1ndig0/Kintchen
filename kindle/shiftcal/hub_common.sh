@@ -96,7 +96,7 @@ hc_kill_tree() { hc_alive "$1" || return 0; HK="$(hc_tree "$1") $1"; hc_stop_pid
 # given to the page as mesquite/portkey.js. Sets HC_PORT_KEY. run_hub.sh calls it before the page opens, so
 # the page always starts with the key; power_loop.sh calls it again (no change if the key exists).
 hub_port_key() {
-    HC_PORT_KEY=$(tr -cd 'a-f0-9' < "$HC_DIR/.port_key" 2>/dev/null | cut -c1-32)
+    HC_PORT_KEY=$(tr -cd 'a-f0-9' 2>/dev/null < "$HC_DIR/.port_key" | cut -c1-32)
     if [ ${#HC_PORT_KEY} -lt 32 ]; then
         HC_PORT_KEY=$(od -An -tx1 -N16 /dev/urandom 2>/dev/null | tr -cd 'a-f0-9' | cut -c1-32)
         [ ${#HC_PORT_KEY} -lt 32 ] && HC_PORT_KEY=$( (date +%s; echo $$; cat /proc/uptime /proc/interrupts 2>/dev/null) | sha256sum | cut -c1-32)
@@ -106,6 +106,51 @@ hub_port_key() {
     HC_PK_JS="window.HUB_PORTKEY=\"$HC_PORT_KEY\";"
     [ "$(cat "$HC_DIR/mesquite/portkey.js" 2>/dev/null)" = "$HC_PK_JS" ] || { echo "$HC_PK_JS" > "$HC_DIR/mesquite/portkey.js.tmp" && mv "$HC_DIR/mesquite/portkey.js.tmp" "$HC_DIR/mesquite/portkey.js"; }
 }
+
+# 10.9: the authenticator (TOTP) secret: 20 random bytes as base32, kept in .totp (private). The page gets it
+# in mesquite/totp.js (with on:1 once you have added it to your authenticator app and entered a code), and
+# checks codes itself. .totp_on marks that setup is finished.
+hub_totp_init() {
+    HC_TOTP=$(tr -cd 'A-Z2-7' 2>/dev/null < "$HC_DIR/.totp" | cut -c1-32)
+    if [ ${#HC_TOTP} -lt 32 ]; then
+        HC_TOTP=$(od -An -tu1 -N20 /dev/urandom 2>/dev/null | awk '
+            BEGIN { A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567" }
+            { for (i = 1; i <= NF; i++) { buf = buf * 256 + $i; bits += 8; while (bits >= 5) { bits -= 5; v = int(buf / 2 ^ bits); buf -= v * 2 ^ bits; out = out substr(A, v + 1, 1) } } }
+            END { print out }')
+        [ ${#HC_TOTP} -lt 32 ] && return 1
+        ( umask 077; echo "$HC_TOTP" > "$HC_DIR/.totp" )
+        rm -f "$HC_DIR/.totp_on"
+        hc_log "made a new authenticator secret (not set up yet)"
+    fi
+    HC_TOTP_ON=0; [ -f "$HC_DIR/.totp_on" ] && HC_TOTP_ON=1
+    HC_TJ="window.HUB_TOTP={secret:\"$HC_TOTP\",on:$HC_TOTP_ON};"
+    [ "$(cat "$HC_DIR/mesquite/totp.js" 2>/dev/null)" = "$HC_TJ" ] || { echo "$HC_TJ" > "$HC_DIR/mesquite/totp.js.tmp" && mv "$HC_DIR/mesquite/totp.js.tmp" "$HC_DIR/mesquite/totp.js"; }
+    return 0
+}
+# 10.9: may this Kindle use the cloud? A first connection needs an authenticator code on the Kindle (.cloud_ok).
+# A Kindle that already synced before 10.9 (it has the last copy seen on GitHub) is allowed without asking.
+hub_cloud_allowed() {
+    [ -f "$HC_DIR/.cloud_ok" ] && return 0
+    if [ -s "$HC_DIR/.cloud_remote.tsv" ]; then date +%s > "$HC_DIR/.cloud_ok"; hc_log "cloud: already connected before 10.9 - allowed"; return 0; fi
+    return 1
+}
+
+# 10.9: set (or with an empty value, remove) one KEY=value line in cloud.conf, keeping every other line.
+# Values are checked here (only [A-Za-z0-9_:/.-]) so the file stays safe to source; it stays private.
+hub_conf_set() {
+    HCF="$HC_DIR/cloud.conf"
+    [ -f "$HCF" ] || return 1
+    case "$2" in *[!A-Za-z0-9_:/.-]*) return 1 ;; esac
+    ( umask 077
+      awk -v k="$1" -v v="$2" 'BEGIN { done = 0 }
+          { line = $0; sub(/\r$/, "", line) }
+          line ~ ("^" k "=") { if (v != "" && !done) { print k "=" v; done = 1 } next }
+          { print }
+          END { if (v != "" && !done) print k "=" v }' "$HCF" > "$HCF.tmp" ) && mv "$HCF.tmp" "$HCF"
+}
+# The passphrase a Kindle used before 10.9 when cloud.conf had none. Kept ONLY so lists locked with it can
+# still be opened and moved to new keys (Settings > Security > MAKE NEW KEYS). It is public: never choose it.
+hc_legacy_pass() { printf '%s' "Holy"; }
 
 # Put back what the loop changes while it runs. Safe to call any time; used after a KILL.
 hc_repair_system() {

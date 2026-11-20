@@ -240,6 +240,19 @@ do_sync() {
     write_js
 }
 
+# 10.9: the first connection to the cloud needs an authenticator code on the Kindle (Settings > Security).
+# Until then nothing is sent to or fetched from GitHub; lists keep working on the fridge alone.
+cloud_gate() {
+    HC_DIR=$DIR; HC_WHO=cloud
+    . "$DIR/hub_common.sh" 2>/dev/null || return 0
+    hub_cloud_allowed && return 0
+    echo "waiting for the authenticator code (Settings > Security)" > "$STF"; write_js
+    say "not connected yet: enter an authenticator code on the Kindle first (Settings > Security)"
+    return 1
+}
+case "$1" in
+    sync|status|log) [ -n "$GIST_ID" ] && [ -n "$GH_TOKEN" ] && { cloud_gate || exit 0; } ;;
+esac
 case "$1" in
     sync) do_sync ;;
     add)

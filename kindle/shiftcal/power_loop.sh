@@ -424,6 +424,7 @@ command -v nc >/dev/null 2>&1 && HAVE_NC=1
 # served over the network (the port only ever answers "ok").
 # (hub_port_key, in hub_common.sh, also runs in run_hub.sh BEFORE the page opens)
 hub_port_key; PORT_KEY=$HC_PORT_KEY
+hub_totp_init
 KEY_BAD_LOGGED=0
 qv() { echo "$QS" | tr '&' '\n' | sed -n "s/^$1=//p" | head -1; }
 num_or_empty() { case "$1" in ''|*[!0-9]*) echo "" ;; *) echo "$1" ;; esac; }
@@ -572,6 +573,25 @@ poll_settings_http() {
         case "$V" in 1) PHONE_ALERTS=1 ;; *) PHONE_ALERTS=0 ;; esac
         CHANGED=1; write_cloud_js; log "phone alerts: $PHONE_ALERTS"
     fi
+    # ---- 10.9: security (the page asks for an authenticator code before it sends any of these) ----
+    if [ "$(qv totpon)" = "1" ] && [ ! -f "$DIR/.totp_on" ]; then
+        date +%s > "$DIR/.totp_on"; hub_totp_init; log "authenticator set up"
+    fi
+    if [ "$(qv cloudok)" = "1" ] && [ -f "$DIR/.totp_on" ] && [ ! -f "$DIR/.cloud_ok" ]; then
+        date +%s > "$DIR/.cloud_ok"; log "cloud: first connection allowed (authenticator code entered)"
+        write_cloud_js; CLOUD_DUE=$((NOWQ + 5)); NEWU=$((NOWQ + 90)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+    fi
+    GT=$(qv ghtoken)
+    if [ -n "$GT" ] && [ -f "$DIR/.totp_on" ]; then        # a new GitHub token, handed over by the phone (locked in the gist)
+        case "$GT" in
+            *[!A-Za-z0-9_]*) log "new GitHub token refused (odd characters)" ;;
+            *) if [ ${#GT} -ge 20 ] && [ ${#GT} -le 255 ] && hub_conf_set GH_TOKEN "$GT"; then log "GitHub token replaced"; write_cloud_js; else log "new GitHub token refused"; fi ;;
+        esac
+    fi
+    if [ "$(qv rotate)" = "1" ] && [ -f "$DIR/.totp_on" ]; then rotate_keys; fi
+    if [ "$(qv keysdone)" = "1" ] && [ -f "$DIR/.totp_on" ]; then
+        rm -f "$DIR/.pass_old"; hub_conf_set PASSPHRASE_OLD ""; log "key change finished: the old passphrase is forgotten"; write_cloud_js
+    fi
     if [ "$(qv exit)" = "1" ]; then
         log "exit requested from the hub - stopping"
         write_ui_state 0
@@ -659,17 +679,45 @@ notify_phone() {
         [ "$WAS" = "CONNECTED" ] || sync_running || wifi_off
     ) &
 }
+# 10.9: MAKE NEW KEYS (Settings > Security, after an authenticator code). New passphrase, alert topic and
+# monitor topic, all from the Kindle's random source. The passphrase before this one is kept as
+# PASSPHRASE_OLD so everything locked with it still opens until the page has re-locked it and you tap
+# FINISH; the phone, PC and TV get the new keys from a new sealed pairing code on the Kindle.
+rand_b32() { od -An -tu1 -N"$1" /dev/urandom 2>/dev/null | awk 'BEGIN { A = "ABCDEFGHJKMNPQRSTUVWXYZ23456789" } { for (i = 1; i <= NF; i++) printf "%s", substr(A, $i % 31 + 1, 1) }'; }
+rotate_keys() {
+    [ -f "$DIR/cloud.conf" ] || { log "new keys: no cloud.conf"; return; }
+    OLDP=$( PASSPHRASE="@unset@"; . "$DIR/cloud.conf" >/dev/null 2>&1; [ "$PASSPHRASE" = "@unset@" ] && PASSPHRASE=$(hc_legacy_pass); printf '%s' "$PASSPHRASE" )
+    R=$(rand_b32 24)
+    [ ${#R} = 24 ] || { log "new keys: no random source - nothing changed"; return; }
+    NEWP=$(echo "$R" | sed 's/\(....\)/\1-/g; s/-$//')         # XXXX-XXXX-XXXX-XXXX-XXXX-XXXX (about 118 bits)
+    NTN="kitchenhub-$(od -An -tx1 -N10 /dev/urandom | tr -cd 'a-f0-9')"
+    MTN="khscreen-$(od -An -tx1 -N10 /dev/urandom | tr -cd 'a-f0-9')"
+    # the old one goes in its own private file (any characters), not cloud.conf; FINISH deletes it
+    [ -n "$OLDP" ] && ( umask 077; printf '%s' "$OLDP" > "$DIR/.pass_old" )
+    hub_conf_set PASSPHRASE "$NEWP" || { rm -f "$DIR/.pass_old"; log "new keys: could not write cloud.conf"; return; }
+    hub_conf_set NTFY_TOPIC "$NTN"; hub_conf_set MON_TOPIC "$MTN"
+    date +%s > "$DIR/.keys_at"
+    write_cloud_js
+    log "new keys made (passphrase, alert topic, monitor topic) - re-pair the phone, PC and TV, then update the GitHub secrets"
+}
 write_cloud_js() {
     NT=$(ntfy_topic)
     if [ -f "$DIR/cloud.conf" ]; then
-        ( GIST_ID=""; GH_TOKEN=""; PAGES_URL=""; PASSPHRASE="Holy"; . "$DIR/cloud.conf"
+        # 10.9: pass0 = the passphrase before the last key change (still opens older items); legacy=1 when
+        # cloud.conf has no PASSPHRASE and the pre-10.9 built-in one is in use (the page asks you to make new
+        # keys); mon = the kitchen monitor's topic; cok = this Kindle may use the cloud (authenticator code given)
+        ( GIST_ID=""; GH_TOKEN=""; PAGES_URL=""; PASSPHRASE="@unset@"; PASSPHRASE_OLD=""; MON_TOPIC=""; . "$DIR/cloud.conf"
+          LEG=0; [ "$PASSPHRASE" = "@unset@" ] && { PASSPHRASE=$(hc_legacy_pass); LEG=1; }      # no PASSPHRASE line at all (PASSPHRASE= empty means no lock, as before)
+          [ -z "$PASSPHRASE_OLD" ] && [ -s "$DIR/.pass_old" ] && PASSPHRASE_OLD=$(cat "$DIR/.pass_old")
           Q() { echo "$1" | sed 's/[\\"]//g'; }
           LK() { sed -n "s/^$1=\\([A-Za-z0-9:/._-]*\\)\$/\\1/p" "$DIR/.cloud_links" 2>/dev/null | head -1; }
           CDA=$(cat "$DIR/.cloud_data_at" 2>/dev/null | tr -cd '0-9'); BA=$(LK BRAIN_AT | tr -cd '0-9')
-          printf 'window.HUB_CLOUD={pages:"%s",gist:"%s",token:"%s",pass:"%s",wake:%s,ntfy:"%s",alerts:%s,cdata:%s,cdataAt:%s,ics:"%s",ics2:"%s",tv:"%s",cgist:"%s",brainAt:%s};\n' "$(Q "$PAGES_URL")" "$(Q "$GIST_ID")" "$(Q "$GH_TOKEN")" "$(Q "$PASSPHRASE")" "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" \
+          COK=0; hub_cloud_allowed && COK=1
+          KAT=$(cat "$DIR/.keys_at" 2>/dev/null | tr -cd '0-9')
+          printf 'window.HUB_CLOUD={pages:"%s",gist:"%s",token:"%s",pass:"%s",pass0:"%s",legacy:%s,mon:"%s",cok:%s,keysAt:%s,wake:%s,ntfy:"%s",alerts:%s,cdata:%s,cdataAt:%s,ics:"%s",ics2:"%s",tv:"%s",cgist:"%s",brainAt:%s};\n' "$(Q "$PAGES_URL")" "$(Q "$GIST_ID")" "$(Q "$GH_TOKEN")" "$(Q "$PASSPHRASE")" "$(Q "$PASSPHRASE_OLD")" "$LEG" "$(Q "$MON_TOPIC")" "$COK" "${KAT:-0}" "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" \
               "$USE_CLOUD_DATA" "${CDA:-0}" "$(LK ICS_URL)" "$(LK ICS2_URL)" "$(LK TV_REF)" "$(LK CLOUD_GIST)" "${BA:-0}" > "$MESQ/cloud.js.tmp" && mv "$MESQ/cloud.js.tmp" "$MESQ/cloud.js" )
     else
-        printf 'window.HUB_CLOUD={pages:"",gist:"",token:"",pass:"",wake:%s,ntfy:"%s",alerts:%s};\n' "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" > "$MESQ/cloud.js"
+        printf 'window.HUB_CLOUD={pages:"",gist:"",token:"",pass:"",pass0:"",legacy:0,mon:"",cok:0,keysAt:0,wake:%s,ntfy:"%s",alerts:%s};\n' "$CLOUD_ON_WAKE" "$NT" "$PHONE_ALERTS" > "$MESQ/cloud.js"
     fi
 }
 CURL_BIN=/usr/bin/curl; [ -x "$CURL_BIN" ] || CURL_BIN=curl

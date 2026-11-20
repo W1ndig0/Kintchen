@@ -189,6 +189,7 @@ if [ "$PILLOW_DISABLE" != "0" ]; then
 fi
 echo "boot $(date +%s)" > "$DIR/.boot"
 hub_port_key      # 10.9: the page must open WITH the settings-port key (mesquite/portkey.js)
+hub_totp_init     # 10.9: and with the authenticator secret (mesquite/totp.js)
 if ! hub_start_page 30; then rm -f "$DIR/.boot"; STEP=10; [ "$HIDE_BAR" = "1" ] && show_bar_again; fail "the Kindle would not open the page"; fi
 echo "mesquite active, pid=$(cat "$MESQ_PIDF" 2>/dev/null)"
 if [ "$HIDE_BAR" = "1" ]; then
