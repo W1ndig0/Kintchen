@@ -27,6 +27,9 @@ mkdir -p "$T" "$DIR/mesquite"
 
 merge() { sh "$DIR/hub_merge.sh" "$@"; }
 say() { echo "$(date '+%m-%d %H:%M:%S') [cloud] $*" >> "$LOG"; }
+# 10.10.3: a stamp file cut off mid-write is not a number, and "$(( NOWS -  ))" ends the script (the lists
+# sync would stop half way through).
+num0() { V0=$(tr -cd '0-9' < "$1" 2>/dev/null | cut -c1-12); case "$V0" in '') echo 0 ;; *) echo "$V0" ;; esac; }
 urldecode() { printf '%b' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/+/ /g' -e 's/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')"; }     # 10.5: a typed backslash stays a backslash
 
 # hub.tsv is changed by "add" (from the page) while a sync may be running: every read-modify-write
@@ -240,8 +243,8 @@ do_sync() {
     echo "ok $(date +%s)" > "$STF"
     # 9.8.5: tell the phone/TV/cloud how the fridge is doing (at most every 20 min), and a daily log
     NOWS=$(date +%s)
-    [ $((NOWS - $(cat "$DIR/.status_at" 2>/dev/null || echo 0))) -ge 1200 ] && do_status
-    [ "${DAILY_LOG:-1}" = "1" ] && [ $((NOWS - $(cat "$DIR/.log_up_at" 2>/dev/null || echo 0))) -ge 86400 ] && [ -s "$DIR/.cloud_links" ] && do_log
+    [ $((NOWS - $(num0 "$DIR/.status_at"))) -ge 1200 ] && do_status
+    [ "${DAILY_LOG:-1}" = "1" ] && [ $((NOWS - $(num0 "$DIR/.log_up_at"))) -ge 86400 ] && [ -s "$DIR/.cloud_links" ] && do_log
     if [ $SAME = 1 ]; then [ $PUSHED = 1 ] && say "lists synced, $N items (uploaded)"; else say "lists: still changing after $ROUND rounds, will finish next time"; fi
     write_js
 }

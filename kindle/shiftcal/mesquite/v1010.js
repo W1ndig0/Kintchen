@@ -40,9 +40,28 @@ if (FEEL.rail === 0) { FEEL.rail = 1; try { saveFeel(); } catch (e) {} }
 
 // ---------------------------------------------------------------- data only when it changed
 var DN_SEEN = null, SLEEP_WAS10 = null;
+// 10.10.3: two safety nets, after a freeze that left nothing in the log at all.
+//  * If anything in the state chain throws, the page says so once and carries on. Before, one bad element
+//    could throw on every poll and the screen would sit there with nothing to show for it.
+//  * state.js is a script: if the loop ever writes a file that doesn't parse, the browser still reports a
+//    successful load and the page quietly keeps its LAST state for ever. The loop stamps "now" into every
+//    write, so a "now" that stops moving while the hub should be awake means exactly that - say so once.
+var ST10_ERR = 0, ST10_NOW = 0, ST10_AT = 0, ST10_SAID = 0;
+function st10Watch(s) {
+    var t = new Date().getTime(), n = parseInt(s && s.now, 10) || 0;
+    if (n !== ST10_NOW) { ST10_NOW = n; ST10_AT = t; ST10_SAID = 0; return; }
+    if (ST10_SAID || !ST10_AT || t - ST10_AT < 150000) return;
+    if (HUB.sleeping) { ST10_AT = t; return; }                       // asleep: the loop is not writing anyway
+    ST10_SAID = 1;
+    khSay("pgerr=" + encodeURIComponent("state.js has not changed for " + Math.round((t - ST10_AT) / 1000) + "s - it may not be valid JavaScript"));
+}
 var __applyState1010 = applyState;
 applyState = function(s) {
-    __applyState1010(s);
+    st10Watch(s);
+    try { __applyState1010(s); } catch (e) {
+        ST10_ERR++;
+        if (ST10_ERR <= 2) khSay("pgerr=" + encodeURIComponent("state: " + e));
+    }
     if (!s) return;
     if (s.dataN !== undefined) {
         var dn = parseInt(s.dataN, 10) || 0;
@@ -318,6 +337,7 @@ renderTray = function(mid) {
 };
 
 // ---------------------------------------------------------------- Settings > Sleep: the 10.10 settings
+var EN10_TRIED = 0;
 function s10Row(id, label, hint) { return "<div class='hv-row'><div class='hv-lbl'>" + label + "</div><div id='" + id + "'></div>" + (hint ? "<div class='hv-hint'>" + hint + "</div>" : "") + "</div>"; }
 var __buildSmart1010 = buildSmartOpts;
 buildSmartOpts = function() {
@@ -362,7 +382,8 @@ buildSmartOpts = function() {
     row("opt-lowb", [1, 0], ["On", "Off"], S.lowSaver === 0 ? 0 : 1, "lowsaver");
     row("opt-cdraw", ["auto", "page"], ["Automatic", "The page"], S.clockDraw || "auto", "clockdraw");
     chipRow("opt-light", [-1, 0, 4, 8, 12, 16, 20, 24], ["Kindle's own", "Off", "4", "8", "12", "16", "20", "24"], PWR.light, function(v) { PWR.light = v; sendPower("light=" + (v < 0 ? "keep" : v)); });
-    loadScript("energy.js", function() {});
+    // 10.10.3: the report is loaded once and the pane built again, so it shows the first time you open this
+    if (!window.HUB_ENERGY && !EN10_TRIED) { EN10_TRIED = 1; loadScript("energy.js", function() { if (window.HUB_ENERGY) buildSmartOpts(); }); }
     if (typeof HVS !== "undefined") HVS.sig = "";
 };
 // the Status table: the real schedule instead of the old "Wakes every"

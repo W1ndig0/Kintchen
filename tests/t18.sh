@@ -5,8 +5,8 @@ ok() { echo "PASS $*"; }; bad() { echo "FAIL $*"; }
 export HUB_BOOT_WAIT=40
 sh "$HUB_DIR/run_hub.sh" eco >/dev/null 2>&1
 ping_nokey "boot=10.9.1" >/dev/null; sleep 3
-grep -q 'page is up after' "$HUB_DIR/power.log" && ok "start-up gets through without the key" || bad "keyless page not let through: $(tail -3 "$HUB_DIR/power.log")"
-grep -q 'a request with NO key' "$HUB_DIR/power.log" && ok "the log says the page sent no key" || bad "no diagnosis in the log"
+waitfor 'grep -q "page is up after" "$HUB_DIR/power.log"' 20 && ok "start-up gets through without the key" || bad "keyless page not let through: $(tail -3 "$HUB_DIR/power.log")"
+waitfor 'grep -q "a request with NO key" "$HUB_DIR/power.log"' 20 && ok "the log says the page sent no key" || bad "no diagnosis in the log: $(tail -3 "$HUB_DIR/power.log")"
 ping_nokey "snooze=65&rid=9101" >/dev/null; sleep 3
 grep -q 'staying awake 65s' "$HUB_DIR/power.log" && bad "an action without the key was carried out" || ok "actions still need the key"
 sleep 45

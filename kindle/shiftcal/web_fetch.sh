@@ -41,7 +41,9 @@ case "$CODE" in 2*) ;; 000) ERR="Couldn't reach the site" ;; *) [ -z "$ERR" ] &&
 {
     printf 'window.HUB_WEB={id:"%s",url:"%s",final:"%s",code:%s,err:"%s",ts:%s,html:"' "$ID" "$ESCU" "${FINAL:-$ESCU}" "${CODE:-0}" "$ERR" "$(date +%s)"
     # 700 KB is plenty of article; bigger pages are cut (the reader says so). JS-string safe: \ " CR, and U+2028/9.
-    head -c 700000 "$T/page" 2>/dev/null | tr -d '\000\r' | awk 'BEGIN { ORS = "" } {
+    # 10.10.3: also drop the other control characters (the Kindle's engine can stop at one, like data.js did)
+    # and any half character left by the byte-wise cut, so the file always parses.
+    head -c 700000 "$T/page" 2>/dev/null | tr -d '\000-\010\013-\037' | sed "$(printf '$s/[\302-\364][\200-\277]*$//')" | awk 'BEGIN { ORS = "" } {
         gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); gsub(/\342\200\250|\342\200\251/, " "); print $0 "\\n" }'
     printf '"};\n'
 } > "$OUT.tmp" && mv "$OUT.tmp" "$OUT"
