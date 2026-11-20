@@ -339,3 +339,77 @@ function pickUpToken() {
 // after every items reload: move old-locked items to the new key, pick up a new token
 var __applyItems109 = applyItems;
 applyItems = function() { __applyItems109(); try { relockOld(); pickUpToken(); } catch (e) {} };
+
+// ===================== 8. POWER: quick timer wakes, the standby clock, the frontlight =====================
+// The loop says in state.js whether the next timer wake is a quick one (quick:1) and how the standby clock
+// works (clockMode "15" | "min"). On a quick wake (or a minute tick) the page stays on its standby view and
+// refreshes quietly: no black flash, no switch to the tiles and back.
+var PWR = { quick: 0, clockMode: "15", light: 0, quickWake: 1, rate7: 0, wakesPerDay: 0 };
+var __applyState109 = applyState;
+applyState = function(s) {
+    if (s) {
+        PWR.quick = parseInt(s.quick, 10) === 1 ? 1 : 0;
+        if (s.clockMode) PWR.clockMode = s.clockMode === "min" ? "min" : "15";
+        if (s.frontlight !== undefined) PWR.light = parseInt(s.frontlight, 10) || 0;
+        if (s.quickWake !== undefined) PWR.quickWake = parseInt(s.quickWake, 10) === 0 ? 0 : 1;
+        PWR.rate7 = parseFloat(s.rate7) || 0; PWR.wakesPerDay = parseFloat(s.wakesPerDay) || 0;
+    }
+    __applyState109(s);
+    if (HUB.sleeping) frontClock();
+};
+var __onWake109 = onWake;
+onWake = function() {
+    // the clock jumped (back from suspend) but the loop still says standby: a quick wake or a minute tick
+    if (HUB.sleeping && (PWR.quick || PWR.clockMode === "min")) { quietRefresh(); return; }
+    __onWake109();
+};
+var QUIET_LAST = 0;
+function quietRefresh() {
+    frontClock();
+    var t = new Date().getTime();
+    if (t - QUIET_LAST < 50000) return;          // minute ticks: only the clock; data at most once a minute
+    QUIET_LAST = t;
+    pollState(); reloadDataScript(); reloadItemsScript();
+}
+// the standby page's clock: exact minutes, and honest about how long it will stay on screen
+function frontClock() {
+    var cw = $("fp-cw"); if (!cw || $("front").style.display !== "block") return;
+    var n = getBCNow(), h12 = n.getUTCHours() % 12 || 12, mm = n.getUTCMinutes(), ap = n.getUTCHours() >= 12 ? "PM" : "AM";
+    var key = h12 + ":" + mm + PWR.clockMode + HUB.next;
+    if (cw.__k === key) return;
+    cw.__k = key;
+    cw.innerHTML = h12 + "<span class='fp-dash'>:" + (mm < 10 ? "0" : "") + mm + "</span><span class='fp-ap'>" + ap + "</span>";
+    var k = $("front").getElementsByClassName("fp-k")[0];
+    if (k) {
+        var night = (window.HUB_STATE || {}).where === "night";
+        k.innerHTML = PWR.clockMode === "min" ? "Asleep &middot; clock keeps time" :
+            (night ? "Night &middot; back at " + esc(HUB.next || "morning") : "Asleep &middot; until " + esc(HUB.next || "the next wake"));
+    }
+}
+var __renderFront109 = renderFront;
+renderFront = function() { __renderFront109(); var cw = $("fp-cw"); if (cw) cw.__k = ""; frontClock(); };
+var __updateClock109 = updateClock;
+updateClock = function(force) { __updateClock109(force); if (HUB.sleeping) frontClock(); };
+
+// Settings > Sleep: three new rows, each saved at once
+var __buildSmart109 = buildSmartOpts;
+buildSmartOpts = function() {
+    __buildSmart109();
+    var box = $("v9-power");
+    if (!box) {
+        box = document.createElement("div"); box.id = "v9-power";
+        var after = $("smart-rows"); if (!after || !after.parentNode) return;
+        after.parentNode.insertBefore(box, after.nextSibling);
+    }
+    var use = PWR.rate7 > 0 ? "Lately about <b>" + PWR.rate7 + "%</b> of the battery an hour" + (PWR.wakesPerDay ? " (" + Math.round(PWR.wakesPerDay) + " wakes a day)" : "") + ". Change one thing, then compare after a day or two."
+                            : "The battery use per hour shows here after a few hours on battery.";
+    box.innerHTML =
+        "<div class='hv-row'><div class='hv-lbl'>Timer wakes</div><div id='opt-quick'></div><div class='hv-hint'>Quick: the Kindle refreshes the standby page in a few seconds and sleeps again; the power button (or a tap while it refreshes) opens the hub. Full: every wake keeps the hub open for the wake window.</div></div>" +
+        "<div class='hv-row'><div class='hv-lbl'>Standby clock</div><div id='opt-clockm'></div><div class='hv-hint'>Every minute: a short wake each minute to change the time (no Wi-Fi, no touch). Every wake: the time is exact at each wake and shows when it changes next.</div></div>" +
+        "<div class='hv-row'><div class='hv-lbl'>Light while you use it</div><div id='opt-light'></div><div class='hv-hint'>Always off while the hub sleeps.</div></div>" +
+        "<div class='hv-hint' id='v9-use'>" + use + "</div>";
+    chipRow("opt-quick", [1, 0], ["Quick", "Full"], PWR.quickWake, function(v) { PWR.quickWake = v; sendPower("quickwake=" + v); });
+    chipRow("opt-clockm", ["15", "min"], ["Every wake", "Every minute"], PWR.clockMode, function(v) { PWR.clockMode = v; sendPower("clockmode=" + v); });
+    chipRow("opt-light", [0, 4, 8, 12, 16, 20, 24], ["Off", "4", "8", "12", "16", "20", "24"], PWR.light, function(v) { PWR.light = v; sendPower("light=" + v); });
+    if (typeof HVS !== "undefined") HVS.sig = "";
+};

@@ -82,11 +82,17 @@ load_conf() {
     SMART_SLEEP=1; HOME_MIN=15; AWAY_MIN=120; NIGHT_MIN=180; NIGHT_FROM=23; NIGHT_TO=6     # 10.6
     FREEZE_POWERD=1                    # 10.5: 0 = let powerd run while the Kindle sleeps (test for the wake freeze)
     LOCAL_ONLY=0                       # 10.9: 1 = the settings port listens on 127.0.0.1 only (needs an nc with -s; test first)
+    QUICK_WAKE=1                       # 10.9: timer wakes refresh the standby page and sleep again (button = full hub); 0 = old way
+    CLOCK_MODE=15                      # 10.9: standby clock: 15 = exact at each wake (:00 :15 :30 :45), min = new minute every minute
+    FRONTLIGHT=0                       # 10.9: 0-24, the light while the hub is awake (off while it sleeps)
     AUTO_UPDATE=1                      # 0 = only when you tap, 1 = check nightly and tell you (10.5 default), 2 = install at night (undone by itselfif it fails)
     [ -f "$CONF" ] && . "$CONF"
     case "$AUTO_UPDATE" in 0|1|2) ;; *) AUTO_UPDATE=1 ;; esac
     case "$FREEZE_POWERD" in 0|1) ;; *) FREEZE_POWERD=1 ;; esac
     case "$LOCAL_ONLY" in 0|1) ;; *) LOCAL_ONLY=0 ;; esac
+    case "$QUICK_WAKE" in 0|1) ;; *) QUICK_WAKE=1 ;; esac
+    case "$CLOCK_MODE" in 15|min) ;; *) CLOCK_MODE=15 ;; esac
+    case "$FRONTLIGHT" in ''|*[!0-9]*) FRONTLIGHT=0 ;; esac; [ "$FRONTLIGHT" -gt 24 ] && FRONTLIGHT=24
     case "$SMART_SLEEP" in 0|1) ;; *) SMART_SLEEP=1 ;; esac
     case "$HOME_MIN" in ''|*[!0-9]*) HOME_MIN=15 ;; esac;   [ "$HOME_MIN" -lt 5 ] && HOME_MIN=5
     case "$AWAY_MIN" in ''|*[!0-9]*) AWAY_MIN=120 ;; esac;  [ "$AWAY_MIN" -lt 15 ] && AWAY_MIN=15
@@ -124,6 +130,9 @@ USE_CLOUD_DATA=$USE_CLOUD_DATA
 AUTO_UPDATE=$AUTO_UPDATE
 FREEZE_POWERD=$FREEZE_POWERD
 LOCAL_ONLY=$LOCAL_ONLY
+QUICK_WAKE=$QUICK_WAKE
+CLOCK_MODE=$CLOCK_MODE
+FRONTLIGHT=$FRONTLIGHT
 SMART_SLEEP=$SMART_SLEEP
 HOME_MIN=$HOME_MIN
 AWAY_MIN=$AWAY_MIN
@@ -261,7 +270,9 @@ window.HUB_STATE = {
     booted: $([ "$BOOT" = "0" ] && echo 1 || echo 0),
     smart: $SMART_SLEEP, homeMin: $HOME_MIN, awayMin: $AWAY_MIN, nightMin: $NIGHT_MIN, nightFrom: $NIGHT_FROM, nightTo: $NIGHT_TO,
     where: "${SMODE:-fixed}", aways: $(grep -c . "$DIR/.away" 2>/dev/null || echo 0),
-    snoozeUntil: 0
+    snoozeUntil: 0,
+    quick: ${QUICK_NEXT:-0}, quickWake: $QUICK_WAKE, clockMode: "$CLOCK_MODE", frontlight: $FRONTLIGHT,
+    rate7: ${RATE7:-0}, hours7: ${HRS7:-0}, wakesPerDay: ${WPD:-0}
 };
 EOT
     mv "$STATE_JS.tmp" "$STATE_JS"
@@ -603,7 +614,17 @@ poll_settings_http() {
     if [ -n "$T_REQ" ]; then
         NEWU=$((NOWQ + WAKE_WINDOW))
         [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+        # 10.9: a tap during a quick wake turns it into a full one (page, light, lists from the phone)
+        if [ "$QUICK_ACTIVE" = "1" ]; then
+            QUICK_ACTIVE=0; WAKE_REASON=touch; set_light "$FRONTLIGHT"; write_ui_state 0; log "tapped during a quick wake - full wake"
+            cloud_ready && [ "$CLOUD_ON_WAKE" = "1" ] && ! sync_running && start_sync lists
+        fi
     fi
+    # 10.9: power settings from Settings > Sleep
+    V=$(qv quickwake); case "$V" in 0|1) QUICK_WAKE=$V; CHANGED=1; log "quick timer wakes: $V" ;; esac
+    V=$(qv clockmode); case "$V" in 15|min) CLOCK_MODE=$V; CHANGED=1; log "standby clock: $V" ;; esac
+    V=$(num_or_empty "$(qv light)")
+    if [ -n "$V" ]; then [ "$V" -gt 24 ] && V=24; FRONTLIGHT=$V; CHANGED=1; set_light "$V"; log "frontlight: $V"; fi
     SNZ=$(num_or_empty "$(qv snooze)")
     if [ -n "$SNZ" ] && [ "$SNZ" != "0" ]; then
         [ "$SNZ" = "1" ] && SNZ=300
@@ -743,6 +764,7 @@ smart_step() {
             fi
         done < "$DIR/.away"
     fi
+    [ -n "$HUB_TEST_STEP" ] && STEP=$HUB_TEST_STEP      # tests only
 }
 
 GOV_SAVED=""
@@ -756,6 +778,8 @@ if [ "$HUB_TEST" != "1" ]; then
 fi
 
 # NB: never name a variable PPID - it is read-only in many shells
+# 10.9: the frontlight (0 = off). On only while the hub is awake for you; every standby turns it off.
+set_light() { [ "$HUB_TEST" = "1" ] && { echo "light $1" >> "${KT:-/tmp}/light.log" 2>/dev/null; return 0; }; lipc-set-prop com.lab126.powerd flIntensity "${1:-0}" 2>/dev/null; }
 freeze_powerd() { [ "$FREEZE_POWERD" = "1" ] || return 0; PD=$(pidof powerd 2>/dev/null); [ -n "$PD" ] && kill -STOP $PD 2>/dev/null; }
 thaw_powerd()   { PD=$(pidof powerd 2>/dev/null); [ -n "$PD" ] && kill -CONT $PD 2>/dev/null; }
 
@@ -877,7 +901,7 @@ suspend_for() {
         SLEPT=$((T1 - T0))
         WR=$(head -n 1 "$WAKE_REASON_F" 2>/dev/null | tr -d '\r' | cut -c1-60)
         if [ "$RC" -eq 0 ] && [ "$SLEPT" -ge $((REM - 10)) ]; then
-            log "woke on schedule after ${SLEPT}s${WR:+ (reason: $WR)}$([ "$ATTEMPTS" -gt 0 ] && echo " - suspended on try $((ATTEMPTS + 1))")"
+            [ "$SUSPEND_QUIET" = "1" ] || log "woke on schedule after ${SLEPT}s${WR:+ (reason: $WR)}$([ "$ATTEMPTS" -gt 0 ] && echo " - suspended on try $((ATTEMPTS + 1))")"
             RESULT=0; break
         fi
         if [ "$RC" -eq 0 ] && [ "$SLEPT" -ge 1 ]; then
@@ -892,6 +916,24 @@ suspend_for() {
     done
     thaw_powerd
     return $RESULT
+}
+
+# 10.9: standby clock "every minute": sleep minute by minute until the next real wake. Each tick wakes the
+# Kindle for ~3 s with no Wi-Fi and no touch screen: the page's own clock timer fires on resume and redraws
+# just the minute (partial e-ink update), then the Kindle sleeps again. Returns like suspend_for.
+minute_sleep() {
+    MS_T=$1; MS_N=0
+    while :; do
+        MS_NOW=$(date +%s); MS_REM=$((MS_T - MS_NOW))
+        if [ "$MS_REM" -le $(( ${HUB_TEST_MINUTE:-60} + 20 )) ]; then [ "$MS_N" -gt 0 ] && log "standby clock: $MS_N minute ticks"; suspend_for $((MS_REM - 3)); return $?; fi
+        MS_L=${HUB_TEST_MINUTE:-60}                 # (tests use a shorter "minute")
+        MS_S=$((MS_L - MS_NOW % MS_L)); [ "$MS_S" -lt $((MS_L / 3)) ] && MS_S=$((MS_S + MS_L))
+        SUSPEND_QUIET=1; suspend_for "$MS_S"; MS_R=$?; SUSPEND_QUIET=0
+        if [ "$MS_R" != "0" ]; then [ "$MS_N" -gt 0 ] && log "standby clock: $MS_N minute ticks"; return "$MS_R"; fi
+        MS_N=$((MS_N + 1))
+        sleep 2                                   # the page redraws the minute
+        still_owner || exit 0
+    done
 }
 
 # Used when real suspend is unavailable/refused and in "always" mode: wait for the next wake time
@@ -982,10 +1024,22 @@ while true; do
     lipc-set-prop com.lab126.powerd preventScreenSaver 1 2>/dev/null
 
     NOW=$(date +%s)
-    AWAKE_UNTIL=$((NOW + WAKE_WINDOW))
-    NEXT_WAKE_EPOCH=0
-    write_ui_state 0
-    log "awake (${WAKE_REASON}) for ${WAKE_WINDOW}s, battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
+    # 10.9: a timer wake is a QUICK wake: the page stays on its standby view (no flash, no touch screen
+    # waiting for nobody), data is refreshed, a due sync runs, the new frame is captured, back to sleep.
+    # Not while the page is starting or a fresh update still has to report in (that needs a full wake).
+    QUICK_ACTIVE=0
+    if [ "$QUICK_WAKE" = "1" ] && [ "$WAKE_REASON" = "timer" ] && [ "$FIRST" != "1" ] && [ "$BOOT" != "1" ] && [ ! -f "$DIR/.update/pending" ]; then QUICK_ACTIVE=1; fi
+    if [ "$QUICK_ACTIVE" = "1" ]; then
+        AWAKE_UNTIL=$((NOW + ${HUB_QUICK_SEC:-8}))
+        QUICK_NEXT=1; write_ui_state 1
+        log "quick wake (timer), battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
+    else
+        AWAKE_UNTIL=$((NOW + WAKE_WINDOW))
+        NEXT_WAKE_EPOCH=0
+        set_light "$FRONTLIGHT"
+        write_ui_state 0
+        log "awake (${WAKE_REASON}) for ${WAKE_WINDOW}s, battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
+    fi
 
     # sync if due (3 min early-wake tolerance), on first start, but never retry more than every 15 min
     if [ "$FIRST" = "1" ] || [ $((NOW - LAST_SYNC)) -ge $((SYNC_EVERY_MIN * 60 - 180)) ]; then
@@ -1047,13 +1101,20 @@ while true; do
     NEXT_WAKE_EPOCH=$((NOW + SECS))
     [ "$SMODE" != "fixed" ] && log "next wake $(fmt_epoch "$NEXT_WAKE_EPOCH") ($SMODE, every $((STEP / 60)) min)"
 
+    # 10.9: the next timer wake will be a quick one (the page reads this before it sleeps)
+    QUICK_NEXT=0; [ "$QUICK_WAKE" = "1" ] && [ ! -f "$DIR/.update/pending" ] && QUICK_NEXT=1
+    set_light 0
     write_ui_state 1
     write_log_js
-    sleep 6   # give the page time to draw the standby frame before it is captured
+    [ "$QUICK_ACTIVE" = "1" ] && sleep 3 || sleep 6   # give the page time to draw the standby frame before it is captured
+    QUICK_ACTIVE=0
 
     [ "$SCREENSAVER_MODE" != "off" ] && capture_and_freeze_display
 
-    if [ "$MODE" = "eco" ]; then
+    if [ "$MODE" = "eco" ] && [ "$CLOCK_MODE" = "min" ]; then
+        minute_sleep "$NEXT_WAKE_EPOCH"
+        SR=$?
+    elif [ "$MODE" = "eco" ]; then
         suspend_for $((SECS - 3))
         SR=$?
     else
