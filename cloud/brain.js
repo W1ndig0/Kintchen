@@ -420,7 +420,9 @@ async function main() {
     const cloudFiles = {};
     const prevBundle = cg && cg.files && cg.files["bundle.txt"] ? await fileText(cg.files["bundle.txt"]) : null;
     let parts = null;
-    const wantBundle = process.env.SKIP_BUNDLE !== "1" && (!brain.bundleAt || NOW - brain.bundleAt > 25 * 60000 || !prevBundle);
+    // 10.10: the Kindle's package (weather, news, recipes) every 2 hours; the runs in between (every 30 min) only
+    // do the phone reminders. The Kindle downloads a package only when it has a new one.
+    const wantBundle = process.env.SKIP_BUNDLE !== "1" && (!brain.bundleAt || NOW - brain.bundleAt > 115 * 60000 || !prevBundle);
     if (wantBundle) {
         const b = await makeBundle(prevBundle);
         if (b && b.data) { cloudFiles["bundle.txt"] = { content: b.text }; brain.bundleAt = NOW; parts = b; }
@@ -488,6 +490,31 @@ async function main() {
             if (next !== cur) { cloudFiles["bundle.txt"] = { content: next }; log("deals: " + EX.deals.length + " (" + want.length + " photos)"); }
         }
     } catch (e) { log("deal photos failed: " + String(e.message || e).slice(0, 80)); }
+    // 5d. 10.10: the extras (deals, money, pantry, fun, birds) ride inside the package too: one download for the
+    // Kindle instead of two. Any change to the package gets a new time on its first line, which is what the
+    // Kindle looks at (40 bytes) to decide whether to download it.
+    try {
+        const cur = cloudFiles["bundle.txt"] ? cloudFiles["bundle.txt"].content : prevBundle;
+        if (cur && /\n@@END\n?$/.test(cur)) {
+            let ex = cloudFiles["extra.js"] ? cloudFiles["extra.js"].content : null;
+            const had = /\n@@FILE mesquite\/extra\.js\n/.test(cur);
+            if (!ex && !had && cg && cg.files && cg.files["extra.js"]) ex = await fileText(cg.files["extra.js"]);
+            let next = cur;
+            if (ex) {
+                const lines = cur.replace(/\n@@END\n?$/, "").split("\n"), out = [];
+                for (let i = 0, skip = false; i < lines.length; i++) {
+                    const l = lines[i];
+                    if (l.startsWith("@@")) skip = l === "@@FILE mesquite/extra.js";
+                    if (!skip) out.push(l);
+                }
+                next = out.join("\n") + "\n@@FILE mesquite/extra.js\n" + ex.replace(/\n+$/, "") + "\n@@END\n";
+            }
+            if (next !== cur || cloudFiles["bundle.txt"]) {
+                if (next !== cur && prevBundle && next.replace(/^[^\n]*\n/, "") === prevBundle.replace(/^[^\n]*\n/, "")) { delete cloudFiles["bundle.txt"]; }     // nothing really changed
+                else cloudFiles["bundle.txt"] = { content: next.replace(/^@@KH-BUNDLE \d+/, "@@KH-BUNDLE " + Math.floor(NOW / 1000)) };
+            }
+        }
+    } catch (e) { log("extras in the package failed: " + String(e.message || e).slice(0, 80)); }
 
     // 6. pushes
     const cal = calendar();

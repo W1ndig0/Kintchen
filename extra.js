@@ -119,12 +119,16 @@
     var box = $("app-f"), k = X.kindle, b = X.brain, h = "";
     h += '<h2>The fridge</h2>';
     if (k && k.ts) {
-      var quiet = Date.now() / 1000 - k.ts > Math.max(3, (k.interval || 60) * 3 / 60) * 3600;
+      // 10.10: the fridge reports in at its daily session (or when SYNC is tapped), not at every wake
+      var daily = k.daily !== undefined && k.daily >= 0;
+      var quiet = Date.now() / 1000 - k.ts > (daily ? 27 : Math.max(3, (k.interval || 60) * 3 / 60)) * 3600;
       h += '<div style="border:2px solid var(--ink);background:#fff;padding:12px;font-size:16px;line-height:1.5">' +
         '<div style="font:900 34px/1 Georgia,serif">' + (k.pct || "?") + '%' + (k.charging ? ' <span style="font-size:16px">charging</span>' : "") + '</div>' +
         (k.left7 > 0 && !k.charging ? 'About <b>' + (k.left7 >= 48 ? Math.round(k.left7 / 24) + " days" : k.left7 + " h") + '</b> left (' + k.rate7 + '%/h)<br>' : "") +
         'Checked in <b>' + ago(k.ts) + '</b>' + (quiet ? ' — <b>quiet longer than usual</b>' : "") + '<br>' +
-        'Wakes every ' + (k.interval || "?") + ' min · version ' + esc(k.v) + ' · ' + (k.cloudData && Date.now() / 1000 - k.cloudData < 7200 ? "data from the cloud" : "fetches its own data") + '</div>';
+        (daily ? 'Reports in daily at ' + ((k.daily % 12) || 12) + (k.daily < 12 ? ' am' : ' pm') + ' (or when you tap SYNC on it)' : 'Wakes every ' + (k.interval || "?") + ' min') + ' · version ' + esc(k.v) + ' · ' + (k.cloudData && Date.now() / 1000 - k.cloudData < 7200 ? "data from the cloud" : "fetches its own data") + '</div>';
+      // 10.10: what the battery went on yesterday (Wi-Fi, wakes, the standby clock), from the fridge's energy report
+      if (k.energy) h += '<div style="font-size:14px;margin-top:6px;line-height:1.45"><b>Yesterday\'s battery:</b> ' + esc(String(k.energy).replace(/^energy [0-9-]+: */, "")).replace(/ \| /g, " · ") + '</div>';
       // 10.2: updates on the fridge
       var ev = String(k.upd || "").split(" "), au = ["only when you tap", "tells you", "installs at night"][k.auto === undefined ? 2 : +k.auto] || "";
       h += '<div style="font-size:14px;margin-top:6px">Updates: <b>' + au + '</b>' + (k.avail ? ' · <b>' + esc(k.avail) + ' is ready</b>' : "") +
@@ -132,14 +136,14 @@
     } else h += '<p class="empty">No check-in yet. The fridge reports in after its next sync (9.8.5 or newer).</p>';
     // 10.2: open a page in the fridge's web reader
     h += '<h2>Send a web page to the fridge</h2><div class="row"><input id="fw-u" inputmode="url" placeholder="https://… or search words" style="flex:1;font-size:17px;padding:10px;border:2px solid var(--ink)"><button class="btn" id="fw-go">Send</button></div>' +
-      '<p style="font-size:13px;color:var(--mute);margin:4px 0 0">Opens as clean text in the fridge\'s WEB app at its next wake. Handy for a recipe or an article.</p>';
+      '<p style="font-size:13px;color:var(--mute);margin:4px 0 0">Opens as clean text in the fridge\'s WEB app. It reaches the fridge with its daily session, or right away when you tap SYNC on the fridge. Handy for a recipe or an article.</p>';
     h += '<p style="font-size:14px;color:var(--mute)">Cloud brain: ' + (b && b.lastRun ? "ran " + ago(b.lastRun / 1000) + (b.pushes ? " · sent " + b.pushes + " push" + (b.pushes > 1 ? "es" : "") : "") : 'not running — see GITHUB_SETUP.txt') + '</p>';
     // note
     var notes = itemsOf("msg").filter(function(m) { return !m.locked; }).sort(function(a, c) { return c.ts - a.ts; }).slice(0, 3);
     h += '<h2>Leave a note on the fridge</h2><div class="row"><input id="fn-t" maxlength="280" placeholder="Back at 6. Love you." style="flex:1;font-size:17px;padding:10px;border:2px solid var(--ink)"><button class="btn" id="fn-go">Pin</button></div>';
     notes.forEach(function(n) { h += '<div style="font-size:14px;margin-top:6px">' + (n.state === "open" ? "📌 " : "✓ read: ") + esc(n.text) + '</div>'; });
     // remote  (10.4: every timer button says its length in minutes)
-    h += '<h2>Remote control</h2><p style="font-size:13px;color:var(--mute);margin:0 0 8px">Runs on the fridge at its next wake (or right away if it is awake).</p><div class="rc">' +
+    h += '<h2>Remote control</h2><p style="font-size:13px;color:var(--mute);margin:0 0 8px">Reaches the fridge with its daily session (or tap SYNC on the fridge to get it now).</p><div class="rc">' +
       '<button class="btn ghost" data-c="sync">Sync now</button><button class="btn ghost" data-c="timer|5">5 min</button><button class="btn ghost" data-c="timer|10">10 min</button><button class="btn ghost" data-c="timer|20">20 min</button><button class="btn ghost" data-c="timer|45">45 min</button>' +
       '<button class="btn ghost" data-c="update|check">Check update</button><button class="btn ghost" data-c="update|install">Install update</button><button class="btn ghost" data-c="update|rollback">Undo last update</button><button class="btn ghost" data-c="log">Send log</button>' +
       '<button class="btn ghost" data-c="screen|front">Front page</button><button class="btn ghost" data-c="screen|tiles">Tiles</button><button class="btn ghost" data-c="contrast|max">Max contrast</button><button class="btn ghost" data-c="contrast|normal">Normal</button><button class="btn ghost" data-c="reload">Reload page</button></div>';
@@ -166,7 +170,7 @@
     });
     [].forEach.call(box.querySelectorAll(".rc .btn"), function(bt) {
       bt.style.margin = "0 6px 6px 0";
-      bt.addEventListener("click", function() { var c = bt.getAttribute("data-c"); if (c === "update|install" && !confirm("Install the update from your GitHub site at the next wake? The hub restarts by itself.")) return; if (c === "update|rollback" && !confirm("Go back to the version the fridge had before its last update?")) return; put("cmd", c); });
+      bt.addEventListener("click", function() { var c = bt.getAttribute("data-c"); if (c === "update|install" && !confirm("Install the update from your GitHub site? It reaches the fridge with its daily session or the next SYNC, and the hub restarts by itself.")) return; if (c === "update|rollback" && !confirm("Go back to the version the fridge had before its last update?")) return; put("cmd", c); });
     });
     if ($("tv-copy")) $("tv-copy").addEventListener("click", function() { copy(tv, $("tv-copy")); });
     $("gt-go").addEventListener("click", function() {

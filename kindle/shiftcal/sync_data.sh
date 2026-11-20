@@ -32,32 +32,50 @@ over() { [ $(( $(date +%s) - SYNC_T0 )) -ge "${SYNC_BUDGET:-240}" ]; }
 IMGMAX="--max-filesize 3000000"
 
 # ---------- 10.0: deals, money, pantry and fun from the cloud brain (one small locked file; the page unlocks it)
-if [ "$1" != "search" ] && [ -z "$CLOUD_BUNDLE" ] && [ -s "$DIR/.cloud_links" ]; then
+# 10.10: they ride inside the cloud package now; this separate download is only for an older brain
+fetch_extras() {
+    [ "$1" != "search" ] && [ -z "$CLOUD_BUNDLE" ] && [ -s "$DIR/.cloud_links" ] || return 0
     XU=$(sed -n 's/^EXTRA_URL=\(https*:[^ ]*\)$/\1/p' "$DIR/.cloud_links" | head -1)
-    if [ -n "$XU" ] && ( KC_STRICT=1; kcurl -s --connect-timeout 6 --max-time 25 -o "$MESQ/extra.js.part" "$XU?t=$(date +%s)" 2>/dev/null ) && head -c 26 "$MESQ/extra.js.part" | grep -q '^window.HUB_EXTRA_LOCKED'; then
+    if [ -n "$XU" ] && ( KC_STRICT=1; kcurl -s --connect-timeout 6 --max-time 25 -o "$MESQ/extra.js.part" "$XU?t=$(date +%s)" 2>/dev/null ) && head -c 26 "$MESQ/extra.js.part" | grep -q '^window.HUB_E'; then
         mv "$MESQ/extra.js.part" "$MESQ/extra.js"; echo "Extras: deals/money/fun updated"
     else rm -f "$MESQ/extra.js.part"; fi
-fi
+}
 
 # ---------- 9.8.5: cloud data. The GitHub Action already fetched weather, news, what's on, recipes and
 # horoscopes into ONE file (bundle.txt in your cloud gist). One download instead of ~25 = Wi-Fi off sooner.
-# Falls through to the normal fetches below when it's missing, broken or older than 2 hours.
+# Falls through to the normal fetches below when it's missing, broken or older than 6 hours.
+# 10.10: first a 40-byte look at the package's first line (its time): if this Kindle already has that package,
+# nothing more is downloaded. The brain makes a new one every 2 hours.
 if [ "$1" != "search" ] && [ -z "$CLOUD_BUNDLE" ] && [ "${USE_CLOUD_DATA:-1}" = "1" ] && [ -s "$DIR/.cloud_links" ]; then
     BU=$(sed -n 's/^BUNDLE_URL=\(https*:[^ ]*\)$/\1/p' "$DIR/.cloud_links" | head -1)
     BP="$DIR/.bundle.part"; rm -f "$BP"
+    if [ -n "$BU" ] && [ -s "$DIR/.bundle_ts" ]; then
+        HT=$( ( KC_STRICT=1; kcurl -s -r 0-39 --connect-timeout 6 --max-time 12 "$BU?t=$(date +%s)" 2>/dev/null ) | head -1 | sed -n 's/^@@KH-BUNDLE \([0-9][0-9]*\).*/\1/p')
+        if [ -n "$HT" ] && [ "$HT" = "$(cat "$DIR/.bundle_ts" 2>/dev/null)" ]; then
+            AGE=$(( $(date +%s) - HT ))
+            if [ "${ONLY_IF_NEW:-0}" = "1" ] || [ "$AGE" -lt 21600 ]; then
+                echo "Cloud data: nothing new from the cloud brain (its package from $((AGE / 60)) min ago is already here)"
+                exit 0
+            fi
+        fi
+    fi
     if [ -n "$BU" ] && ( KC_STRICT=1; kcurl -s --max-filesize 20000000 --connect-timeout 6 --max-time 45 -o "$BP" "$BU?t=$(date +%s)" 2>/dev/null ) &&
        head -1 "$BP" | grep -q '^@@KH-BUNDLE [0-9][0-9]*$' && tail -1 "$BP" | grep -q '^@@END$'; then
         BTS=$(head -1 "$BP" | cut -d' ' -f2); AGE=$(( $(date +%s) - BTS ))
-        if [ "$AGE" -lt 7200 ] && [ "$AGE" -gt -900 ]; then
+        if [ "$AGE" -lt 21600 ] && [ "$AGE" -gt -900 ]; then
             mkdir -p "$MESQ/rcp"
             awk -v D="$MESQ" '
                 /^@@FILE / { if (f != "") close(f); p = substr($0, 8); f = ""
-                             if (p ~ /^mesquite\/(data|whatson|rfeed|horo)\.js$/ || p ~ /^mesquite\/rcp\/[0-9a-z]+\.js$/) { f = D "/" substr(p, 10) ".new"; printf "" > f; print f > (D "/.bundle_list") }
+                             if (p ~ /^mesquite\/(data|whatson|rfeed|horo|extra)\.js$/ || p ~ /^mesquite\/rcp\/[0-9a-z]+\.js$/) { f = D "/" substr(p, 10) ".new"; printf "" > f; print f > (D "/.bundle_list") }
                              next }
                 /^@@(IMG|END|KH-BUNDLE)/ { if (f != "") close(f); f = ""; next }
                 { if (f != "") print > f }' "$BP"
             NF=0
+            HAS_EX=0; grep -q '/extra\.js\.new$' "$MESQ/.bundle_list" 2>/dev/null && HAS_EX=1
+            # the extras must be the locked file the page expects, or they're left as they were
+            [ -f "$MESQ/extra.js.new" ] && ! head -c 26 "$MESQ/extra.js.new" | grep -q '^window.HUB_E' && { rm -f "$MESQ/extra.js.new"; HAS_EX=0; }
             while read -r F; do [ -s "$F" ] && mv "$F" "${F%.new}" && NF=$((NF + 1)); rm -f "$F"; done < "$MESQ/.bundle_list"
+            [ "$HAS_EX" = "1" ] && echo "Extras: deals/money/fun updated (in the package)" || fetch_extras "$1"
             rm -f "$MESQ/.bundle_list"
             NI=0
             grep '^@@IMG img/[0-9a-z]*\.\(jpg\|png\|gif\) http' "$BP" | while read -r X P U; do
@@ -70,7 +88,7 @@ if [ "$1" != "search" ] && [ -z "$CLOUD_BUNDLE" ] && [ "${USE_CLOUD_DATA:-1}" = 
             ls -1t "$MESQ/rcp" 2>/dev/null | tail -n +61 | while read F; do rm -f "$MESQ/rcp/$F"; done
             COUNT=$(ls -1 "$IMG_DIR" 2>/dev/null | wc -l)
             [ "$COUNT" -gt 60 ] && ls -1t "$IMG_DIR" | tail -n +61 | while read F; do rm -f "$IMG_DIR/$F"; done     # 10.7: news + deal photos
-            rm -f "$BP"; date +%s > "$DIR/.cloud_data_at"
+            rm -f "$BP"; date +%s > "$DIR/.cloud_data_at"; echo "$BTS" > "$DIR/.bundle_ts"
             echo "Cloud data: $NF files from the cloud brain ($((AGE / 60)) min old) - skipped the direct fetches"
             exit 0
         fi
@@ -80,6 +98,7 @@ if [ "$1" != "search" ] && [ -z "$CLOUD_BUNDLE" ] && [ "${USE_CLOUD_DATA:-1}" = 
     fi
     rm -f "$BP"
 fi
+fetch_extras "$1"      # (only reached when the package wasn't used)
 
 jesc() { sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 
