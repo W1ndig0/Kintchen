@@ -310,6 +310,10 @@ async function makeBundle(prev) {
     ["mesquite/data.js", "mesquite/whatson.js", "mesquite/rfeed.js", "mesquite/horo.js"].concat(rcp).forEach(rel => {
         const f = path.join(dir, rel);
         if (!fs.existsSync(f)) return;
+        // 10.9.4: Node accepts U+2028/U+2029 and control characters inside strings; the Kindle's older engine
+        // may not ("Parse error @ data.js:5" = the news line). They are escaped/removed before the check.
+        const raw = fs.readFileSync(f, "utf8"), ls = (raw.match(/[\u2028\u2029]/g) || []).length, ctl = (raw.match(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g) || []).length;
+        if (ls || ctl) { fs.writeFileSync(f, raw.replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")); log("bundle: " + rel + ": " + ls + " line-separator and " + ctl + " control characters made safe"); }
         try { new Function("window", fs.readFileSync(f, "utf8")); }
         catch (e) { log("bundle: " + rel + " is not valid JavaScript (" + String(e.message).slice(0, 80) + ") - left out"); fs.unlinkSync(f); }
     });

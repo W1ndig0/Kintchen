@@ -390,6 +390,11 @@ window.HUB_DATA = {
     onThisDay: $OTD_JSON
 };
 EOT
+    # 10.9.4: no invisible line separators (U+2028/U+2029) or control characters in data.js: newer JavaScript
+    # allows them inside text, but an older engine like the Kindle's can stop at one with "Parse error"
+    # (no weather or news until the next good file). They come from news text.
+    LS1=$(printf '\342\200\250'); LS2=$(printf '\342\200\251')
+    sed "s/$LS1/ /g; s/$LS2/ /g" "$TMP" | tr -d '\000-\010\013\014\016-\037' > "$TMP.c" && mv "$TMP.c" "$TMP"
     mv "$TMP" "$DATA_JS"
     echo "data.js written ($ACOUNT stories, $(( $(date +%s) - SYNC_T0 ))s)"
 fi

@@ -20,48 +20,31 @@ function khSay(q, tries) {      // the loop listens one request at a time: a mis
     } catch (e) { again(); }
 }
 function khMark(s) { KH_STAGE = s; }
-// a step reported on the spot (synchronous): it reaches the loop even if the page freezes right after it,
-// which a normal (queued) request would not. At most 14, only until the loop has heard the page.
-var KH_NOW_N = 0;
-function khNow(s) {
-    KH_STAGE = s;
-    if (KH_NOW_N >= 14 || (window.HUB_STATE || {}).booted === 1) return;
-    KH_NOW_N++;
-    var q = "pgl=" + encodeURIComponent("step " + s + " at " + Math.round((new Date().getTime() - KH_T0) / 1000) + "s");
-    for (var i = 0; i < 3; i++) {
-        if (i) { var w0 = new Date().getTime(); while (new Date().getTime() - w0 < 250) {} }     // the loop may be busy with the last one
-        try {
-            var x = new XMLHttpRequest();
-            x.open("GET", "http://127.0.0.1:8765/save?" + q + "&t=" + new Date().getTime(), false);
-            x.send(null);
-            if (x.status >= 200 && x.status < 300) return;
-        } catch (e) {}
-    }
-}
-// the first call of a start-up function, reported going in and coming out (set up at the end of v109.js)
-function khWatch(name) {
-    var f = window[name], n = 0;
-    if (typeof f !== "function") return;
-    window[name] = function() {
-        var me = ++n <= 1, r;
-        if (me) khNow(name + " #" + n + " in");
-        r = f.apply(this, arguments);
-        if (me) khNow(name + " #" + n + " out");
-        return r;
-    };
-}
+// 10.9.4: steps are only remembered (they used to be sent synchronously, one by one: that made start-up ~9 s
+// slower and set off the Kindle browser's "JavaScript execution exceeded timeout"). Errors are still sent.
+function khNow(s) { KH_STAGE = s; }
+function khWatch(name) {}
+function khUp() { return (window.HUB_STATE || {}).booted === 1 || !!(window.HUB && window.HUB.seen); }
+function khClear() { var d = document.getElementById("kh-err"); if (d && d.parentNode) d.parentNode.removeChild(d); }
 function khReport() {
     var w = window, files = (w.HUB_PORTKEY ? "k" : "-") + (w.HUB_TOTP ? "t" : "-") + (w.HUB_CLOUD ? "c" : "-") + (w.HUB_DATA ? "d" : "-");
     khSay("pgl=" + encodeURIComponent(KH_STAGE + " after " + Math.round((new Date().getTime() - KH_T0) / 1000) + "s files " + files + (KH_ERRS ? " errors " + KH_ERRS : "")));
 }
+var KH_LOADFAIL = {};
 window.onerror = function(msg, url, line) {
+    // a script file that failed to load arrives as an Event (horo.js, whatson.js and the like are optional and
+    // may simply not be there yet): logged once per file, never shown on the screen
+    if (msg && typeof msg === "object") {
+        var tg = msg.target || msg.srcElement || {}, f = String(tg.src || tg.href || tg.tagName || "?").split("/").pop().split("?")[0];
+        if (!KH_LOADFAIL[f]) { KH_LOADFAIL[f] = 1; khSay("pgerr=" + encodeURIComponent("a file failed to load: " + f + " [" + KH_STAGE + "]")); }
+        return false;
+    }
     KH_ERRS++;
-    if (msg && typeof msg === "object") { var tg = msg.target || msg.srcElement || {}; msg = "a file failed to load: " + String(tg.src || tg.href || tg.tagName || "?").split("/").pop(); }
     var what = String(msg).substring(0, 150) + " @ " + String(url || "").split("/").pop().split("?")[0] + ":" + line + " [" + KH_STAGE + "]";
     if (KH_ERRS <= 8) khSay("pgerr=" + encodeURIComponent(what));
-    // and on the screen, while the hub hasn't started (a blank screen tells you nothing)
+    // on the screen only while the hub hasn't started (a blank screen tells you nothing); cleared once it has
     try {
-        if ((window.HUB_STATE || {}).booted !== 1 && document.body && KH_ERRS <= 4) {
+        if (!khUp() && document.body && KH_ERRS <= 4) {
             var d = document.getElementById("kh-err");
             if (!d) { d = document.createElement("div"); d.id = "kh-err"; d.style.cssText = "position:absolute;left:0;top:0;right:0;z-index:9999;background:#fff;border-bottom:6px solid #000;padding:12px;font:bold 22px Helvetica,Arial,sans-serif"; document.body.appendChild(d); d.innerHTML = "KITCHEN HUB START-UP ERROR (it goes back to the last version by itself)"; }
             var p = document.createElement("div"); p.style.cssText = "font:normal 18px Courier,monospace;margin-top:6px"; p.appendChild(document.createTextNode(what)); d.appendChild(p);
@@ -71,7 +54,8 @@ window.onerror = function(msg, url, line) {
 };
 (function() {
     var n = 0, t = setInterval(function() {
-        if ((window.HUB_STATE || {}).booted === 1 || ++n > 15) { clearInterval(t); return; }
+        if (khUp()) { khClear(); clearInterval(t); return; }
+        if (++n > 15) { clearInterval(t); return; }
         khReport();
     }, 6000);
 })();
@@ -1665,7 +1649,7 @@ function exitHub() {
 khMark("main: v9.2 CHROME tiles, sysbar, settings");
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.9.3";
+var VERSION = "10.9.4";
 var DIAG_SENT = {};      // 10.9.3: set up here, before anything at start-up can call diagOnce (see diagOnce)
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
