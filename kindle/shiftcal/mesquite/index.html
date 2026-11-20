@@ -4,6 +4,77 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>Kitchen Hub</title><!-- v9.6 -->
+<script>
+// 10.9.2: start-up black box. Tiny, first, and separate from the big script below: it tells the loop how far
+// the page got and reports any script error (power.log: "page start-up: ..." / "page SCRIPT ERROR: ..."),
+// so a page that never says "I'm up" leaves the reason in the log. Stops once the loop has heard the page.
+var KH_STAGE = "head", KH_ERRS = 0, KH_T0 = new Date().getTime();
+function khSay(q, tries) {      // the loop listens one request at a time: a miss is tried again (3 times)
+    tries = tries || 0;
+    function again() { if (tries < 3) setTimeout(function() { khSay(q, tries + 1); }, 1500); }
+    try {
+        var x = new XMLHttpRequest(), done = false;
+        x.open("GET", "http://127.0.0.1:8765/save?" + q + "&t=" + new Date().getTime(), true);
+        x.onreadystatechange = function() { if (x.readyState === 4 && !done) { done = true; if (!(x.status >= 200 && x.status < 300)) again(); } };
+        x.send(null);
+    } catch (e) { again(); }
+}
+function khMark(s) { KH_STAGE = s; }
+// a step reported on the spot (synchronous): it reaches the loop even if the page freezes right after it,
+// which a normal (queued) request would not. At most 14, only until the loop has heard the page.
+var KH_NOW_N = 0;
+function khNow(s) {
+    KH_STAGE = s;
+    if (KH_NOW_N >= 14 || (window.HUB_STATE || {}).booted === 1) return;
+    KH_NOW_N++;
+    var q = "pgl=" + encodeURIComponent("step " + s + " at " + Math.round((new Date().getTime() - KH_T0) / 1000) + "s");
+    for (var i = 0; i < 3; i++) {
+        if (i) { var w0 = new Date().getTime(); while (new Date().getTime() - w0 < 250) {} }     // the loop may be busy with the last one
+        try {
+            var x = new XMLHttpRequest();
+            x.open("GET", "http://127.0.0.1:8765/save?" + q + "&t=" + new Date().getTime(), false);
+            x.send(null);
+            if (x.status >= 200 && x.status < 300) return;
+        } catch (e) {}
+    }
+}
+// the first call of a start-up function, reported going in and coming out (set up at the end of v109.js)
+function khWatch(name) {
+    var f = window[name], n = 0;
+    if (typeof f !== "function") return;
+    window[name] = function() {
+        var me = ++n <= 1, r;
+        if (me) khNow(name + " #" + n + " in");
+        r = f.apply(this, arguments);
+        if (me) khNow(name + " #" + n + " out");
+        return r;
+    };
+}
+function khReport() {
+    var w = window, files = (w.HUB_PORTKEY ? "k" : "-") + (w.HUB_TOTP ? "t" : "-") + (w.HUB_CLOUD ? "c" : "-") + (w.HUB_DATA ? "d" : "-");
+    khSay("pgl=" + encodeURIComponent(KH_STAGE + " after " + Math.round((new Date().getTime() - KH_T0) / 1000) + "s files " + files + (KH_ERRS ? " errors " + KH_ERRS : "")));
+}
+window.onerror = function(msg, url, line) {
+    KH_ERRS++;
+    var what = String(msg).substring(0, 150) + " @ " + String(url || "").split("/").pop().split("?")[0] + ":" + line + " [" + KH_STAGE + "]";
+    if (KH_ERRS <= 8) khSay("pgerr=" + encodeURIComponent(what));
+    // and on the screen, while the hub hasn't started (a blank screen tells you nothing)
+    try {
+        if ((window.HUB_STATE || {}).booted !== 1 && document.body && KH_ERRS <= 4) {
+            var d = document.getElementById("kh-err");
+            if (!d) { d = document.createElement("div"); d.id = "kh-err"; d.style.cssText = "position:absolute;left:0;top:0;right:0;z-index:9999;background:#fff;border-bottom:6px solid #000;padding:12px;font:bold 22px Helvetica,Arial,sans-serif"; document.body.appendChild(d); d.innerHTML = "KITCHEN HUB START-UP ERROR (it goes back to the last version by itself)"; }
+            var p = document.createElement("div"); p.style.cssText = "font:normal 18px Courier,monospace;margin-top:6px"; p.appendChild(document.createTextNode(what)); d.appendChild(p);
+        }
+    } catch (e) {}
+    return false;
+};
+(function() {
+    var n = 0, t = setInterval(function() {
+        if ((window.HUB_STATE || {}).booted === 1 || ++n > 15) { clearInterval(t); return; }
+        khReport();
+    }, 6000);
+})();
+</script>
 <style>
 /* Kitchen Hub v9.2 - written for the Kindle's older WebKit: no flexbox, no svg use-references, prefixed transforms */
 * { box-sizing: border-box; -webkit-box-sizing: border-box; }
@@ -996,6 +1067,7 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
 <script src="horo.js"></script>
 <script src="data.js"></script>
 <script>
+khNow("main: started");     // 10.9.2 black box
 // ===================== CONFIG =====================
 // BC's Pacific Time (PCT) is permanently UTC-7 (no more clock changes since March 8, 2026)
 var TZ_MODE = 7;
@@ -1017,6 +1089,7 @@ var WMO = {
     95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm"
 };
 
+khMark("main: HELPERS");
 // ===================== HELPERS =====================
 function $(id) { return document.getElementById(id); }
 function pad2(n) { return (n < 10 ? "0" : "") + n; }
@@ -1040,6 +1113,7 @@ function getBCNow() {
 }
 function keyOf(y, m, d) { return y + "-" + pad2(m + 1) + "-" + pad2(d); }
 
+khMark("main: SHIFT STORAGE");
 // ===================== SHIFT STORAGE =====================
 var SHIFTS = {};
 function initShifts() {
@@ -1094,15 +1168,18 @@ function shiftHours(v) { var p = parseShift(v); return p ? p.dur : null; }
 function isOff(v) { return /^\s*(off|x|-|vac|vacation|sick|stat|holiday)\s*$/i.test(v); }      // 10.1.2: same days-off words as the phone, TV and cloud
 function shortShift(v) { return String(v).replace(/:00/g, ""); }
 
+khMark("main: CALENDAR");
 // ===================== CALENDAR =====================
 var bcStart = getBCNow();
 var viewYear = bcStart.getUTCFullYear();
 var viewMonth = bcStart.getUTCMonth();
 
+khMark("main: SHIFT EDITOR");
 // ===================== SHIFT EDITOR =====================
 var activeDateKey = "";
 var repeatDays = 1;
 
+khMark("main: WEATHER + NEWS DATA");
 // ===================== WEATHER + NEWS DATA =====================
 var WX = null;            // raw Open-Meteo response (current + hourly + daily)
 var FEED_RESULTS = {};    // source name -> [articles]
@@ -1542,6 +1619,7 @@ function maybeFallbackSync() {
 }
 
 
+khMark("main: ARTICLE VIEWER");
 // ===================== ARTICLE VIEWER =====================
 var curArticle = 0;
 function updateArticleFoot() {
@@ -1557,6 +1635,7 @@ function pageArticle(dir) {
 }
 function closeArticle() { $("article-view").style.display = "none"; setView("main"); }
 
+khMark("main: EXIT");
 // ===================== EXIT =====================
 function exitHub() {
     try {
@@ -1582,9 +1661,10 @@ function exitHub() {
 
 
 // =====================================================================
+khMark("main: v9.2 CHROME tiles, sysbar, settings");
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.9.1";
+var VERSION = "10.9.2";
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
 var EDIT = false;
@@ -1753,6 +1833,7 @@ function fuelSvg(pct, c, b, charging) {
 }
 
 // =====================================================================
+khMark("main: TILE ENGINE");
 // =====================  TILE ENGINE  ==================================
 // =====================================================================
 var TILE_IDS = ["cal", "clock", "wx", "fc", "news", "mkt", "alm", "shifts", "timer"];
@@ -1926,6 +2007,7 @@ function renderAllTiles() {
 }
 
 // =====================================================================
+khMark("main: LAYOUT");
 // =====================  LAYOUT  =======================================
 // =====================================================================
 function layout() {
@@ -1993,6 +2075,7 @@ function renderMasthead() {
 }
 
 // =====================================================================
+khMark("main: TILE RENDERERS");
 // =====================  TILE RENDERERS  ===============================
 // =====================================================================
 function fitPad(el) { var p = Math.round(FS * 0.45); el.style.padding = p + "px " + Math.round(p * 1.4) + "px"; }
@@ -2529,6 +2612,7 @@ function updateClock(force) {
 }
 
 // =====================================================================
+khMark("main: POWER STATE + SYSBAR");
 // =====================  POWER STATE + SYSBAR  =========================
 // =====================================================================
 var POWER_URL = "http://127.0.0.1:8765/save";
@@ -2762,6 +2846,7 @@ function sendPower(q, done) {
 }
 
 // =====================================================================
+khMark("main: EDIT MODE");
 // =====================  EDIT MODE  ====================================
 // =====================================================================
 function findItem(id) { var l = LAYOUT[orientKey()]; for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
@@ -2870,6 +2955,7 @@ function renderTray(mid) {
 }
 
 // =====================================================================
+khMark("main: SETTINGS");
 // =====================  SETTINGS  =====================================
 // =====================================================================
 var OPTS = { int: [15, 30, 60, 120, 240], win: [120, 180, 300, 600], ss: [1, 2, 0] };
@@ -3794,6 +3880,7 @@ if (typeof module !== "undefined") { module.exports.HubCrypt = HubCrypt; module.
 
 
 // =====================================================================
+khMark("main: 9.5: LISTS, BOARD, RECIPES, PHONE");
 // =====================  9.5: LISTS, BOARD, RECIPES, PHONE  ===========
 // =====================================================================
 // Everything here rides on one shared store (HubData): shopping items, board
@@ -6234,6 +6321,7 @@ loadScript("update.js", function(ok) { if (ok) UPD = window.HUB_UPDATE; });
 var __phonePane = renderPhonePane;
 renderPhonePane = function() { __phonePane(); gitHubPane(); };
 
+khMark("main: 9.9: PEOPLE, PAY, BIG REFRESH");
 // =====================  9.9: PEOPLE, PAY, BIG REFRESH  =====================
 
 // ---------- people: you + a roommate, each with a look. Synced in the gist as cfg item "people" ----------
@@ -6999,6 +7087,7 @@ fitText = function(el, lo, hi) {
 };
 
 
+khMark("main: 9.9.1: FIXES");
 // =====================  9.9.1: FIXES  =====================
 // itemsOf() parsed the whole store and unlocked every line on each call (dozens per screen refresh).
 // Same store text = same answer, so remember it until the store changes.
@@ -7056,6 +7145,7 @@ tileTap = function(id, open) {
     __tileTap(id, open);
 };
 
+khMark("main: 10.0: DEALS, MONEY, FOOD, HOME, FUN");
 // =====================  10.0: DEALS, MONEY, FOOD, HOME, FUN  =====================
 // cloud data (extra.js, locked): wishlist prices, flyer matches, hot deals, fun of the day
 var EX = null;
@@ -7529,6 +7619,7 @@ renderFront = function() {
 var __itemsUI100 = renderItemsUI;
 renderItemsUI = function() { __itemsUI100(); renderTileById("money"); renderTileById("food"); renderTileById("deals"); };
 
+khMark("main: 10.1.1: MORE DEALS, MONEY, FOOD, HOME, FUN");
 // =====================  10.1.1: MORE DEALS, MONEY, FOOD, HOME, FUN  =====================
 XV_TABS.money = ["THIS MONTH", "BILLS", "GOALS", "PAYCHEQUE"];
 XV_TABS.food = ["PANTRY", "LEFTOVERS", "IDEAS"];
@@ -7871,6 +7962,7 @@ renderFront = function() {
 var __itemsUI101 = renderItemsUI;
 renderItemsUI = function() { __itemsUI101(); renderTileById("fun"); };
 
+khMark("main: 10.1.2: FIXES");
 // =====================  10.1.2: FIXES  =====================
 // cloud data can arrive with fields missing (a store with no name, a team with no record); make every field safe to print
 function cleanEX(x) {
@@ -7968,8 +8060,10 @@ layoutItems = function() {
     for (var i = 0; i < ks.length; i++) { var k = ks[i].getAttribute("data-k"); if (k === "SYM" || k === "CASE" || k === "CLR") ks[i].style.fontSize = Math.round(ks[i].offsetWidth * 0.3) + "px"; }
 };
 
+khMark("main: 10.2: AUTO-UPDATE + ROLLBACK, WEB READER");
 // =====================  10.2: AUTO-UPDATE + ROLLBACK, WEB READER  =====================
 // ---------- the page tells the loop it started fine (keeps a fresh update; silence = automatic rollback) ----------
+khMark("main: start-up timers set");     // 10.9.2 black box
 setTimeout(function() { sendPower("health=" + encodeURIComponent(VERSION)); }, 20000);
 // 10.5: a steady "I'm up" until the loop confirms it heard the page (state.js booted:1). Before 10.5 the page
 // only spoke at 4 s and 20 s; if the loop was busy both times, a working hub was stopped after 90 s.
@@ -8027,6 +8121,7 @@ loadScript("whatsnew.js", function(ok) {
     try { window.localStorage.setItem("pg_seen_ver", VERSION); } catch (e) {}
 });
 
+khMark("main: WEB READER");
 // =====================  WEB READER  =====================
 // The Kindle fetches the page (web_fetch.sh); here it becomes plain text with numbered links. The site's own
 // scripts never run and its pictures never load, so even heavy sites read fine on e-ink.
@@ -8208,6 +8303,7 @@ bulletinItem = function() {
     return __bull102();
 };
 
+khMark("main: 10.3: BOOK CLOUD, SAVE PAGES TO THE LIBRARY");
 // =====================  10.3: BOOK CLOUD, SAVE PAGES TO THE LIBRARY  =====================
 // Your books live in your private book cloud (a secret gist). Each one is a "book" line in the list:
 // title|author|ext|size|want|src|added|conv. "want = kindle" ones are downloaded into the Kindle's library
@@ -8333,6 +8429,7 @@ XVA.webKeep = function() {
     var b = document.querySelector("#xv-body [data-a=webKeep]"); if (b) b.innerHTML = "SAVED &#10003; (Kitchen Hub / Web pages)";
 };
 
+khNow("main: BIND + BOOT");
 // =====================  BIND + BOOT  ==================================
 // =====================================================================
 bindTap($("t-wx"), function() { tileTap("wx", openWeather); });
@@ -8500,6 +8597,7 @@ var HubPantry = (function() {
     return { FEATURES: FEATURES, cfg: cfg, cfgText: cfgText, guess: guess, isFood: isFood, daysLeft: daysLeft, status: status, opened: opened, sameName: sameName, needsRestock: needsRestock, place: place };
 })();
 
+khMark("main: 10.4 PANTRY APP");
 // =====================  10.4 PANTRY APP  =====================
 // The Pantry app: USE FIRST (the expiry board), EVERYTHING (by place), COOK (your saved recipes that use what's
 // about to expire, then ideas) and SETTINGS. Same rules as the phone and the cloud (HubPantry, above).
@@ -8656,6 +8754,7 @@ TILE_RENDER.food = function(T) {
 renderTileById("food");
 
 
+khMark("main: 10.4 PRIVACY: PIN LOCK");
 // =====================  10.4 PRIVACY: PIN LOCK  =====================
 // Each person can set a PIN. Locked: their Pay (only their own PIN opens it), and the shared Money, fridge
 // Notes and the Board (either person's PIN opens those). Opens for a few minutes, and everything locks again
@@ -8826,6 +8925,7 @@ setInterval(function() { if (HUB.sleeping) lockAll(); lockRefresh(); }, 10000);
 lockRefresh();
 
 
+khMark("main: 10.4 THE OPEN-APPS RAIL Windows 8 style");
 // =====================  10.4 THE OPEN-APPS RAIL (Windows 8 style)  =====================
 // A still column on the left: the time, HOME (your tiles) and the apps you've opened, newest first. Tap a tile
 // to open an app beside the rail; tap the rail to jump between open apps or back to the tiles. The rest of the
@@ -8926,6 +9026,7 @@ IC_LABEL.rail = "RAIL";
 setInterval(renderRail, 20000);      // the clock (only repaints when the minute changes)
 relayout();
 
+khMark("main: 10.6: SETTINGS REFRESH, SMART WAKE SCHEDULE, RAIL ");
 // =====================  10.6: SETTINGS REFRESH, SMART WAKE SCHEDULE, RAIL SLEEPS  =====================
 // Settings scroll: the panes can be taller than the screen. Drag up or down anywhere in a pane, or tap the
 // arrows; the page jumps (no animation: e-ink). The bar on the right only shows when there is more to see.
@@ -9100,6 +9201,7 @@ railLayout = function() {
     try { __railLayout106(); } finally { FEEL.rail = keep; }
 };
 relayout();
+khMark("main: 10.7: SHUFFLE TILE");
 // =====================  10.7: SHUFFLE TILE  =====================
 // Tiles marked SHUFFLE (edit mode) on the page on show share the slot of the first one and take turns every
 // LAYOUT.rotSec seconds while the hub is awake on the home screen. Only that slot repaints (e-ink).
@@ -9128,6 +9230,7 @@ function shuffleStep() {
     renderTileById(nx);
 }
 setInterval(shuffleStep, 2500);      // 10.8: was every second; shuffles are 10 s or more apart, and fewer wake-ups save battery
+khMark("main: 10.7: DEALS PAGE");
 // =====================  10.7: DEALS PAGE  =====================
 // The cloud brain sends EX.deals: wishlist items on sale first, then similar items on sale (same searches,
 // or the same category when there are fewer than five). Photos are downloaded by the Kindle into img/.
@@ -9350,6 +9453,7 @@ function buildSlcOpts() {
 var __feelOpts107 = buildFeelOpts;
 buildFeelOpts = function() { __feelOpts107(); buildSlcOpts(); };
 buildSlcOpts();
+khMark("main: 10.8: CROWDED DOCK - STATUS UNDER THE RAIL CLOCK");
 // =====================  10.8: CROWDED DOCK -> STATUS UNDER THE RAIL CLOCK  =====================
 // When the dock's buttons (or the edit tray) leave too little room, AWAKE / battery / UPDATED move to the
 // side rail, right under the time, and the dock gets the whole width. They go back when there is room.
@@ -9417,6 +9521,7 @@ setInterval(function() { if (!HUB.sleeping) sbFit(); else if (SBR.on) sbPut(fals
 var __applyState108 = applyState;
 applyState = function(st) { __applyState108(st); if (HUB.sleeping && SBR.on) sbPut(false); else if (!HUB.sleeping && !SBR.on) sbFit(); };      // asleep: the status belongs to the black bar
 sbFit();
+khMark("main: 10.8: ASLEEP TAG AT THE TOP, SMALLER");
 // =====================  10.8: ASLEEP TAG AT THE TOP, SMALLER  =====================
 // The moon tag sat halfway down the power-button edge, on top of the front page's text. It now sits in the
 // top corner of that edge, small, and the front page keeps that corner free.
@@ -9444,6 +9549,7 @@ tagReserve = function() {
     css.textContent = ".asleep.wk-r .fp-mast .fp-r { padding-right: 3.4em; } .asleep.wk-l .fp-mast .fp-l { padding-left: 3.4em; }";
     document.getElementsByTagName("head")[0].appendChild(css);
 })();
+khMark("main: 10.8: ALMANAC TILE FILLS ITS SPACE");
 // =====================  10.8: ALMANAC TILE FILLS ITS SPACE  =====================
 // Its lines never wrapped, so a narrow tile shrank the text to fit the width and left the bottom half empty.
 // Now it also tries a stacked version (sunrise and sunset on their own lines, the week's releases as a
@@ -9508,6 +9614,7 @@ TILE_RENDER.horo = function(T) {
     inner.__fk = null; __horoTile108(T);      // too small to read: the name-only tile as before
     inner.__fk = fk + "|no";
 };
+khNow("main: finished");     // 10.9.2 black box
 </script>
 <script src="v109.js"></script>
 </body>
