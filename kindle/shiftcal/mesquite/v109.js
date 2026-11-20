@@ -478,7 +478,8 @@ selectTab = function(name) {
 //    a size bigger (up to two tiles, kept at least 30 minutes so the screen doesn't jump every wake)
 // Settings > Look: "Smart space" and "Filler cards" (both on). Nothing changes while you edit the layout.
 var SPACE = { need: {}, measuredAt: 0, relaidAt: 0, boost: [], boostUntil: 0, boostSig: "" };
-function spaceOn() { return FEEL.space !== 0 && !EDIT && !PEEKED; }
+// 10.9.1: only once the page has heard from the loop (start-up does the plain layout, as in 10.8)
+function spaceOn() { return FEEL.space !== 0 && !EDIT && !PEEKED && !!HUB.seen; }
 function fillersOn() { return FEEL.fillers !== 0 && spaceOn(); }
 function tileEmpty(id) {
     if (id === "shop") { var a = itemsOf("shop"); for (var i = 0; i < a.length; i++) if (a[i].state === "open") return false; return true; }
@@ -576,7 +577,14 @@ packTiles = function(list, cols, rows, fill, ok) {
 };
 // filler cards: small, only when there's something worth saying
 var FILLER_EXTRA = [];            // other parts of 10.9 (the bird of the hour) add card makers here
-function fillerCards() {
+var FILLER_MEMO = { at: 0, v: null };
+function fillerCards() {           // 10.9.1: worked out at most once a minute (the packer asks many times per layout)
+    var t = new Date().getTime();
+    if (FILLER_MEMO.v && t - FILLER_MEMO.at < 60000) return FILLER_MEMO.v;
+    FILLER_MEMO.v = fillerCardsNow(); FILLER_MEMO.at = t;
+    return FILLER_MEMO.v;
+}
+function fillerCardsNow() {
     var out = [], i;
     try {
         var up = upcomingShifts(3);

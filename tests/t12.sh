@@ -13,7 +13,7 @@ ping_page vp=1x1 >/dev/null; sleep 2
 # a request without the key: answered (nc always says ok) but nothing happens
 ping_nokey "snooze=62&rid=9001" >/dev/null; sleep 3
 grep -q 'staying awake 62s' "$HUB_DIR/power.log" && bad "request WITHOUT the key was acted on" || ok "request without the key ignored"
-grep -q 'without the right key was ignored' "$HUB_DIR/power.log" && ok "the ignored request was logged" || bad "ignored request not logged"
+grep -q 'a request with NO key' "$HUB_DIR/power.log" && ok "the ignored request was logged" || bad "ignored request not logged"
 # a wrong key
 for i in 1 2 3 4 5; do R=$(busybox wget -q -T 2 -O- "http://127.0.0.1:8765/save?snooze=63&rid=9002&pk=00000000000000000000000000000000&t=$(date +%s%N)" 2>/dev/null); [ "$R" = ok ] && break; sleep 1; done; sleep 3
 grep -q 'staying awake 63s' "$HUB_DIR/power.log" && bad "request with a WRONG key was acted on" || ok "wrong key ignored"

@@ -98,7 +98,7 @@ hc_kill_tree() { hc_alive "$1" || return 0; HK="$(hc_tree "$1") $1"; hc_stop_pid
 hub_port_key() {
     HC_PORT_KEY=$(tr -cd 'a-f0-9' 2>/dev/null < "$HC_DIR/.port_key" | cut -c1-32)
     if [ ${#HC_PORT_KEY} -lt 32 ]; then
-        HC_PORT_KEY=$(od -An -tx1 -N16 /dev/urandom 2>/dev/null | tr -cd 'a-f0-9' | cut -c1-32)
+        HC_PORT_KEY=$(head -c 16 /dev/urandom | od -An -v -tx1 2>/dev/null | tr -cd 'a-f0-9' | cut -c1-32)
         [ ${#HC_PORT_KEY} -lt 32 ] && HC_PORT_KEY=$( (date +%s; echo $$; cat /proc/uptime /proc/interrupts 2>/dev/null) | sha256sum | cut -c1-32)
         ( umask 077; echo "$HC_PORT_KEY" > "$HC_DIR/.port_key" )
         hc_log "made a new key for the settings port"
@@ -113,7 +113,7 @@ hub_port_key() {
 hub_totp_init() {
     HC_TOTP=$(tr -cd 'A-Z2-7' 2>/dev/null < "$HC_DIR/.totp" | cut -c1-32)
     if [ ${#HC_TOTP} -lt 32 ]; then
-        HC_TOTP=$(od -An -tu1 -N20 /dev/urandom 2>/dev/null | awk '
+        HC_TOTP=$(head -c 20 /dev/urandom | od -An -v -tu1 2>/dev/null | awk '
             BEGIN { A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567" }
             { for (i = 1; i <= NF; i++) { buf = buf * 256 + $i; bits += 8; while (bits >= 5) { bits -= 5; v = int(buf / 2 ^ bits); buf -= v * 2 ^ bits; out = out substr(A, v + 1, 1) } } }
             END { print out }')
