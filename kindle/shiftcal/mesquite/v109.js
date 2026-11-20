@@ -560,10 +560,15 @@ packTiles = function(list, cols, rows, fill, ok) {
     if (fillersOn()) {
         var cards = fillerCards().length;
         for (r = 0; r < rows && out.__fillers.length < Math.min(cards, 3); r++) for (c = 0; c < cols && out.__fillers.length < Math.min(cards, 3); c++)
-            if (!occ[r][c]) { occ[r][c] = "__filler"; out.__fillers.push([c, r]); }
+            if (!occ[r][c]) { occ[r][c] = "__filler"; out.__fillers.push({ c: c, r: r, w: 1, h: 1 }); }
     }
     for (i = 0; i < placed.length; i++) if (SPACE.need[placed[i]] !== 2 && !tileEmpty(placed[i])) grow(placed[i]);
     for (i = 0; i < placed.length; i++) grow(placed[i]);          // last resort: better a roomy empty tile than a blank hole
+    for (i = 0; i < out.__fillers.length; i++) {                   // ...and filler cards stretch into what's left next to them
+        var f = out.__fillers[i];
+        while (free(f.c, f.r + f.h, f.w, 1)) { mark(f.c, f.r + f.h, f.w, 1, "__filler"); f.h++; }
+        while (free(f.c + f.w, f.r, 1, f.h)) { mark(f.c + f.w, f.r, 1, f.h, "__filler"); f.w++; }
+    }
     var empty = 0;
     for (r = 0; r < rows; r++) for (c = 0; c < cols; c++) if (!occ[r][c]) empty++;
     out.__empty = empty;
@@ -590,7 +595,7 @@ function fillerCards() {
         var ne = nextEvents(4);
         for (i = 0; i < ne.length; i++) if (ne[i].i >= 1) { out.push([ne[i].i === 1 ? "TOMORROW" : prettyDay(ne[i].d).split(",")[0].toUpperCase(), esc(ne[i].e.title)]); break; }
     } catch (e) {}
-    for (i = 0; i < FILLER_EXTRA.length; i++) { try { var x = FILLER_EXTRA[i](); if (x) out.push(x); } catch (e) {} }
+    for (i = FILLER_EXTRA.length - 1; i >= 0; i--) { try { var x = FILLER_EXTRA[i](); if (x) out.unshift(x); } catch (e) {} }      // (the bird first)
     return out;
 }
 var __placeTiles109 = placeTiles;
@@ -602,13 +607,15 @@ placeTiles = function() {
     if (!F || !F.length) return;
     var ok = orientKey(), g = GRID_DIMS[ok], cols = g[0], rows = g[1], GW = W - tagReserve().r, cards = fillerCards();
     for (i = 0; i < F.length && i < cards.length; i++) {
-        var c = F[i][0], r = F[i][1], el = document.createElement("div");
-        var x = Math.round(c * GW / cols), x2 = Math.round((c + 1) * GW / cols), y = GRID_Y + Math.round(r * GRID_H / rows), y2 = GRID_Y + Math.round((r + 1) * GRID_H / rows);
-        el.className = "tile sz-s v9-filler";
-        el.style.borderRightWidth = (c + 1 < cols) ? "3px" : "0"; el.style.borderBottomWidth = (r + 1 < rows) ? "3px" : "0";
+        var c = F[i].c, r = F[i].r, el = document.createElement("div");
+        var x = Math.round(c * GW / cols), x2 = Math.round((c + F[i].w) * GW / cols), y = GRID_Y + Math.round(r * GRID_H / rows), y2 = GRID_Y + Math.round((r + F[i].h) * GRID_H / rows);
+        el.className = "tile sz-" + shapeClass(F[i].w, F[i].h) + " v9-filler";
+        el.style.borderRightWidth = (c + F[i].w < cols) ? "3px" : "0"; el.style.borderBottomWidth = (r + F[i].h < rows) ? "3px" : "0";
         el.innerHTML = "<div class='v9-fin'><div class='v9-fk'>" + cards[i][0] + "</div><div class='v9-fv'>" + cards[i][1] + "</div></div>";
         ($("t-clock") ? $("t-clock").parentNode : $("root")).appendChild(el);      // with the tiles (inside the stage, beside the rail)
         place(el, x, y, x2 - x, y2 - y);
+        var im = el.getElementsByTagName("img")[0];
+        if (im) { im.style.maxHeight = Math.round((y2 - y) * 0.42) + "px"; im.style.maxWidth = "100%"; }
         try { fitText(el.firstChild, 9, FS * 2.2); } catch (e) {}
     }
 };
@@ -706,3 +713,26 @@ function openScreenPanel() {
     var rb = $("sec-in").getElementsByTagName("span");
     for (i = 0; i < rb.length; i++) (function(el) { var t = el.getAttribute("data-rt"); if (t) bindTap(el, function() { monSend("cook", t, "Cooking " + t); }); })(rb[i]);
 }
+
+// ===================== 12. BIRD OF THE HOUR =====================
+// 12 birds a day from around Prince George (the cloud picks them for the season), one per hour. Photos are
+// freely licensed Wikimedia Commons pictures, downloaded with the sync into img/; the credit is shown.
+var __cleanEX109 = cleanEX;
+cleanEX = function(x) {
+    x = __cleanEX109(x);
+    if (!x) return x;
+    var a = x.birds instanceof Array ? x.birds : [], out = [];
+    for (var i = 0; i < a.length && out.length < 12; i++) {
+        var b = a[i];
+        if (!b || !b.n || !/^img\/b[0-9a-f]{12}\.(jpg|png)$/.test(String(b.img))) continue;
+        out.push({ n: String(b.n).substring(0, 40), note: String(b.note || "").substring(0, 120), img: String(b.img), by: String(b.by || "").substring(0, 60), lic: String(b.lic || "").substring(0, 24) });
+    }
+    x.birds = out;
+    return x;
+};
+function birdNow() { var B = EX && EX.birds; if (!B || !B.length) return null; return B[getBCNow().getUTCHours() % B.length]; }
+FILLER_EXTRA.push(function() {
+    var b = birdNow(); if (!b) return null;
+    return ["BIRD OF THE HOUR", "<img src='" + esc(b.img) + "' alt='' onerror=\"this.style.display='none'\" style='display:block;margin:.1em 0 .2em;-webkit-filter:grayscale(1);filter:grayscale(1)'>" +
+        esc(b.n) + "<div style='font:normal .45em Helvetica,Arial,sans-serif;margin-top:.2em'>" + esc(b.note) + "<br>Photo: " + esc(b.by) + " (" + esc(b.lic) + ")</div>"];
+});

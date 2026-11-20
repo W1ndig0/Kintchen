@@ -457,6 +457,7 @@ async function main() {
         const xget = process.env.EXTRAS_BASE ? (u, ms, o) => get(process.env.EXTRAS_BASE + "/ext/" + encodeURIComponent(u), ms, o) : get;   // tests
         const before = JSON.stringify(exState);
         EX = await require("./extras.js")({ items, push, sent, mark, NOW, TODAY, TOMORROW, HOUR, DOW, addK, get: xget, HubCal, decodeEnts, log, state: exState, pantryCfg });
+        try { EX.birds = await require("./birds.js")({ get: xget, NOW, TODAY, log, state: exState }); } catch (e) { log("birds failed: " + String(e.message || e).slice(0, 60)); }      // 10.9
         if (JSON.stringify(exState) !== before) cloudFiles["extras_state.json"] = { content: JSON.stringify(exState) };
         const exHash = require("crypto").createHash("sha1").update(JSON.stringify({ ...EX, ts: 0 })).digest("hex");
         if (exHash !== brain.exHash || !(cg && cg.files && cg.files["extra.js"])) {
@@ -468,9 +469,9 @@ async function main() {
     try {
         const cur = cloudFiles["bundle.txt"] ? cloudFiles["bundle.txt"].content : prevBundle;
         if (EX && Array.isArray(EX.deals) && cur && /\n@@END\n?$/.test(cur)) {
-            const all = EX.deals.concat(...((EX.week && EX.week.events) || []).map(e => e.deals || []));
-            const want = all.filter(d => d.img && /^img\/d[0-9a-f]{12}\.(jpg|png)$/.test(d.img) && /^https:\/\/\S+$/.test(d.src)).map(d => "@@IMG " + d.img + " " + d.src).filter((l, i, arr) => arr.indexOf(l) === i);
-            const kept = cur.replace(/\n@@END\n?$/, "").split("\n").filter(l => !/^@@IMG img\/d[0-9a-f]{12}\./.test(l));
+            const all = EX.deals.concat(...((EX.week && EX.week.events) || []).map(e => e.deals || []), EX.birds || []);      // 10.9: + bird photos
+            const want = all.filter(d => d.img && /^img\/[bd][0-9a-f]{12}\.(jpg|png)$/.test(d.img) && /^https:\/\/\S+$/.test(d.src)).map(d => "@@IMG " + d.img + " " + d.src).filter((l, i, arr) => arr.indexOf(l) === i);
+            const kept = cur.replace(/\n@@END\n?$/, "").split("\n").filter(l => !/^@@IMG img\/[bd][0-9a-f]{12}\./.test(l));
             const next = kept.concat(want).join("\n") + "\n@@END\n";
             if (next !== cur) { cloudFiles["bundle.txt"] = { content: next }; log("deals: " + EX.deals.length + " (" + want.length + " photos)"); }
         }
