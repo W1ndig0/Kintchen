@@ -24,4 +24,13 @@ npx --yes acorn@8.14.0 --ecma5 --silent /tmp/page.js || { echo "PAGE SCRIPT DOES
 # 10.9: the page's own script files (not the generated data files) must be ES5 too, and v109.js must be there
 [ -s shiftcal/mesquite/v109.js ] || { echo "MISSING: mesquite/v109.js"; FAIL=1; }
 for J in shiftcal/mesquite/v109.js shiftcal/mesquite/qr.js; do npx --yes acorn@8.14.0 --ecma5 --silent "$J" || { echo "NOT ES5: $J"; FAIL=1; }; done
+# 10.9.3: start-up code must not read a variable that is only set further down the page (what broke 10.9-10.9.2:
+# blank screen + rollback). The names in KH_SCAN_KNOWN already did this in 10.8 and are guarded at run time.
+python3 page_lines.py > /tmp/page_lines.js || FAIL=1
+if ! node -e 'require("acorn"); require("acorn-walk")' 2>/dev/null; then
+    mkdir -p /tmp/kh-scan && (cd /tmp/kh-scan && npm install --silent --no-save acorn@8.14.0 acorn-walk@8.3.4 >/dev/null 2>&1)
+    export NODE_PATH=/tmp/kh-scan/node_modules
+fi
+KH_SCAN_KNOWN="AISLES AUTO CAL2_OFF DAY DAYPARTS EVENTS FEEL FEEL8 HORO H_COL H_END H_MID H_OPEN PAGE PEEKED PEOPLE RAIL TOUR TOUR_I ZODIAC" \
+    node startup_scan.js /tmp/page_lines.js shiftcal/mesquite/v109.js || { echo "START-UP CODE READS SOMETHING BEFORE IT IS SET (the page would not start)"; FAIL=1; }
 [ "$FAIL" = "0" ] && echo "build check passed" || { echo "build check FAILED - manifest not updated"; exit 1; }

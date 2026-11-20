@@ -305,6 +305,14 @@ async function makeBundle(prev) {
     catch (e) { log("bundle: sync_data.sh ended early (" + (e.status || e.signal) + ")"); }
     const rcp = fs.readdirSync(path.join(dir, "mesquite/rcp")).filter(f => /\.js$/.test(f)).map(f => "mesquite/rcp/" + f);
     const state = fs.readdirSync(dir).filter(f => /^\.(due_|stocks_cache|whatson_cache|otd_)/.test(f));
+    // 10.9.3: a file that isn't valid JavaScript is left out of the bundle (the Kindle keeps its last good copy).
+    // A cut-off weather download once made data.js fail on the Kindle: no weather or news, and a page error.
+    ["mesquite/data.js", "mesquite/whatson.js", "mesquite/rfeed.js", "mesquite/horo.js"].concat(rcp).forEach(rel => {
+        const f = path.join(dir, rel);
+        if (!fs.existsSync(f)) return;
+        try { new Function("window", fs.readFileSync(f, "utf8")); }
+        catch (e) { log("bundle: " + rel + " is not valid JavaScript (" + String(e.message).slice(0, 80) + ") - left out"); fs.unlinkSync(f); }
+    });
     const b = packDir(dir, ["mesquite/data.js", "mesquite/whatson.js", "mesquite/rfeed.js", "mesquite/horo.js"].concat(rcp), state);
     let data = null;
     try { const t = fs.readFileSync(path.join(dir, "mesquite/data.js"), "utf8"); data = new Function("window", t + "; return window.HUB_DATA;")({}); } catch (e) {}

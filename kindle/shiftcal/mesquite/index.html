@@ -56,6 +56,7 @@ function khReport() {
 }
 window.onerror = function(msg, url, line) {
     KH_ERRS++;
+    if (msg && typeof msg === "object") { var tg = msg.target || msg.srcElement || {}; msg = "a file failed to load: " + String(tg.src || tg.href || tg.tagName || "?").split("/").pop(); }
     var what = String(msg).substring(0, 150) + " @ " + String(url || "").split("/").pop().split("?")[0] + ":" + line + " [" + KH_STAGE + "]";
     if (KH_ERRS <= 8) khSay("pgerr=" + encodeURIComponent(what));
     // and on the screen, while the hub hasn't started (a blank screen tells you nothing)
@@ -1664,7 +1665,8 @@ function exitHub() {
 khMark("main: v9.2 CHROME tiles, sysbar, settings");
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.9.2";
+var VERSION = "10.9.3";
+var DIAG_SENT = {};      // 10.9.3: set up here, before anything at start-up can call diagOnce (see diagOnce)
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
 var EDIT = false;
@@ -4702,7 +4704,7 @@ bindTap($("ph-sync"), function() {
     busyStart("SYNCING", 60000);
     sendPower("cloudsync=1", function(r) { if (r !== "ok") { busyEnd("SYNCING"); $("ph-status").innerHTML = "The background loop did not answer - try while the hub is awake."; } });
 });
-applyItems();
+try { applyItems(); } catch (e) { khSay("pgerr=" + encodeURIComponent("applyItems at start-up: " + e)); }     // 10.9.3: never stops start-up
 
 
 // =====================================================================
@@ -5763,8 +5765,12 @@ loadScript("whatson.js", function() {});
 loadRecipeCards(function() { renderTileById("rcp"); if (currentView === "cook" && !CV.open && $("cv-art").style.display !== "block") renderCookList(); });
 
 // =====================  9.8: CLOCK DIAG, RECIPE SEARCH, INGREDIENTS -> LIST, AUTO SCREENS, MORE SETTINGS
-var DIAG_SENT = {};
-function diagOnce(msg) {     // one line per distinct measurement into power.log, so device sizing can be checked
+// 10.9.3: diagOnce can be called before this line runs (start-up: applyItems -> resendMissing, ~1900 lines up),
+// when DIAG_SENT was still undefined. That TypeError killed the page's start-up in 10.9-10.9.2 (blank screen,
+// rollback). Keep any value set earlier, and never fail on a missing one.
+var DIAG_SENT = DIAG_SENT || {};
+function diagOnce(msg) {
+    if (!DIAG_SENT) DIAG_SENT = {};     // one line per distinct measurement into power.log, so device sizing can be checked
     if (DIAG_SENT[msg]) return;
     DIAG_SENT[msg] = 1;
     try { sendPower("diag=" + encodeURIComponent(msg)); } catch (e) {}
