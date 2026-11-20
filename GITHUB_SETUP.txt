@@ -35,6 +35,9 @@ WHAT'S IN HERE
      GIST_TOKEN   the token from step 3
      HUB_PASS     your passphrase (the PASSPHRASE line in the Kindle's cloud.conf)
      NTFY_TOPIC   the fridge's alert channel: Kindle Settings > Phone > "Timer alerts on your phone" shows it
+   10.9: after MAKE NEW KEYS (Kindle Settings > Security) the Kindle shows the new HUB_PASS and NTFY_TOPIC to
+   put here, plus a temporary HUB_PASS_OLD (the passphrase before) so the brain can move old items over.
+   Delete HUB_PASS_OLD after you tap FINISH on the Kindle.
    Secrets are hidden, even though the repo is public. The brain's logs only ever show counts, never your items.
 
 5. TURN IT ON
