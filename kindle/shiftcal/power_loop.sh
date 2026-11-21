@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.10.1"
+VERSION="10.10.2"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -818,7 +818,7 @@ poll_settings_http() {
     V=$(qv clockmode);   case "$V" in min) SLEEP_CLOCK=min; CHANGED=1 ;; 15) SLEEP_CLOCK=15; CHANGED=1 ;; esac      # (10.9 pages)
     V=$(num_or_empty "$(qv timerend)"); [ -n "$V" ] && TIMER_END=$V      # a kitchen timer started (0 = stopped)
     # where the standby page put its clock digits and weather picture (screen pixels), for the sleep clock
-    V=$(qv sclk); case "$V" in [sml]_*) printf '%s\n' "$V" | tr '_' ' ' | tr -cd 'a-z0-9 \n' > "$DIR/.sleep_geo" ;; none) rm -f "$DIR/.sleep_geo" ;; esac
+    V=$(qv sclk); case "$V" in [smlx]_*) printf '%s\n' "$V" | tr '_' ' ' | tr -cd 'a-z0-9 \n' > "$DIR/.sleep_geo" ;; none) rm -f "$DIR/.sleep_geo" ;; esac
     V=$(qv swx);  case "$V" in [a-z]*_*) printf '%s\n' "$V" | tr '_' ' ' | tr -cd 'a-z0-9 \n' > "$DIR/.sleep_wx" ;; none) rm -f "$DIR/.sleep_wx" ;; esac
     V=$(qv light)
     if [ "$V" = "keep" ]; then LIGHT_AWAKE=keep; CHANGED=1; log "frontlight: left to the Kindle"
@@ -1475,7 +1475,7 @@ while true; do
         [ "$HOURLY_NOW" = "1" ] && [ "$WX_ANIM" = "1" ] && ! saver_on && play_wx_anim
     fi
     QUICK_ACTIVE=0; HOURLY_NOW=0
-    CLK_LAST=$(clock_glyphs)                   # what the page just drew; ticks only redraw digits that change
+    CLK_LAST=""          # 10.10.2: the first tick draws every slot (the page may not have shown the current time)
 
     if [ "$MODE" = "eco" ]; then
         sleep_clock "$NEXT_WAKE_EPOCH"

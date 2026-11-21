@@ -51,9 +51,10 @@ applyState = function(s) {
     }
     if (SLEEP_WAS10 !== null && SLEEP_WAS10 !== HUB.sleeping) relayout();      // the bottom bar is smaller while asleep
     SLEEP_WAS10 = HUB.sleeping;
+    if (HUB.sleeping && parseInt(s.quick, 10) === 1) front10Hourly();      // the hourly redraw: a fresh standby page
 };
 // minute ticks while asleep: only the clock (data comes with the loop's counter, above)
-quietRefresh = function() { frontClock(); pollState(); };
+quietRefresh = function() { if (!front10Hourly()) frontClock(); pollState(); };
 // filler cards and boosts are decided once per wake, so tiles don't move around while you look
 var __onWake1010 = onWake;
 onWake = function() { FILLER_MEMO.v = null; __onWake1010(); };
@@ -123,7 +124,7 @@ renderSysbarContext = function() { var c0 = SB.ctx; __renderCtx1010(); if (SB.ct
 })();
 
 // ---------------------------------------------------------------- the standby clock, drawn from pictures
-var CLK10 = { l: [115, 71, 120, 151], m: [82, 50, 85, 105], s: [54, 33, 56, 70] };       // digit, colon, am/pm width; height (art/clk/*/metrics.txt)
+var CLK10 = { x: [191, 117, 199, 249], l: [115, 71, 120, 151], m: [82, 50, 85, 105], s: [54, 33, 56, 70] };       // digit, colon, am/pm width; height (art/clk/*/metrics.txt). x: 10.10.2, the night screen
 var CLK10_SENT = "", WX10_SENT = "", CLK10_BAD = 0;
 function clk10Mode() {
     var s = window.HUB_STATE || {}, m = s.sleepClock || "min";
@@ -136,8 +137,8 @@ function clk10Glyphs(mode) {
     if (mode === "hour") return [h1, h2, ap];
     return [h1, h2, "c", String(Math.floor(mm / 10)), String(mm % 10), ap];
 }
-function clk10Size(side, glyphs) {
-    var avail = (side ? side.clientWidth : 300) - FS, hmax = side ? side.clientHeight * 0.26 : 200, keys = ["l", "m", "s"];
+function clk10Size(avail, hmax, glyphs) {
+    var keys = ["x", "l", "m", "s"];
     for (var i = 0; i < keys.length; i++) {
         var M = CLK10[keys[i]], w = 0;
         for (var j = 0; j < glyphs.length; j++) w += glyphs[j] === "c" ? M[1] : (glyphs[j] === "am" || glyphs[j] === "pm" ? M[2] : M[0]);
@@ -149,15 +150,21 @@ function clk10Send(q, which) {       // the loop needs to know where the digits 
     if (which === "c") { if (q === CLK10_SENT) return; CLK10_SENT = q; sendPower("sclk=" + q, function(r) { if (r !== "ok" && CLK10_SENT === q) CLK10_SENT = ""; }); }
     else { if (q === WX10_SENT) return; WX10_SENT = q; sendPower("swx=" + q, function(r) { if (r !== "ok" && WX10_SENT === q) WX10_SENT = ""; }); }
 }
+// 10.10.2: the night screen has its own clock (nt-cw). 10.10 only knew the day page's (fp-cw), so at night the page
+// left its "10:—" placeholder up and the loop drew the minutes where the day page's digits had been.
+function clk10El() { return $("fp-cw") || $("nt-cw"); }
 frontClock = function() {
-    var cw = $("fp-cw"); if (!cw || $("front").style.display !== "block") return;
+    if (!$("front") || $("front").style.display !== "block") return;
+    var cw = clk10El();
+    if (!cw) { clk10Send("none", "c"); return; }      // no clock on this page: the loop must not draw one
+    var night = cw.id === "nt-cw";
     var S = window.HUB_STATE || {}, mode = clk10Mode();
     // while the Kindle sleeps the loop draws the minutes straight onto the screen: the page leaves them alone
     if (HUB.sleeping && S.clockBy === "loop" && cw.__drawn && mode !== "off") return;
     var g = mode === "off" ? [] : clk10Glyphs(mode), key = mode + g.join("") + HUB.next;
     if (cw.__k === key) return;
     cw.__k = key;
-    var k = $("front").getElementsByClassName("fp-k")[0];
+    var k = $("front").getElementsByClassName(night ? "au-sub" : "fp-k")[0];
     if (k) k.innerHTML = mode === "off" ? "Asleep" : (mode === "hour" ? "Asleep &middot; the hour" : "Asleep &middot; clock keeps time");
     if (mode === "off") { cw.innerHTML = "<span class='fp-zz'>SLEEPING</span>"; cw.__drawn = 0; clk10Send("none", "c"); return; }
     if (CLK10_BAD) {      // the pictures aren't on this Kindle yet: plain text, the page redraws the minute
@@ -165,7 +172,9 @@ frontClock = function() {
         cw.innerHTML = h12 + (mode === "hour" ? "" : "<span class='fp-dash'>:" + (mm < 10 ? "0" : "") + mm + "</span>") + "<span class='fp-ap'>" + (n.getUTCHours() >= 12 ? "PM" : "AM") + "</span>";
         cw.__drawn = 0; clk10Send("none", "c"); return;
     }
-    var sz = clk10Size($("fp-side"), g), M = CLK10[sz], h = "";
+    var side = $("fp-side"), rv = tagReserve();
+    var sz = night ? clk10Size((W - rv.r) * 0.85, H * 0.4, g) : clk10Size((side ? side.clientWidth : 300) - FS, side ? side.clientHeight * 0.26 : 200, g);
+    var M = CLK10[sz], h = "";
     for (var i = 0; i < g.length; i++) {
         var w = g[i] === "c" ? M[1] : (g[i] === "am" || g[i] === "pm" ? M[2] : M[0]);
         h += "<img src='art/clk/" + sz + "/0/" + g[i] + ".png' width='" + w + "' height='" + M[3] + "' alt='' onerror='clk10Bad()'>";
@@ -177,7 +186,7 @@ frontClock = function() {
     for (var j = 0; j < ims.length; j++) { var r = ims[j].getBoundingClientRect(); q += "_" + Math.round(r.left) + "_" + Math.round(r.top); }
     clk10Send(q, "c");
 };
-function clk10Bad() { if (CLK10_BAD) return; CLK10_BAD = 1; var cw = $("fp-cw"); if (cw) { cw.__k = ""; frontClock(); } }
+function clk10Bad() { if (CLK10_BAD) return; CLK10_BAD = 1; var cw = clk10El(); if (cw) { cw.__k = ""; frontClock(); } }
 // the weather picture on the standby page (the loop animates it on the hourly redraw)
 function wx10Kind(code, night) {
     code = +code;
@@ -188,9 +197,15 @@ function wx10Kind(code, night) {
     if (code <= 1) return night ? "night" : "sun";
     return "cloud";
 }
-var __renderFront1010 = renderFront;
+var __renderFront1010 = renderFront, FRONT10_H = "";
+function front10Hour() { var n = getBCNow(); return n.getUTCDate() + "-" + n.getUTCHours(); }
+// 10.10.2: on the hourly redraw (and a minute tick that crosses the hour) the standby page is drawn again, so the
+// story, the bird, the "wakes ..." line and the night screen switch actually change. 10.10 only redrew the clock.
+function front10Hourly() { if (HUB.sleeping && FRONT10_H !== front10Hour()) { renderFront(); return 1; } return 0; }
 renderFront = function() {
+    FRONT10_H = front10Hour();
     __renderFront1010();
+    var cw0 = clk10El(); if (cw0) { cw0.__k = ""; frontClock(); }      // the night screen too
     var el = $("front"); if (!el || el.style.display !== "block") return;
     var side = $("fp-side"), ic = el.getElementsByClassName("fp-wxic")[0];
     if (ic && WX && WX.current && !CLK10_BAD) {

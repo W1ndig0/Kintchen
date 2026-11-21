@@ -51,7 +51,8 @@ waitfor 'grep -q "standby clock: [0-9]* ticks (loop" "$HUB_DIR/power.log"' 200 &
 grep -q 'clockBy: "loop"' "$HUB_DIR/mesquite/state.js" || grep -q 'standby clock: every minute (loop)' "$HUB_DIR/power.log" && ok "page told: the loop draws the minutes" || bad "clockBy not loop"
 D=$(grep 'eips -g .*/art/clk/m/90/[0-9b]\.png -x 1017 -y \(26\|108\|240\|322\)' "$KT/sys.log" | head -1)
 [ -n "$D" ] && ok "a changed digit drawn at its slot: ${D#*art/}" || bad "no digit drawn at a reported slot: $(grep 'art/clk' "$KT/sys.log" | head -2)"
-[ "$(grep -c 'art/clk' "$KT/sys.log")" -le 6 ] && ok "only changed digits are drawn ($(grep -c 'art/clk' "$KT/sys.log") pictures)" || bad "too many digit draws: $(grep -c 'art/clk' "$KT/sys.log")"
+# 10.10.2: the first tick draws all six slots (the page may have shown another time), later ticks only what changed
+N=$(grep -c 'art/clk' "$KT/sys.log"); [ "$N" -ge 6 ] && [ "$N" -le 9 ] && ok "first tick draws every slot, then only changed digits ($N pictures)" || bad "digit draws: $N"
 [ "$(grep -c 'woke on schedule' "$HUB_DIR/power.log")" -le 2 ] && ok "ticks are not logged one by one" || bad "log flooded: $(grep -c 'woke on schedule' "$HUB_DIR/power.log") lines"
 sh "$HUB_DIR/stop_hub.sh" launch >/dev/null 2>&1; sleep 1
 # ---- the same without a screen tool that can place pictures: the page draws the minute
