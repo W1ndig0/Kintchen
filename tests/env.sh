@@ -13,7 +13,7 @@ kh_stray() {
     for d in /proc/[0-9]*; do
         p=${d#/proc/}
         [ "$p" = "$$" ] && continue
-        for a in $(tr '\0' '\n' 2>/dev/null < "$d/cmdline" | head -3); do
+        for a in $(tr '\0' '\n' 2>/dev/null < "$d/cmdline" | head -2); do      # the first two, like hc_pids_matching: a path passed as an ARGUMENT is not the script being run
             case "$a" in */power_loop.sh|power_loop.sh|*/stub/mesquite) echo "$p"; break ;; esac
         done
     done

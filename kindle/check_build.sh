@@ -33,4 +33,28 @@ if ! node -e 'require("acorn"); require("acorn-walk")' 2>/dev/null; then
 fi
 KH_SCAN_KNOWN="AISLES AUTO CAL2_OFF DAY DAYPARTS EVENTS FEEL FEEL8 HORO H_COL H_END H_MID H_OPEN PAGE PEEKED PEOPLE RAIL TOUR TOUR_I ZODIAC" \
     node startup_scan.js /tmp/page_lines.js shiftcal/mesquite/v109.js shiftcal/mesquite/v1010.js || { echo "START-UP CODE READS SOMETHING BEFORE IT IS SET (the page would not start)"; FAIL=1; }
+# 10.10.4: every "if has a b c" block in the loop must name every setting read inside it, or that setting
+# would silently stop working. Checked here so the guards can never drift from the code they guard.
+python3 - <<'PYCHK' || { echo "A SETTING INSIDE AN 'if has' BLOCK IS NOT NAMED IN ITS GUARD"; FAIL=1; }
+import re, sys
+L = open("shiftcal/power_loop.sh").read().split("\n")
+bad = []
+for i, line in enumerate(L):
+    m = re.match(r"    if has ([\w ]+); then", line)      # the guards sit at four spaces, their body at eight
+    if not m:
+        continue
+    keys = set(m.group(1).split())
+    for j in range(i + 1, len(L)):
+        if L[j] == "    fi":
+            break
+        for k in re.findall(r"qv (\w+)", L[j]):
+            if k not in keys:
+                bad.append("   line %d reads '%s' but the guard on line %d does not name it" % (j + 1, k, i + 1))
+    else:
+        bad.append("   the guard on line %d is never closed" % (i + 1))
+for b in bad:
+    print(b)
+sys.exit(1 if bad else 0)
+PYCHK
+[ "$FAIL" = "0" ] && echo "   ok - every guarded setting is named in its guard"
 [ "$FAIL" = "0" ] && echo "build check passed" || { echo "build check FAILED - manifest not updated"; exit 1; }

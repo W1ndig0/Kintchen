@@ -1,0 +1,38 @@
+KITCHEN HUB 10.10.4 - FASTER TAPS, AND THREE MORE FAULTS
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE.
+No new features. 10.10.3 was a hunt for faults; this one measures the hub instead of guessing, and
+makes the part you actually wait for - a tap in Settings - about three times quicker.
+
+WHY SETTINGS FELT SLOW
+ 1  While the background loop is dealing with one tap it cannot hear the next one. So however long the
+    loop takes to handle a tap is exactly how long the screen feels stuck. Measured here, almost all
+    of that time was the loop looking through the whole settings message about forty times over,
+    starting a separate little program for each look, even for the thirty-odd settings your tap had
+    nothing to do with. It now checks once whether your tap mentions a group of settings at all and
+    skips the whole group if it does not. A tap went from 43 to 15 milliseconds on this machine; the
+    Kindle is some ten to twenty times slower than that, so it is the same saving in the part you feel.
+ 2  The clock, the "wakes at" times and the file the loop hands the page are now worked out without
+    starting a program each time either - the same answers, fewer moving parts.
+ 3  When the loop does turn a tap away because it is still busy, the page now tries again after a sixth
+    of a second instead of waiting the better part of a second, and staggers repeat tries slightly so
+    two taps sent together stop colliding.
+
+FAULTS FOUND AND FIXED
+ 4  THE ALMANAC NEVER HAD ANY RELEASES IN IT. The cloud looks up the week's big games, films and TV
+    every six hours, and then the Sunday summary ("last 7 days: spent ...") was written over the top of
+    it before it was sent out. So the fridge's Almanac has always said "No big game, film or TV
+    releases this week". Both now have their own place and both arrive.
+ 5  Once all your books were locked with your passphrase, the cloud still downloaded every book in full
+    every quarter of an hour to check - every part of every book, for nothing. It now remembers which
+    books it has already locked.
+ 6  A bird whose photo could not be looked up (Wikipedia down, or no licence it was allowed to use) was
+    given up on for a whole month. It tries again after three days.
+
+UNDER THE BONNET
+ 7  A new test times the loop with every group of settings mentioned against a plain tap and fails if
+    the difference has crept back. It fails on 10.10.3 and passes on this one, so the saving cannot be
+    lost again without something going red.
+ 8  The build check now refuses to start if a setting is ever handled inside a group that does not name
+    it - the mistake that would otherwise make a setting silently stop working.
+ 9  Proof that none of the above changed any behaviour: thirty-nine settings were each sent to the old
+    loop and the new one, and everything both of them wrote was compared byte for byte.

@@ -1662,7 +1662,7 @@ function exitHub() {
 khMark("main: v9.2 CHROME tiles, sysbar, settings");
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.10.3";
+var VERSION = "10.10.4";
 var DIAG_SENT = {};      // 10.9.3: set up here, before anything at start-up can call diagOnce (see diagOnce)
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
@@ -2822,7 +2822,10 @@ function sendPower(q, done) {
     var rid = (q.indexOf("touch=") === 0) ? "" : String(++RID_SEQ), tries = 0, fin = false;
     function end(r) { if (fin) return; fin = true; if (rid) delete PENDING[rid]; if (done) done(r); }
     if (rid) PENDING[rid] = function() { end("ok"); };
-    function again() { if (!fin && tries < 4) setTimeout(attempt, 450 + Math.floor(Math.random() * 900)); }      // 10.10.1: jitter
+    // 10.10.4: the loop now answers a tap in a fraction of the time, and a refusal almost always means it is
+    // still busy with the last one. Try again quickly first, then back off (with jitter, so two requests sent
+    // together do not keep colliding).
+    function again() { if (fin || tries >= 4) return; setTimeout(attempt, tries === 1 ? 160 : (tries === 2 ? 400 : 900) + Math.floor(Math.random() * 500)); }
     function attempt() {
         if (fin) return;
         tries++;

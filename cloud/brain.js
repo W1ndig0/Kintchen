@@ -600,9 +600,11 @@ async function main() {
                 if (plan[k]) bits.push("dinner: " + plan[k]);
                 if (bits.length) lines.push(DAYS[(DOW + i) % 7].slice(0, 3) + ": " + bits.join(" / "));
             }
-            if (EX && EX.week) {      // 10.1.1: how the last 7 days went
+            // 10.10.4: last7 (an extra.js from before 10.10.4 kept it in .week, so read that too)
+            const L7 = (EX && EX.last7) || (EX && EX.week && typeof EX.week.spent === "number" ? EX.week : null);
+            if (L7 && L7.chores) {      // 10.1.1: how the last 7 days went
                 const pc2 = peopleCfg(), n1 = (pc2 && pc2.people && pc2.people.p1 && pc2.people.p1.name) || "You", n2 = pc2 && pc2.people && pc2.people.p2 && pc2.people.p2.name;
-                const ch = EX.week.chores, bits = ["spent $" + EX.week.spent.toFixed(2)];
+                const ch = L7.chores, bits = ["spent $" + (+L7.spent || 0).toFixed(2)];
                 if (ch.p1 + ch.p2) bits.push("chores " + n1 + " " + ch.p1 + (n2 ? ", " + n2 + " " + ch.p2 : ""));
                 lines.unshift("Last 7 days: " + bits.join(" / "));
             }

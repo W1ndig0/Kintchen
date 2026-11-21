@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.10.3"
+VERSION="10.10.4"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -222,6 +222,7 @@ record_battery() {
         }' "$BATT_HIST" 2>/dev/null)
     BATT_RATE=$(echo "$RES" | awk '{print $1+0}')
     BATT_HOURS_LEFT=$(echo "$RES" | awk '{print $2+0}')
+    CHARGING=$(n0 "$CHARGING"); BATT_HOURS_LEFT=$(n0 "$BATT_HOURS_LEFT")      # 10.10.4: checked here, not on every state write
     # 9.8: drain over the whole week (every discharging stretch, charging left out) -> steadier prediction
     W7=$(awk -v now="$NOW" '
         { t[NR]=$1; p[NR]=$2; c[NR]=$3 }
@@ -260,13 +261,17 @@ write_log_js() {
 }
 
 # "9:00 PM" for an epoch, without relying on busybox date -d (PCT is a fixed UTC-7)
-fmt_epoch() {
+fmt_epoch_v() {      # 10.10.4: the same, into FMT_V, without starting a program
+    # it no longer runs inside $( ), so a value that is not a number would stop the whole loop, not a subshell
+    case "$1" in ''|*[!0-9]*) FMT_V="--:--"; return ;; esac
     L=$(( $1 - 25200 ))
     H=$(( (L / 3600) % 24 )); M=$(( (L / 60) % 60 ))
     AP=AM; [ "$H" -ge 12 ] && AP=PM
     H12=$(( H % 12 )); [ "$H12" -eq 0 ] && H12=12
-    printf "%d:%02d %s" "$H12" "$M" "$AP"
+    case $M in ?) M="0$M" ;; esac
+    FMT_V="$H12:$M $AP"
 }
+fmt_epoch() { fmt_epoch_v "$1"; printf '%s' "$FMT_V"; }
 
 LAST_SYNC=0
 LAST_SYNC_STR="Never"
@@ -275,7 +280,7 @@ read_last_sync() {
     LS=$(awk '{print $1}' "$LAST_SYNC_F" 2>/dev/null)
     case "$LS" in ''|*[!0-9]*) return ;; esac
     LAST_SYNC=$LS
-    LAST_SYNC_STR=$(fmt_epoch "$LS")
+    fmt_epoch_v "$LS"; LAST_SYNC_STR="$FMT_V"
 }
 
 # 10.10.3: anything that goes into state.js as a NUMBER goes through here. `grep -c` on an empty file
@@ -291,20 +296,25 @@ AWAKE_UNTIL=0
 NEXT_WAKE_EPOCH=0
 WAKE_REASON="start"
 UI_SLEEP=0          # 10.10.1: 1 while the page should show the standby view (hourly redraw, getting ready to sleep, asleep)
-write_ui_state() {
+# 10.10.4: this runs on every single request from the page, and every $(...) in it starts another program.
+# On the Kindle that is most of the delay you feel between taps, so it now works out of shell variables.
+write_ui_state() {      # $1 = sleeping, $2 = the time now, when the caller already has it
     SLEEPING="${1:-0}"
     NEXT_STR="--:--"
-    [ "$SLEEPING" = "1" ] && [ "$NEXT_WAKE_EPOCH" -gt 0 ] && NEXT_STR=$(fmt_epoch "$NEXT_WAKE_EPOCH")
-    B_NOW=${B:-$(battery_pct)}      # 10.10.3: the reading from this wake (state.js is written on every request)
+    [ "$SLEEPING" = "1" ] && [ "$NEXT_WAKE_EPOCH" -gt 0 ] && { fmt_epoch_v "$NEXT_WAKE_EPOCH"; NEXT_STR="$FMT_V"; }
+    B_NOW=${B:-$(battery_pct)}      # 10.10.3: the reading from this wake
     case "$SCREENSAVER_MODE" in off) SS_LEGACY=0 ;; eips_slots) SS_LEGACY=2 ;; *) SS_LEGACY=1 ;; esac
-    WS_NOW=$(date +%s); is_night_at "$WS_NOW" && SMODE=night || SMODE=home
-    SC_BY_NOW=page; [ "$SLEEPING" = "1" ] && SC_BY_NOW=$(clock_by)      # 10.10: who draws the standby minute
+    WS_NOW=${2:-$(date +%s)}; is_night_at "$WS_NOW" && SMODE=night || SMODE=home
+    SC_BY_NOW=page; [ "$SLEEPING" = "1" ] && { clock_by_v; SC_BY_NOW="$CB_V"; }      # 10.10: who draws the standby minute
+    UPD_P=0; [ -f "$DIR/.update/pending" ] && UPD_P=1
+    BOOTED=0; [ "$BOOT" = "0" ] && BOOTED=1
+    FL_V="$LIGHT_AWAKE"; [ "$LIGHT_AWAKE" = keep ] && FL_V=-1
     cat > "$STATE_JS.tmp" <<EOT
 window.HUB_STATE = {
     v: "$VERSION",
     autoUpd: $AUTO_UPDATE,
-    updPending: $([ -f "$DIR/.update/pending" ] && echo 1 || echo 0),
-    now: $(date +%s),
+    updPending: $UPD_P,
+    now: $WS_NOW,
     sleeping: $SLEEPING,
     awakeUntil: $AWAKE_UNTIL,
     wakeReason: "$WAKE_REASON",
@@ -318,14 +328,14 @@ window.HUB_STATE = {
     screensaverMode: "$SCREENSAVER_MODE",
     pillowDisabled: $PILLOW_DISABLE,
     battery: "${B_NOW:-?}",
-    batteryHoursLeft: $(n0 "$BATT_HOURS_LEFT"),
-    charging: $(n0 "$CHARGING"),
-    lastRid: $(n0 "$LAST_RID"),
-    booted: $([ "$BOOT" = "0" ] && echo 1 || echo 0),
+    batteryHoursLeft: $BATT_HOURS_LEFT,
+    charging: $CHARGING,
+    lastRid: $LAST_RID,
+    booted: $BOOTED,
     smart: $SMART_SLEEP, homeMin: $HOME_MIN, awayMin: $AWAY_MIN, nightMin: $NIGHT_MIN, nightFrom: $NIGHT_FROM, nightTo: $NIGHT_TO,
     where: "${SMODE:-fixed}", aways: $AWAYS_N,
     snoozeUntil: 0,
-    quick: ${QUICK_NEXT:-0}, quickWake: $QUICK_WAKE, clockMode: "$CLOCK_MODE", frontlight: $([ "$LIGHT_AWAKE" = keep ] && echo -1 || echo "$LIGHT_AWAKE"),
+    quick: ${QUICK_NEXT:-0}, quickWake: $QUICK_WAKE, clockMode: "$CLOCK_MODE", frontlight: $FL_V,
     rate7: ${RATE7:-0}, hours7: ${HRS7:-0}, wakesPerDay: ${WPD:-0},
     sleepClock: "$SLEEP_CLOCK", nightClock: "$NIGHT_CLOCK", nightDeghost: $NIGHT_DEGHOST, hourly: $HOURLY_REFRESH, wxAnim: $WX_ANIM,
     timerTick: $TIMER_TICK, timerEnd: ${TIMER_END:-0}, syncMode: "$SYNC_MODE", editPush: "$EDIT_PUSH", listsOnWake: $LISTS_ON_WAKE,
@@ -580,6 +590,10 @@ hub_totp_init
 KEY_BAD_LOGGED=0
 # 10.10: pure shell (was echo | tr | sed | head: ~150 programs started per tap, the main reason taps felt slow)
 qv() { case "&$QS" in *"&$1="*) QV_T="&$QS"; QV_T=${QV_T#*"&$1="}; printf '%s\n' "${QV_T%%&*}" ;; esac; }
+# 10.10.4: true when the request actually carries one of these names. Starting a program is what costs
+# time on the Kindle, and the settings below used to start one for every name on every single request, even
+# a plain tap. This is all shell, so it costs nothing. check_build.sh makes sure no name goes missing.
+has() { for HK in "$@"; do case "&$QS" in *"&$HK="*) return 0 ;; esac; done; return 1; }
 num_or_empty() { case "$1" in ''|*[!0-9]*) echo "" ;; *) echo "$1" ;; esac; }
 
 # One ~1 s listen for a request from the page. Handles: touch=1, snooze=N (seconds; 1 = 5 min),
@@ -617,9 +631,9 @@ poll_settings_http() {
         NCN=$(( ${NCN:-0} + 1 ))
         [ $(( $(date +%s) - ${NC_LOGGED:-0} )) -ge 60 ] && { log "page connection hung - listener reset (${NCN}x so far)"; NC_LOGGED=$(date +%s); }
     fi
-    REQ=$(head -1 "$NC_OUT" 2>/dev/null)
-    case "$REQ" in *"/save?"*) ;; *) return ;; esac
-    QS=$(echo "$REQ" | sed -n 's#.* /save?\([^ ]*\) HTTP.*#\1#p')
+    REQ=""; [ -s "$NC_OUT" ] && read -r REQ < "$NC_OUT" 2>/dev/null      # 10.10.4: the shell reads the line itself
+    case "$REQ" in *" /save?"*) ;; *) return ;; esac
+    QS=${REQ#* /save?}; QS=${QS%% *}
     NOWQ=$(date +%s)
     # 10.9.2: the page's start-up black box (a tiny script at the top of the page, separate from the big one):
     # how far the page got (pgl) and any script error (pgerr). No key needed - it only writes a line to the
@@ -655,140 +669,144 @@ poll_settings_http() {
     # a request id the page repeats on retries: handle each id once, echo it back through state.js
     RID=$(num_or_empty "$(qv rid)")
     if [ -n "$RID" ]; then
-        if [ "$RID" = "$LAST_RID" ]; then write_ui_state "$UI_SLEEP"; return; fi
+        if [ "$RID" = "$LAST_RID" ]; then write_ui_state "$UI_SLEEP" "$NOWQ"; return; fi
         LAST_RID=$RID; echo "$RID" > "$DIR/.last_rid"
     fi
     if [ "$(qv sync)" = "1" ]; then
         NEWU=$((NOWQ + 90)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
         if sync_running; then log "sync requested (already running)"; else log "sync requested from the hub"; start_sync; fi
     fi
-    STK=$(qv stocks)
-    if [ -n "$STK" ]; then
-        # "SYM~LABEL,SYM~LABEL" url-encoded; keep only safe characters, max 10 lines
-        urldecode "$STK" | tr ',' '\n' | tr -cd 'A-Za-z0-9^=./&~\n-' | sed -e 's/~/:/' -e '/^:*$/d' | head -n 10 > "$STOCKS_CONF.tmp"
-        if [ -s "$STOCKS_CONF.tmp" ]; then
-            { echo "# Markets tile symbols (YAHOO_SYMBOL:LABEL) - edited from Settings > Markets"; cat "$STOCKS_CONF.tmp"; } > "$STOCKS_CONF"
-            write_stocks_js
-            log "markets list saved: $(tr '\n' ' ' < "$STOCKS_CONF.tmp")"
+    if has stocks item cloudsync cloudwake rsearch news job clouddata books savepage web wid kbrowser health autoupd diag notify alerts; then      # 10.10.4: cloud, lists and jobs
+        STK=$(qv stocks)
+        if [ -n "$STK" ]; then
+            # "SYM~LABEL,SYM~LABEL" url-encoded; keep only safe characters, max 10 lines
+            urldecode "$STK" | tr ',' '\n' | tr -cd 'A-Za-z0-9^=./&~\n-' | sed -e 's/~/:/' -e '/^:*$/d' | head -n 10 > "$STOCKS_CONF.tmp"
+            if [ -s "$STOCKS_CONF.tmp" ]; then
+                { echo "# Markets tile symbols (YAHOO_SYMBOL:LABEL) - edited from Settings > Markets"; cat "$STOCKS_CONF.tmp"; } > "$STOCKS_CONF"
+                write_stocks_js
+                log "markets list saved: $(tr '\n' ' ' < "$STOCKS_CONF.tmp")"
+                NEWU=$((NOWQ + 90)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+                sync_running || start_sync
+            fi
+            rm -f "$STOCKS_CONF.tmp"
+        fi
+
+        ITM=$(qv item)
+        if [ -n "$ITM" ]; then
+            sh "$DIR/hub_cloud.sh" add "$ITM" 2>/dev/null
+            touch "$DIR/.cloud_dirty"
+            cloud_ready && [ "$EDIT_PUSH" = "now" ] && CLOUD_DUE=$((NOWQ + 12))     # a short lists-only burst after the last edit
             NEWU=$((NOWQ + 90)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+        fi
+        if [ "$(qv cloudsync)" = "1" ]; then
+            if cloud_ready; then
+                NEWU=$((NOWQ + 90)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+                if sync_running; then log "lists sync requested (sync already running)"; else log "lists sync requested from the hub"; start_sync lists; fi
+            else log "lists sync requested but cloud.conf is missing"; fi
+        fi
+        V=$(num_or_empty "$(qv cloudwake)")
+        if [ -n "$V" ]; then
+            case "$V" in 1) LISTS_ON_WAKE=1 ;; *) LISTS_ON_WAKE=0 ;; esac
+            CHANGED=1; write_cloud_js
+            log "lists on button wake: $LISTS_ON_WAKE"
+        fi
+        RQ=$(qv rsearch)
+        if [ -n "$RQ" ]; then
+            RQ=$(urldecode "$RQ" | tr -cd 'A-Za-z0-9 -' | cut -c1-40)
+            NEWU=$((NOWQ + 150)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+            if sync_running; then log "recipe search waits for the running sync"; echo "$RQ" > "$DIR/.rsearch_next"
+            else log "recipe search: $RQ"; start_search "$RQ"; fi
+        fi
+        NWS=$(qv news)
+        if [ -n "$NWS" ]; then
+            : > "$DIR/news.conf.tmp"
+            for K in $(urldecode "$NWS" | tr ',' ' '); do
+                case "$K" in
+                    ckpg) echo "https://ckpgtoday.ca/feed/|CKPG|8" ;;
+                    cbcbc) echo "https://www.cbc.ca/webfeed/rss/rss-canada-britishcolumbia|CBC BC|6" ;;
+                    cbcca) echo "https://www.cbc.ca/webfeed/rss/rss-canada|CBC CANADA|5" ;;
+                    cbcworld) echo "https://www.cbc.ca/webfeed/rss/rss-world|CBC WORLD|5" ;;
+                    cbcbiz) echo "https://www.cbc.ca/webfeed/rss/rss-business|CBC BUSINESS|4" ;;
+                    cbctech) echo "https://www.cbc.ca/webfeed/rss/rss-technology|CBC TECH|4" ;;
+                esac >> "$DIR/news.conf.tmp"
+            done
+            [ -s "$DIR/news.conf.tmp" ] && mv "$DIR/news.conf.tmp" "$DIR/news.conf" && rm -f "$DIR/.due_news_night" && log "news sources: $(cut -d'|' -f2 "$DIR/news.conf" | tr '\n' ' ')"
             sync_running || start_sync
         fi
-        rm -f "$STOCKS_CONF.tmp"
-    fi
-
-    ITM=$(qv item)
-    if [ -n "$ITM" ]; then
-        sh "$DIR/hub_cloud.sh" add "$ITM" 2>/dev/null
-        touch "$DIR/.cloud_dirty"
-        cloud_ready && [ "$EDIT_PUSH" = "now" ] && CLOUD_DUE=$((NOWQ + 12))     # a short lists-only burst after the last edit
-        NEWU=$((NOWQ + 90)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
-    fi
-    if [ "$(qv cloudsync)" = "1" ]; then
-        if cloud_ready; then
-            NEWU=$((NOWQ + 90)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
-            if sync_running; then log "lists sync requested (sync already running)"; else log "lists sync requested from the hub"; start_sync lists; fi
-        else log "lists sync requested but cloud.conf is missing"; fi
-    fi
-    V=$(num_or_empty "$(qv cloudwake)")
-    if [ -n "$V" ]; then
-        case "$V" in 1) LISTS_ON_WAKE=1 ;; *) LISTS_ON_WAKE=0 ;; esac
-        CHANGED=1; write_cloud_js
-        log "lists on button wake: $LISTS_ON_WAKE"
-    fi
-    RQ=$(qv rsearch)
-    if [ -n "$RQ" ]; then
-        RQ=$(urldecode "$RQ" | tr -cd 'A-Za-z0-9 -' | cut -c1-40)
-        NEWU=$((NOWQ + 150)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
-        if sync_running; then log "recipe search waits for the running sync"; echo "$RQ" > "$DIR/.rsearch_next"
-        else log "recipe search: $RQ"; start_search "$RQ"; fi
-    fi
-    NWS=$(qv news)
-    if [ -n "$NWS" ]; then
-        : > "$DIR/news.conf.tmp"
-        for K in $(urldecode "$NWS" | tr ',' ' '); do
-            case "$K" in
-                ckpg) echo "https://ckpgtoday.ca/feed/|CKPG|8" ;;
-                cbcbc) echo "https://www.cbc.ca/webfeed/rss/rss-canada-britishcolumbia|CBC BC|6" ;;
-                cbcca) echo "https://www.cbc.ca/webfeed/rss/rss-canada|CBC CANADA|5" ;;
-                cbcworld) echo "https://www.cbc.ca/webfeed/rss/rss-world|CBC WORLD|5" ;;
-                cbcbiz) echo "https://www.cbc.ca/webfeed/rss/rss-business|CBC BUSINESS|4" ;;
-                cbctech) echo "https://www.cbc.ca/webfeed/rss/rss-technology|CBC TECH|4" ;;
-            esac >> "$DIR/news.conf.tmp"
-        done
-        [ -s "$DIR/news.conf.tmp" ] && mv "$DIR/news.conf.tmp" "$DIR/news.conf" && rm -f "$DIR/.due_news_night" && log "news sources: $(cut -d'|' -f2 "$DIR/news.conf" | tr '\n' ' ')"
-        sync_running || start_sync
-    fi
-    JB=$(qv job | tr -cd 'a-z-')
-    case "$JB" in
-        update-rollback)
-            log "rollback asked for from the hub"
-            if sh "$DIR/hub_update.sh" rollback; then relaunch "rolled back from the hub"; fi ;;
-        update-check|update-install|update-auto|logup|status)
-            NEWU=$((NOWQ + 180)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
-            if sync_running; then log "$JB waits for the running sync"; echo "$JB" > "$DIR/.job_next"; else log "job: $JB"; start_job "$JB"; fi ;;
-    esac
-    V=$(num_or_empty "$(qv clouddata)")
-    if [ -n "$V" ]; then case "$V" in 1) USE_CLOUD_DATA=1 ;; *) USE_CLOUD_DATA=0 ;; esac; CHANGED=1; write_cloud_js; log "cloud data: $USE_CLOUD_DATA"; fi
-    BK=$(qv books)
-    if [ -n "$BK" ]; then       # 10.3: which books belong on the Kindle: lines "id<TAB>file name"
-        urldecode "$BK" | awk -F'\t' 'NF == 2 && $1 ~ /^[A-Za-z0-9]+$/ && $2 !~ /\// && $2 !~ /^\./ && length($2) < 120 { print $1 "\t" $2 }' > "$DIR/.books_want.tmp"
-        if ! cmp -s "$DIR/.books_want.tmp" "$DIR/.books_want"; then mv "$DIR/.books_want.tmp" "$DIR/.books_want"; log "books on the Kindle: $(grep -c . "$DIR/.books_want")"; sync_running || start_sync lists; else rm -f "$DIR/.books_want.tmp"; fi
-    fi
-    SP=$(qv savepage)
-    if [ -n "$SP" ]; then       # 10.3: the web page you're reading -> a text file in the Kindle library
-        SPN=$(urldecode "$SP" | tr -cd 'A-Za-z0-9 ._()-' | cut -c1-80)
-        [ -n "$SPN" ] && log "$(sh "$DIR/web_fetch.sh" save "$SPN")"
-    fi
-    WU=$(qv web)
-    if [ -n "$WU" ]; then
-        WU=$(urldecode "$WU" | tr -d '\r\n"`$\\' | cut -c1-500); WID=$(qv wid | tr -cd 'A-Za-z0-9' | cut -c1-20)
-        NEWU=$((NOWQ + 240)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
-        case "$WU" in
-            q:*|http://*|https://*|[A-Za-z0-9]*.*)
-                if sync_running; then log "web page waits for the running sync"; printf '%s\n%s\n' "$WU" "$WID" > "$DIR/.web_next"; else log "web: page asked for"; start_web "$WU" "$WID"; fi ;;
+        JB=$(qv job | tr -cd 'a-z-')
+        case "$JB" in
+            update-rollback)
+                log "rollback asked for from the hub"
+                if sh "$DIR/hub_update.sh" rollback; then relaunch "rolled back from the hub"; fi ;;
+            update-check|update-install|update-auto|logup|status)
+                NEWU=$((NOWQ + 180)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+                if sync_running; then log "$JB waits for the running sync"; echo "$JB" > "$DIR/.job_next"; else log "job: $JB"; start_job "$JB"; fi ;;
         esac
-    fi
-    if [ "$(qv kbrowser)" = "1" ]; then log "opening the Kindle's own browser (the hub comes back at the next wake)"; AWAY=1; lipc-set-prop com.lab126.appmgrd start app://com.lab126.browser 2>/dev/null; fi
-    HV=$(qv health | tr -cd 'A-Za-z0-9.-')
-    # 10.4.1: ANY message from the page proves the new page started. The listener takes one message at a
-    # time, and on the Kindle the page's health= message was always lost in the start-up rush, so a page
-    # that worked was rolled back as "silent". The version comes from .update/pending, so it always matches.
-    if [ -z "$HV" ] && [ -f "$DIR/.update/pending" ]; then HV=$(cut -d' ' -f1 "$DIR/.update/pending" | tr -cd 'A-Za-z0-9.-'); fi
-    [ -n "$HV" ] && [ -f "$DIR/.update/pending" ] && sh "$DIR/hub_update.sh" health "$HV" && [ ! -f "$DIR/.update/pending" ] && log "update $HV confirmed by the page"
-    V=$(num_or_empty "$(qv autoupd)")
-    if [ -n "$V" ]; then case "$V" in 0|1|2) AUTO_UPDATE=$V ;; esac; save_conf; write_ui_state "$UI_SLEEP"; log "auto update: $AUTO_UPDATE"; fi
-    DG=$(qv diag)
-    [ -n "$DG" ] && log "page: $(urldecode "$DG" | tr -cd 'A-Za-z0-9 :=.,x/-' | cut -c1-160)"
-    NTF=$(qv notify)
-    if [ -n "$NTF" ]; then notify_phone "$(urldecode "$NTF" | tr -d '\r\n' | cut -c1-200)"; fi
-    V=$(num_or_empty "$(qv alerts)")
-    if [ -n "$V" ]; then
-        case "$V" in 1) PHONE_ALERTS=1 ;; *) PHONE_ALERTS=0 ;; esac
-        CHANGED=1; write_cloud_js; log "phone alerts: $PHONE_ALERTS"
+        V=$(num_or_empty "$(qv clouddata)")
+        if [ -n "$V" ]; then case "$V" in 1) USE_CLOUD_DATA=1 ;; *) USE_CLOUD_DATA=0 ;; esac; CHANGED=1; write_cloud_js; log "cloud data: $USE_CLOUD_DATA"; fi
+        BK=$(qv books)
+        if [ -n "$BK" ]; then       # 10.3: which books belong on the Kindle: lines "id<TAB>file name"
+            urldecode "$BK" | awk -F'\t' 'NF == 2 && $1 ~ /^[A-Za-z0-9]+$/ && $2 !~ /\// && $2 !~ /^\./ && length($2) < 120 { print $1 "\t" $2 }' > "$DIR/.books_want.tmp"
+            if ! cmp -s "$DIR/.books_want.tmp" "$DIR/.books_want"; then mv "$DIR/.books_want.tmp" "$DIR/.books_want"; log "books on the Kindle: $(grep -c . "$DIR/.books_want")"; sync_running || start_sync lists; else rm -f "$DIR/.books_want.tmp"; fi
+        fi
+        SP=$(qv savepage)
+        if [ -n "$SP" ]; then       # 10.3: the web page you're reading -> a text file in the Kindle library
+            SPN=$(urldecode "$SP" | tr -cd 'A-Za-z0-9 ._()-' | cut -c1-80)
+            [ -n "$SPN" ] && log "$(sh "$DIR/web_fetch.sh" save "$SPN")"
+        fi
+        WU=$(qv web)
+        if [ -n "$WU" ]; then
+            WU=$(urldecode "$WU" | tr -d '\r\n"`$\\' | cut -c1-500); WID=$(qv wid | tr -cd 'A-Za-z0-9' | cut -c1-20)
+            NEWU=$((NOWQ + 240)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+            case "$WU" in
+                q:*|http://*|https://*|[A-Za-z0-9]*.*)
+                    if sync_running; then log "web page waits for the running sync"; printf '%s\n%s\n' "$WU" "$WID" > "$DIR/.web_next"; else log "web: page asked for"; start_web "$WU" "$WID"; fi ;;
+            esac
+        fi
+        if [ "$(qv kbrowser)" = "1" ]; then log "opening the Kindle's own browser (the hub comes back at the next wake)"; AWAY=1; lipc-set-prop com.lab126.appmgrd start app://com.lab126.browser 2>/dev/null; fi
+        HV=$(qv health | tr -cd 'A-Za-z0-9.-')
+        # 10.4.1: ANY message from the page proves the new page started. The listener takes one message at a
+        # time, and on the Kindle the page's health= message was always lost in the start-up rush, so a page
+        # that worked was rolled back as "silent". The version comes from .update/pending, so it always matches.
+        if [ -z "$HV" ] && [ -f "$DIR/.update/pending" ]; then HV=$(cut -d' ' -f1 "$DIR/.update/pending" | tr -cd 'A-Za-z0-9.-'); fi
+        [ -n "$HV" ] && [ -f "$DIR/.update/pending" ] && sh "$DIR/hub_update.sh" health "$HV" && [ ! -f "$DIR/.update/pending" ] && log "update $HV confirmed by the page"
+        V=$(num_or_empty "$(qv autoupd)")
+        if [ -n "$V" ]; then case "$V" in 0|1|2) AUTO_UPDATE=$V ;; esac; save_conf; write_ui_state "$UI_SLEEP" "$NOWQ"; log "auto update: $AUTO_UPDATE"; fi
+        DG=$(qv diag)
+        [ -n "$DG" ] && log "page: $(urldecode "$DG" | tr -cd 'A-Za-z0-9 :=.,x/-' | cut -c1-160)"
+        NTF=$(qv notify)
+        if [ -n "$NTF" ]; then notify_phone "$(urldecode "$NTF" | tr -d '\r\n' | cut -c1-200)"; fi
+        V=$(num_or_empty "$(qv alerts)")
+        if [ -n "$V" ]; then
+            case "$V" in 1) PHONE_ALERTS=1 ;; *) PHONE_ALERTS=0 ;; esac
+            CHANGED=1; write_cloud_js; log "phone alerts: $PHONE_ALERTS"
+        fi
     fi
     # ---- 10.9: security (the page asks for an authenticator code before it sends any of these) ----
-    if [ "$(qv totpon)" = "1" ] && [ ! -f "$DIR/.totp_on" ]; then
-        date +%s > "$DIR/.totp_on"; hub_totp_init; log "authenticator set up"
-    fi
-    if [ "$(qv cloudok)" = "1" ] && [ -f "$DIR/.totp_on" ] && [ ! -f "$DIR/.cloud_ok" ]; then
-        date +%s > "$DIR/.cloud_ok"; log "cloud: first connection allowed (authenticator code entered)"
-        write_cloud_js; CLOUD_DUE=$((NOWQ + 5)); NEWU=$((NOWQ + 90)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
-    fi
-    GT=$(qv ghtoken)
-    if [ -n "$GT" ] && [ -f "$DIR/.totp_on" ]; then        # a new GitHub token, handed over by the phone (locked in the gist)
-        case "$GT" in
-            *[!A-Za-z0-9_]*) log "new GitHub token refused (odd characters)" ;;
-            *) if [ ${#GT} -ge 20 ] && [ ${#GT} -le 255 ] && hub_conf_set GH_TOKEN "$GT"; then log "GitHub token replaced"; write_cloud_js; else log "new GitHub token refused"; fi ;;
-        esac
-    fi
-    if [ "$(qv rotate)" = "1" ] && [ -f "$DIR/.totp_on" ]; then rotate_keys; fi
-    if [ "$(qv keysdone)" = "1" ] && [ -f "$DIR/.totp_on" ]; then
-        rm -f "$DIR/.pass_old"; hub_conf_set PASSPHRASE_OLD ""; log "key change finished: the old passphrase is forgotten"; write_cloud_js
-    fi
-    if [ "$(qv exit)" = "1" ]; then
-        log "exit requested from the hub - stopping"
-        write_ui_state 0
-        stop_and_exit "exit from the hub"
+    if has totpon cloudok ghtoken rotate keysdone exit; then      # 10.10.4: security
+        if [ "$(qv totpon)" = "1" ] && [ ! -f "$DIR/.totp_on" ]; then
+            date +%s > "$DIR/.totp_on"; hub_totp_init; log "authenticator set up"
+        fi
+        if [ "$(qv cloudok)" = "1" ] && [ -f "$DIR/.totp_on" ] && [ ! -f "$DIR/.cloud_ok" ]; then
+            date +%s > "$DIR/.cloud_ok"; log "cloud: first connection allowed (authenticator code entered)"
+            write_cloud_js; CLOUD_DUE=$((NOWQ + 5)); NEWU=$((NOWQ + 90)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+        fi
+        GT=$(qv ghtoken)
+        if [ -n "$GT" ] && [ -f "$DIR/.totp_on" ]; then        # a new GitHub token, handed over by the phone (locked in the gist)
+            case "$GT" in
+                *[!A-Za-z0-9_]*) log "new GitHub token refused (odd characters)" ;;
+                *) if [ ${#GT} -ge 20 ] && [ ${#GT} -le 255 ] && hub_conf_set GH_TOKEN "$GT"; then log "GitHub token replaced"; write_cloud_js; else log "new GitHub token refused"; fi ;;
+            esac
+        fi
+        if [ "$(qv rotate)" = "1" ] && [ -f "$DIR/.totp_on" ]; then rotate_keys; fi
+        if [ "$(qv keysdone)" = "1" ] && [ -f "$DIR/.totp_on" ]; then
+            rm -f "$DIR/.pass_old"; hub_conf_set PASSPHRASE_OLD ""; log "key change finished: the old passphrase is forgotten"; write_cloud_js
+        fi
+        if [ "$(qv exit)" = "1" ]; then
+            log "exit requested from the hub - stopping"
+            write_ui_state 0 "$NOWQ"
+            stop_and_exit "exit from the hub"
+        fi
     fi
     VP=$(qv vp | tr -cd '0-9x')
     if [ -n "$VP" ] && [ "$VP" != "$LAST_VP" ]; then LAST_VP=$VP; log "page window ${VP} (screen 1236x1648; less height = the bar's space is still reserved)"; fi
@@ -799,85 +817,95 @@ poll_settings_http() {
         [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
         # 10.9: a tap during a quick wake turns it into a full one (page, light, lists from the phone)
         if [ "$QUICK_ACTIVE" = "1" ]; then
-            QUICK_ACTIVE=0; UI_SLEEP=0; WAKE_REASON=touch; set_light "$LIGHT_AWAKE"; write_ui_state 0; log "tapped during a quick wake - full wake"
+            QUICK_ACTIVE=0; UI_SLEEP=0; WAKE_REASON=touch; set_light "$LIGHT_AWAKE"; write_ui_state 0 "$NOWQ"; log "tapped during a quick wake - full wake"
             cloud_ready && [ "$LISTS_ON_WAKE" = "1" ] && ! sync_running && start_sync lists
         fi
     fi
     # 10.9: a command for the kitchen monitor, locked by the page with your passphrase ("~" + base64url)
-    SCR=$(qv screen)
-    if [ -n "$SCR" ]; then
-        case "$SCR" in "~"*) ;; *) SCR="" ;; esac
-        case "$SCR" in *[!A-Za-z0-9_~-]*) SCR="" ;; esac
-        [ -n "$SCR" ] && [ ${#SCR} -le 1500 ] && screen_send "$SCR"
+    if has screen sysinfo; then      # 10.10.4: the kitchen monitor and system info
+        SCR=$(qv screen)
+        if [ -n "$SCR" ]; then
+            case "$SCR" in "~"*) ;; *) SCR="" ;; esac
+            case "$SCR" in *[!A-Za-z0-9_~-]*) SCR="" ;; esac
+            [ -n "$SCR" ] && [ ${#SCR} -le 1500 ] && screen_send "$SCR"
+        fi
+        # 10.9: Settings > System asks for a fresh look at CPU, memory and services
+        if [ "$(qv sysinfo)" = "1" ] && [ "$BOOT" != "1" ] && [ -f "$DIR/hub_sys.sh" ]; then SYS_AT=$NOWQ; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & fi
     fi
-    # 10.9: Settings > System asks for a fresh look at CPU, memory and services
-    if [ "$(qv sysinfo)" = "1" ] && [ "$BOOT" != "1" ] && [ -f "$DIR/hub_sys.sh" ]; then SYS_AT=$NOWQ; sh "$DIR/hub_sys.sh" >/dev/null 2>&1 & fi
     # 10.9: power settings from Settings > Sleep
     # 10.10: Settings > Sleep (each saved at once)
-    V=$(qv sleepclock);  case "$V" in min|15|hour|off) SLEEP_CLOCK=$V; CHANGED=1; log "standby clock: $V" ;; esac
-    V=$(qv nightclock);  case "$V" in same|hour|off) NIGHT_CLOCK=$V; CHANGED=1; log "night clock: $V" ;; esac
-    V=$(qv nightdeghost); case "$V" in 0|1) NIGHT_DEGHOST=$V; CHANGED=1 ;; esac
-    V=$(qv hourly);      case "$V" in 0|1) HOURLY_REFRESH=$V; CHANGED=1; log "hourly redraw: $V" ;; esac
-    V=$(qv wxanim);      case "$V" in 0|1) WX_ANIM=$V; CHANGED=1 ;; esac
-    V=$(qv timertick);   case "$V" in 0|1) TIMER_TICK=$V; CHANGED=1 ;; esac
-    V=$(qv syncmode);    case "$V" in manual|2|6|12) SYNC_MODE=$V; CHANGED=1; log "sync: $V" ;; esac
-    V=$(qv editpush);    case "$V" in now|sync) EDIT_PUSH=$V; CHANGED=1; log "Kindle edits: $V" ;; esac
-    V=$(qv daily);       case "$V" in 0|1) DAILY_SESSION=$V; CHANGED=1; log "daily session: $V" ;; esac
-    V=$(qv lowsaver);    case "$V" in 0|1) LOWBATT_SAVER=$V; CHANGED=1 ;; esac
-    V=$(qv clockdraw);   case "$V" in auto|page) CLOCK_DRAW=$V; CHANGED=1; log "clock drawn by: $V" ;; esac
-    V=$(qv clockmode);   case "$V" in min) SLEEP_CLOCK=min; CHANGED=1 ;; 15) SLEEP_CLOCK=15; CHANGED=1 ;; esac      # (10.9 pages)
-    V=$(num_or_empty "$(qv timerend)"); [ -n "$V" ] && TIMER_END=$V      # a kitchen timer started (0 = stopped)
-    # where the standby page put its clock digits and weather picture (screen pixels), for the sleep clock
-    V=$(qv sclk); case "$V" in [smlx]_*) printf '%s\n' "$V" | tr '_' ' ' | tr -cd 'a-z0-9 \n' > "$DIR/.sleep_geo" ;; none) rm -f "$DIR/.sleep_geo" ;; esac
-    V=$(qv swx);  case "$V" in [a-z]*_*) printf '%s\n' "$V" | tr '_' ' ' | tr -cd 'a-z0-9 \n' > "$DIR/.sleep_wx" ;; none) rm -f "$DIR/.sleep_wx" ;; esac
-    V=$(qv light)
-    if [ "$V" = "keep" ]; then LIGHT_AWAKE=keep; CHANGED=1; log "frontlight: left to the Kindle"
-    elif [ -n "$(num_or_empty "$V")" ]; then [ "$V" -gt 24 ] && V=24; LIGHT_AWAKE=$V; CHANGED=1; set_light "$V"; log "frontlight: $V"; fi
-    SNZ=$(num_or_empty "$(qv snooze)")
-    if [ -n "$SNZ" ] && [ "$SNZ" != "0" ]; then
-        [ "$SNZ" = "1" ] && SNZ=300
-        NEWU=$((NOWQ + SNZ))
-        [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
-        log "staying awake ${SNZ}s (requested from the hub)"
+    if has sleepclock nightclock nightdeghost hourly wxanim timertick syncmode editpush daily lowsaver clockdraw clockmode timerend sclk swx; then      # 10.10.4: Settings > Sleep
+        V=$(qv sleepclock);  case "$V" in min|15|hour|off) SLEEP_CLOCK=$V; CHANGED=1; log "standby clock: $V" ;; esac
+        V=$(qv nightclock);  case "$V" in same|hour|off) NIGHT_CLOCK=$V; CHANGED=1; log "night clock: $V" ;; esac
+        V=$(qv nightdeghost); case "$V" in 0|1) NIGHT_DEGHOST=$V; CHANGED=1 ;; esac
+        V=$(qv hourly);      case "$V" in 0|1) HOURLY_REFRESH=$V; CHANGED=1; log "hourly redraw: $V" ;; esac
+        V=$(qv wxanim);      case "$V" in 0|1) WX_ANIM=$V; CHANGED=1 ;; esac
+        V=$(qv timertick);   case "$V" in 0|1) TIMER_TICK=$V; CHANGED=1 ;; esac
+        V=$(qv syncmode);    case "$V" in manual|2|6|12) SYNC_MODE=$V; CHANGED=1; log "sync: $V" ;; esac
+        V=$(qv editpush);    case "$V" in now|sync) EDIT_PUSH=$V; CHANGED=1; log "Kindle edits: $V" ;; esac
+        V=$(qv daily);       case "$V" in 0|1) DAILY_SESSION=$V; CHANGED=1; log "daily session: $V" ;; esac
+        V=$(qv lowsaver);    case "$V" in 0|1) LOWBATT_SAVER=$V; CHANGED=1 ;; esac
+        V=$(qv clockdraw);   case "$V" in auto|page) CLOCK_DRAW=$V; CHANGED=1; log "clock drawn by: $V" ;; esac
+        V=$(qv clockmode);   case "$V" in min) SLEEP_CLOCK=min; CHANGED=1 ;; 15) SLEEP_CLOCK=15; CHANGED=1 ;; esac      # (10.9 pages)
+        V=$(num_or_empty "$(qv timerend)"); [ -n "$V" ] && TIMER_END=$V      # a kitchen timer started (0 = stopped)
+        # where the standby page put its clock digits and weather picture (screen pixels), for the sleep clock
+        V=$(qv sclk); case "$V" in [smlx]_*) printf '%s\n' "$V" | tr '_' ' ' | tr -cd 'a-z0-9 \n' > "$DIR/.sleep_geo" ;; none) rm -f "$DIR/.sleep_geo" ;; esac
+        V=$(qv swx);  case "$V" in [a-z]*_*) printf '%s\n' "$V" | tr '_' ' ' | tr -cd 'a-z0-9 \n' > "$DIR/.sleep_wx" ;; none) rm -f "$DIR/.sleep_wx" ;; esac
     fi
-    V=$(num_or_empty "$(qv interval)"); [ -n "$V" ] && { INTERVAL_MIN=$V; SYNC_EVERY_MIN=$V; CHANGED=1; }
-    # 10.6: smart schedule settings and your work times (from the page's shift calendar)
-    V=$(num_or_empty "$(qv smart)");  [ -n "$V" ] && { case "$V" in 0|1) SMART_SLEEP=$V ;; esac; CHANGED=1; }
-    V=$(num_or_empty "$(qv home)");   [ -n "$V" ] && { HOME_MIN=$V; CHANGED=1; }
-    V=$(num_or_empty "$(qv away)");   [ -n "$V" ] && { AWAY_MIN=$V; CHANGED=1; }
-    V=$(num_or_empty "$(qv night)");  [ -n "$V" ] && { NIGHT_MIN=$V; CHANGED=1; }
-    V=$(num_or_empty "$(qv nf)");     [ -n "$V" ] && { NIGHT_FROM=$V; CHANGED=1; }
-    V=$(num_or_empty "$(qv nt)");     [ -n "$V" ] && { NIGHT_TO=$V; CHANGED=1; }
-    V=$(qv aw | tr -cd '0-9,-')
-    if [ -n "$V" ] || [ "$(qv aw0)" = "1" ]; then
-        printf '%s' "$V" | tr ',' '\n' | sed -n 's/^\([0-9]\{9,11\}\)-\([0-9]\{9,11\}\)$/\1 \2/p' | head -n 30 > "$DIR/.away.tmp"
-        if ! cmp -s "$DIR/.away.tmp" "$DIR/.away"; then mv "$DIR/.away.tmp" "$DIR/.away"; count_aways; log "work times from the calendar: $AWAYS_N in the next week"; else rm -f "$DIR/.away.tmp"; fi
+    if has light snooze; then      # 10.10.4: frontlight and stay-awake
+        V=$(qv light)
+        if [ "$V" = "keep" ]; then LIGHT_AWAKE=keep; CHANGED=1; log "frontlight: left to the Kindle"
+        elif [ -n "$(num_or_empty "$V")" ]; then [ "$V" -gt 24 ] && V=24; LIGHT_AWAKE=$V; CHANGED=1; set_light "$V"; log "frontlight: $V"; fi
+        SNZ=$(num_or_empty "$(qv snooze)")
+        if [ -n "$SNZ" ] && [ "$SNZ" != "0" ]; then
+            [ "$SNZ" = "1" ] && SNZ=300
+            NEWU=$((NOWQ + SNZ))
+            [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+            log "staying awake ${SNZ}s (requested from the hub)"
+        fi
     fi
-    V=$(num_or_empty "$(qv window)");   [ -n "$V" ] && { WAKE_WINDOW=$V; [ "$WAKE_WINDOW" -lt "$MIN_WINDOW" ] && WAKE_WINDOW=$MIN_WINDOW; CHANGED=1; }
-    V=$(num_or_empty "$(qv ss)")
-    if [ -n "$V" ]; then
-        case "$V" in 0) SCREENSAVER_MODE=off ;; 2) SCREENSAVER_MODE=eips_slots ;; *) SCREENSAVER_MODE=eips ;; esac
-        CHANGED=1
-    fi
-    V=$(num_or_empty "$(qv pillow)")
-    if [ -n "$V" ]; then
-        case "$V" in 1|2) PILLOW_DISABLE=$V ;; *) PILLOW_DISABLE=0 ;; esac
-        [ "$PILLOW_DISABLE" = "0" ] && restore_pillow
-        apply_pillow
-        CHANGED=1
+    if has interval smart home away night nf nt aw aw0 window ss pillow; then      # 10.10.4: the older schedule settings
+        V=$(num_or_empty "$(qv interval)"); [ -n "$V" ] && { INTERVAL_MIN=$V; SYNC_EVERY_MIN=$V; CHANGED=1; }
+        # 10.6: smart schedule settings and your work times (from the page's shift calendar)
+        V=$(num_or_empty "$(qv smart)");  [ -n "$V" ] && { case "$V" in 0|1) SMART_SLEEP=$V ;; esac; CHANGED=1; }
+        V=$(num_or_empty "$(qv home)");   [ -n "$V" ] && { HOME_MIN=$V; CHANGED=1; }
+        V=$(num_or_empty "$(qv away)");   [ -n "$V" ] && { AWAY_MIN=$V; CHANGED=1; }
+        V=$(num_or_empty "$(qv night)");  [ -n "$V" ] && { NIGHT_MIN=$V; CHANGED=1; }
+        V=$(num_or_empty "$(qv nf)");     [ -n "$V" ] && { NIGHT_FROM=$V; CHANGED=1; }
+        V=$(num_or_empty "$(qv nt)");     [ -n "$V" ] && { NIGHT_TO=$V; CHANGED=1; }
+        V=$(qv aw | tr -cd '0-9,-')
+        if [ -n "$V" ] || [ "$(qv aw0)" = "1" ]; then
+            printf '%s' "$V" | tr ',' '\n' | sed -n 's/^\([0-9]\{9,11\}\)-\([0-9]\{9,11\}\)$/\1 \2/p' | head -n 30 > "$DIR/.away.tmp"
+            if ! cmp -s "$DIR/.away.tmp" "$DIR/.away"; then mv "$DIR/.away.tmp" "$DIR/.away"; count_aways; log "work times from the calendar: $AWAYS_N in the next week"; else rm -f "$DIR/.away.tmp"; fi
+        fi
+        V=$(num_or_empty "$(qv window)");   [ -n "$V" ] && { WAKE_WINDOW=$V; [ "$WAKE_WINDOW" -lt "$MIN_WINDOW" ] && WAKE_WINDOW=$MIN_WINDOW; CHANGED=1; }
+        V=$(num_or_empty "$(qv ss)")
+        if [ -n "$V" ]; then
+            case "$V" in 0) SCREENSAVER_MODE=off ;; 2) SCREENSAVER_MODE=eips_slots ;; *) SCREENSAVER_MODE=eips ;; esac
+            CHANGED=1
+        fi
+        V=$(num_or_empty "$(qv pillow)")
+        if [ -n "$V" ]; then
+            case "$V" in 1|2) PILLOW_DISABLE=$V ;; *) PILLOW_DISABLE=0 ;; esac
+            [ "$PILLOW_DISABLE" = "0" ] && restore_pillow
+            apply_pillow
+            CHANGED=1
+        fi
     fi
     # 10.10.3: "orient", not "rotate": rotate=1 is MAKE NEW KEYS (above), and it used to turn the Kindle
     # on its side as well, because both handlers read the same name.
-    if [ "$(qv orient)" = "1" ]; then
-        CUR_ROT=$(lipc-get-prop com.lab126.winmgr orientationLock 2>/dev/null)
-        if [ "$CUR_ROT" = "L" ]; then lipc-set-prop com.lab126.winmgr orientationLock U 2>/dev/null
-        else lipc-set-prop com.lab126.winmgr orientationLock L 2>/dev/null; fi
+    if has orient; then      # 10.10.4: screen orientation
+        if [ "$(qv orient)" = "1" ]; then
+            CUR_ROT=$(lipc-get-prop com.lab126.winmgr orientationLock 2>/dev/null)
+            if [ "$CUR_ROT" = "L" ]; then lipc-set-prop com.lab126.winmgr orientationLock U 2>/dev/null
+            else lipc-set-prop com.lab126.winmgr orientationLock L 2>/dev/null; fi
+        fi
     fi
     if [ "$CHANGED" = "1" ]; then
         save_conf
         log "settings saved: interval=${INTERVAL_MIN}m window=${WAKE_WINDOW}s screenshot=${SCREENSAVER_MODE} hide-statusbar=${PILLOW_DISABLE} smart=${SMART_SLEEP} (home ${HOME_MIN}m, work ${AWAY_MIN}m, night ${NIGHT_MIN}m ${NIGHT_FROM}-${NIGHT_TO})"
     fi
-    write_ui_state "$UI_SLEEP"      # 10.10.1: what the page should show NOW (was always "awake": a request during an hourly redraw or while getting ready to sleep woke the page up)
+    write_ui_state "$UI_SLEEP" "$NOWQ"      # 10.10.1: what the page should show NOW (was always "awake": a request during an hourly redraw or while getting ready to sleep woke the page up)
 }
 
 # cloud.conf -> mesquite/cloud.js so the page can show the pairing code and sync status
@@ -1185,9 +1213,11 @@ tick_secs() {        # seconds between clock ticks at epoch $1 (0 = no ticks)
     [ -n "$HUB_TEST_TICK" ] && [ "$TK" != "0" ] && TK=$HUB_TEST_TICK      # tests only (a short "minute")
 }
 tick_label() { tick_secs "$1"; case "$TK" in 60) echo "every minute ($(clock_by))" ;; 900) echo "every 15 min ($(clock_by))" ;; *) echo "$CLK_M (no ticks)" ;; esac; }
-clock_by() {         # who draws the minute: the loop (pictures at x,y) or the page (it redraws itself)
+clock_by() { clock_by_v; echo "$CB_V"; }
+clock_by_v() {       # who draws the minute: the loop (pictures at x,y) or the page (it redraws itself)
+    CB_V=page
     if [ "$CLOCK_DRAW" = "auto" ] && [ "$EIPS_XY_OK" = "1" ] && [ -s "$DIR/.sleep_geo" ] && [ -d "$ART/clk" ] &&
-       ! { [ "$TIMER_TICK" = "1" ] && [ "${TIMER_END:-0}" -gt "$(date +%s)" ]; }; then echo loop; else echo page; fi
+       ! { [ "$TIMER_TICK" = "1" ] && [ "${TIMER_END:-0}" -gt "$(date +%s)" ]; }; then CB_V=loop; else CB_V=page; fi
 }
 next_wake() {        # NEXT_WAKE_EPOCH + NW_WHY from the hourly redraws, the daily session and a chosen sync interval
     NWN=$1; NW=0; NW_WHY=""
