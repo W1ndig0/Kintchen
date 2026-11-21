@@ -31,7 +31,7 @@ module.exports = async function runExtras(ctx) {
     const due = (key, mins) => !st[key + "At"] || NOW - st[key + "At"] > mins * 60000 || NOW < st[key + "At"];
     const J = async (u, ms) => { const t = await get(u, ms || 15000, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KitchenHub", Accept: "application/json" } }); try { return t ? JSON.parse(t) : null; } catch (e) { return null; } };
     const quiet = HOUR < 7 || HOUR >= 22;
-    const out = { ts: Math.floor(NOW / 1000), deals: [], wish: [], flyers: [], hot: [], trivia: null, wotd: null, nhl: [], money: null, pantry: [], pkgs: [], cook: [] };
+    const out = { ts: Math.floor(NOW / 1000), deals: [], wish: [], flyers: [], hot: [], trivia: null, wotd: null, nhl: [], money: null, pantry: [], pkgs: [], cook: [], last7: null };
 
     // ---------------- wishlist: Best Buy Canada prices ----------------
     const wishes = items("wish").filter(w => w.state === "open" && w.text).map(w => ({ id: w.id, ...HubCal.parseRec("wish", w.text) }));
@@ -278,6 +278,8 @@ module.exports = async function runExtras(ctx) {
     // the last 7 days, for the Sunday summary
     const wk = addK(TODAY, -7), wkN = wk.replace(/-/g, ""), ch = { p1: 0, p2: 0 };
     items("chdone").forEach(c => { if (c.state === "open" && c.id.slice(-8) > wkN) ch[c.text === "p2" ? "p2" : "p1"]++; });
-    out.week = { spent: Math.round(spends.filter(x => x.date > wk && x.cat !== "Settle-up").reduce((a, x) => a + x.amount, 0) * 100) / 100, chores: ch };
+    // 10.10.4: out.last7, not out.week - out.week is the Almanac (the week's releases, set above). Writing the
+    // Sunday summary into out.week overwrote it, so the fridge's Almanac never had any releases to show.
+    out.last7 = { spent: Math.round(spends.filter(x => x.date > wk && x.cat !== "Settle-up").reduce((a, x) => a + x.amount, 0) * 100) / 100, chores: ch };
     return out;
 };

@@ -135,19 +135,28 @@ module.exports = async function runBooks(ctx) {
     }
 
     // 2b. 10.4: lock books that were stored before 10.4 (two per run; same size, so the parts stay the same)
+    // 10.10.4: once a book is known to be locked its id is remembered, so a shelf that is fully locked (the
+    // normal case) no longer downloads the whole books gist - every part of every book - on every run.
+    const a1 = brain.booksA1 = (brain.booksA1 && typeof brain.booksA1 === "object") ? brain.booksA1 : {};
     if (KEY) {
-        const gist = await gh("GET", "/gists/" + bg);
-        let done = 0;
-        for (const b of items("book")) {
-            if (done >= 2 || b.state !== "open") continue;
-            const m = await metaOf(b.id, gist);
-            if (!m || m[4] === "a1") continue;
-            const src = await load(b.id, gist);
-            if (!src) continue;
-            await store(b.id, src.ext, src.buf);
-            done++; n++;
+        const shelf = items("book").filter(b => b.state === "open");
+        Object.keys(a1).forEach(k => { if (!shelf.some(b => b.id === k)) delete a1[k]; });
+        const todo = shelf.filter(b => !a1[b.id]);
+        if (todo.length) {
+            const gist = await gh("GET", "/gists/" + bg);
+            let done = 0;
+            for (const b of todo) {
+                if (done >= 2) continue;
+                const m = await metaOf(b.id, gist);
+                if (!m) continue;
+                if (m[4] === "a1") { a1[b.id] = 1; continue; }
+                const src = await load(b.id, gist);
+                if (!src) continue;
+                await store(b.id, src.ext, src.buf);
+                a1[b.id] = 1; done++; n++;
+            }
+            if (done) log("locked " + done + " older book(s) with your passphrase");
         }
-        if (done) log("locked " + done + " older book(s) with your passphrase");
     } else if (items("book").length) log("no HUB_PASS secret: books are stored unlocked");
 
     // 3. once a day (and when a book was deleted): remove files of books that are gone from the shelf

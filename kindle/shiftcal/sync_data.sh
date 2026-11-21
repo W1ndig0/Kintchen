@@ -101,6 +101,10 @@ fi
 fetch_extras "$1"      # (only reached when the package wasn't used)
 
 jesc() { sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+# 10.10.3: cut -c cuts BYTES, so a story cut in the middle of an accented or curly character left half a
+# character in data.js (it shows as a black diamond on the Kindle). Drop a trailing part-character.
+U8L=$(printf '\302-\364'); U8C=$(printf '\200-\277')
+cut8() { cut -c1-"$1" | sed "s/[$U8L][$U8C]*\$//"; }
 
 # ---------- Weather (raw Open-Meteo JSON embedded as-is) ----------
 WX_JSON="null"
@@ -174,7 +178,7 @@ add_feed() {  # $1=url  $2=source tag  $3=max items
         B=$(printf '%s' "$L" | tag 'content:encoded')
         [ -z "$B" ] && B=$(printf '%s' "$L" | tag description)
         IMG_URL=$(extract_image_url "$L")
-        B=$(printf '%s' "$B" | clean | cut -c1-3000 | jesc)
+        B=$(printf '%s' "$B" | clean | cut8 3000 | jesc)
         IMG_FIELD=""; IMG_PATH=""
         if [ -n "$IMG_URL" ]; then
             HASH=$(url_hash "$IMG_URL")
@@ -239,9 +243,13 @@ if [ "$1" = "search" ]; then
     exit 0
 fi
 # ---- 9.8: smart sync - each source on its own schedule; quiet small hours ----
+# 10.10.3: a stamp file that was cut off mid-write (power loss) used to hold something that is not a
+# number, and "$(( NOWD -  ))" is a syntax error that ENDS the script: no weather and no news at all
+# until the file was fixed. Every read of a stamp now goes through num0.
+num0() { V0=$(tr -cd '0-9' < "$1" 2>/dev/null | cut -c1-12); case "$V0" in '') echo 0 ;; *) echo "$V0" ;; esac; }
 due() {   # $1=name $2=minutes -> true when that source is due (and stamps it)
     F="$DIR/.due_$1"; NOWD=$(date +%s)
-    if [ -f "$F" ] && [ $((NOWD - $(cat "$F" 2>/dev/null || echo 0))) -lt $(( $2 * 60 - 120 )) ]; then return 1; fi
+    if [ -f "$F" ] && [ $((NOWD - $(num0 "$F"))) -lt $(( $2 * 60 - 120 )) ]; then return 1; fi
     echo "$NOWD" > "$F"; return 0
 }
 HOUR=$(date +%H | sed 's/^0//'); [ -z "$HOUR" ] && HOUR=0
@@ -287,8 +295,9 @@ for PAIR in $SYMBOLS; do
     RESP=$(kcurl -s --connect-timeout 4 --max-time 8 -A "Mozilla/5.0" "https://query1.finance.yahoo.com/v8/finance/chart/${SYM_ENC}?range=1d&interval=15m" | tr '\r\n' '  ')
     PRICE=$(printf '%s' "$RESP" | sed -n 's/.*"regularMarketPrice": *\([0-9.eE+-]*\).*/\1/p' | head -1)
     PREV=$(printf '%s' "$RESP" | sed -n 's/.*"chartPreviousClose": *\([0-9.eE+-]*\).*/\1/p' | head -1)
-    [ -z "$PRICE" ] && { echo "Markets: no price for $SYM"; continue; }
-    [ -z "$PREV" ] && PREV="$PRICE"
+    # 10.10.3: these go into data.js as bare numbers - anything that is not one would stop the whole file loading
+    case "$PRICE" in *[0-9]*) ;; *) echo "Markets: no price for $SYM"; continue ;; esac
+    case "$PREV" in *[0-9]*) ;; *) PREV="$PRICE" ;; esac
     # up to 12 evenly spaced closes for the sparkline
     SPARK=$(printf '%s' "$RESP" | sed -n 's/.*"close": *\[\([^]]*\)\].*/\1/p' | head -1 | tr -d ' ' | tr ',' '\n' | grep -v '^null$' | grep -v '^$' |
             awk '{v[NR]=$1} END {n=NR; if(n<1) exit; k=(n>12)?12:n; for(i=0;i<k;i++){j=1+int(i*(n-1)/((k>1)?k-1:1)); printf "%s%s", (i?",":""), v[j]}}')
@@ -354,7 +363,7 @@ for EV in $(printf '%s' "$RD" | sed 's/"jurisdiction_url"/\
     EV=$(printf '%s' "$EV" | sed 's/_SP_/ /g')
     SEV=$(printf '%s' "$EV" | sed -n 's/.*"severity" *: *"\([A-Z]*\)".*/\1/p')
     case "$SEV" in MAJOR|MODERATE) ;; *) continue ;; esac
-    D=$(printf '%s' "$EV" | sed -n 's/.*"description" *: *"\(\([^"\\]\|\\.\)*\)".*/\1/p' | cut -c1-220)
+    D=$(printf '%s' "$EV" | sed -n 's/.*"description" *: *"\(\([^"\\]\|\\.\)*\)".*/\1/p' | cut8 220)
     [ -z "$D" ] && continue
     [ -n "$ALERTS" ] && ALERTS="$ALERTS,"; ALERTS="$ALERTS{\"s\":\"ROAD\",\"t\":\"$D\"}"; NR=$((NR + 1))
 done

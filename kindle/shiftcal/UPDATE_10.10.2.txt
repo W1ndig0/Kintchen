@@ -1,0 +1,15 @@
+KITCHEN HUB 10.10.2 - THE NIGHT CLOCK
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE.
+
+FIX
+ 1  At night the standby page switches to the big night screen. 10.10 only knew where the clock was on the
+    day page, so at night the page left its "10:--" placeholder up, and the loop drew the minutes where the
+    day page's digits had been (the small "31" above the hour). The night screen now draws its clock from
+    the same pictures as the loop, in a new extra-large size, and tells the loop exactly where the digits
+    are. If a standby page has no clock, the loop draws none.
+ 2  The first minute tick after the Kindle goes to sleep now redraws every digit, not just the ones that
+    changed, so a clock that was out of date on screen is corrected within a minute.
+ 3  The standby page is drawn again on each hourly redraw (and when a minute tick crosses the hour). Before,
+    only the clock was updated, so the "wakes ..." line, the story, the bird of the hour and the switch
+    between the day page and the night screen could stay out of date.
+ 4  The bottom bar no longer says "press the button" twice while asleep.

@@ -73,7 +73,9 @@ module.exports = async function birdsOfTheDay(ctx) {
     for (const b of today) {
         if (out.length >= 12) break;
         let c = st.birds[b[1]];
-        if ((!c || NOW - c.at > 30 * 864e5) && looked < 6) {
+        // 10.10.4: a bird that looked up fine is kept for 30 days; one that did not (Wikipedia or Commons was
+        // down, or the licence could not be read) is tried again in 3 days instead of being dropped for a month.
+        if ((!c || NOW - c.at > (c.none ? 3 : 30) * 864e5) && looked < 6) {
             looked++;
             const s = await J("https://en.wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(b[1].replace(/ /g, "_")));
             const th = s && s.thumbnail && s.thumbnail.source, orig = s && s.originalimage && s.originalimage.source;
