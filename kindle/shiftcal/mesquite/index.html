@@ -1658,7 +1658,7 @@ function exitHub() {
 khMark("main: v9.2 CHROME tiles, sysbar, settings");
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.10.1";
+var VERSION = "10.10.2";
 var DIAG_SENT = {};      // 10.9.3: set up here, before anything at start-up can call diagOnce (see diagOnce)
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
@@ -6923,7 +6923,7 @@ addIconBtn = function(parent, name, fn, filled) {
 var __statusText = statusText;
 statusText = function() {
     var s = __statusText();
-    if (HUB.sleeping) return { t: "ASLEEP", s: (HUB.next && HUB.next !== "--:--" ? "WAKES " + HUB.next + " &middot; " : "") + "PRESS THE BUTTON" };
+    if (HUB.sleeping) return { t: "ASLEEP", s: HUB.next && HUB.next !== "--:--" ? "WAKES " + HUB.next : "" };      // 10.10.2: "press the button" is already its own chunk on the bar
     if (s.t === "AWAKE" && /STANDBY/.test(s.s)) s.s = s.s.replace("TO STANDBY", "UNTIL SLEEP").replace("GOING UNTIL SLEEP", "SLEEPING NOW");
     return s;
 };
