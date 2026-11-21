@@ -43,7 +43,7 @@ sh "$HUB_DIR/stop_hub.sh" launch >/dev/null 2>&1; sleep 1
 : > "$HUB_DIR/power.log"; : > "$KT/sys.log"
 printf "$CONF" | sed 's/^SLEEP_CLOCK=hour/SLEEP_CLOCK=min/' > "$C"
 mkdir -p "$HUB_DIR/mesquite/art" && tar -xf "$HUB_DIR/sleepart.tar" -C "$HUB_DIR/mesquite/art"
-printf 'EIPS_XY=1\nEIPS_W=1\n' > "$HUB_DIR/.sleepcaps"; echo 10.10 > "$HUB_DIR/.sleepcaps_v"
+printf 'EIPS_XY=1\nEIPS_W=1\n' > "$HUB_DIR/.sleepcaps"; sed -n 's/^VERSION="\(.*\)"/\1/p' "$HUB_DIR/power_loop.sh" > "$HUB_DIR/.sleepcaps_v"      # probed already (this version)
 export HUB_TEST_STEP=130 HUB_TEST_TICK=10
 sh "$HUB_DIR/run_hub.sh" eco >/dev/null 2>&1; ping_page vp=1x1 >/dev/null
 ping_page "sclk=m_90_1017_26_1017_108_1017_190_1017_240_1017_322_1017_404&swx=snow_90_751_26" >/dev/null

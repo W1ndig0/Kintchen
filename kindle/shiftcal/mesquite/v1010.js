@@ -17,7 +17,6 @@ khNow("v1010.js: started");
         "body.asleep #sysbar { font-size: 100%; }" +
         "#countdown-rule { top: 0 !important; height: 100% !important; z-index: 0; }" +  // the whole bar is the sleep timer
         "#sb-row { position: relative; z-index: 1; }" +
-        "#sysbar .inv { -webkit-filter: invert(100%); filter: invert(100%); }" +
         "#sysbar .tray-lbl.inv10w { color: #fff; }" +
         "#sysbar .tray-chip { padding: .5em .75em; margin: .1em .18em; border-width: 3px; }" +
         "#sysbar .txt-btn { padding: .5em .85em; }" +
@@ -64,7 +63,12 @@ sbFit = function() {
     if (!$("sb-left")) return;
     var can = RAIL_W > 0 && !HUB.sleeping && $("rail").style.display !== "none";
     if (can && !SBR.on) sbPut(true); else if (!can && SBR.on) sbPut(false);
+    else if (SBR.on && !sb10InDoc()) sbPut(true);      // 10.10.1: the rail was redrawn under it: put the status back
 };
+// 10.10.1: the rail's minute redraw (rl.innerHTML) took the status with it and nothing put it back (10.10 dropped the
+// 20 s re-check that used to): from the first new minute on, every bar refresh failed on the missing status
+// elements, so the countdown froze, taps threw errors and state updates stopped halfway (the freezing Settings).
+function sb10InDoc() { var b = SBR.box; while (b && b !== document.body) b = b.parentNode; return !!b; }
 var __ctxList1010 = ctxList;
 ctxList = function() {          // APPS is in the rail now
     var l = __ctxList1010();
@@ -87,13 +91,17 @@ function sb10Invert() {
         var e = els[i], x = 0, n = e;
         while (n && n !== bar) { x += n.offsetLeft || 0; n = n.offsetParent; if (n === $("sb-row")) { x += 0; } }
         var over = x + e.offsetWidth / 2 < fill;
-        if (/tray-lbl/.test(e.className)) setCls(e, "inv10w", over);      // plain text: white on the black part
-        else setCls(e, "inv", over);
+        if (/tray-lbl/.test(e.className) && hasCls(e, "inv10w") !== over) setCls(e, "inv10w", over);      // plain text: white on the black part
     }
 }
-var __refreshSysbar1010 = refreshSysbar;
+var __refreshSysbar1010 = refreshSysbar, SB10_SLP = null;
 refreshSysbar = function(force) {
-    __refreshSysbar1010(force);
+    if (SBR.on && !sb10InDoc()) sbPut(true);
+    // every state update forced a full rebuild of the bottom bar: buttons were destroyed and redrawn about a second
+    // after each tap (the loop answers a tap with a new state), so the next tap on them often went nowhere
+    if (force && SB10_SLP === HUB.sleeping) force = false;
+    SB10_SLP = HUB.sleeping;
+    try { __refreshSysbar1010(force); } catch (e) { SB10.err = (SB10.err || 0) + 1; if (SB10.err <= 2) khSay("pgerr=" + encodeURIComponent("bar refresh: " + e)); }
     sb10Invert();
     // "Updated" turns black after 12 hours: SYNC is the only thing that fetches new data now
     var st = $("sync-t");
@@ -108,7 +116,7 @@ refreshSysbar = function(force) {
     }
 };
 var __renderCtx1010 = renderSysbarContext;
-renderSysbarContext = function() { __renderCtx1010(); SB10.sig = ""; sb10Invert(); };
+renderSysbarContext = function() { var c0 = SB.ctx; __renderCtx1010(); if (SB.ctx !== c0) { SB10.sig = ""; sb10Invert(); } };
 (function() {      // tapping the "Updated" line syncs (it's in the rail)
     var st = $("sync-t");
     if (st && st.parentNode) bindTap(st.parentNode, function() { if (!HUB.sleeping) hubSync(); });
@@ -138,8 +146,8 @@ function clk10Size(side, glyphs) {
     return "s";
 }
 function clk10Send(q, which) {       // the loop needs to know where the digits / weather picture are (screen pixels)
-    if (which === "c") { if (q === CLK10_SENT) return; CLK10_SENT = q; sendPower("sclk=" + q); }
-    else { if (q === WX10_SENT) return; WX10_SENT = q; sendPower("swx=" + q); }
+    if (which === "c") { if (q === CLK10_SENT) return; CLK10_SENT = q; sendPower("sclk=" + q, function(r) { if (r !== "ok" && CLK10_SENT === q) CLK10_SENT = ""; }); }
+    else { if (q === WX10_SENT) return; WX10_SENT = q; sendPower("swx=" + q, function(r) { if (r !== "ok" && WX10_SENT === q) WX10_SENT = ""; }); }
 }
 frontClock = function() {
     var cw = $("fp-cw"); if (!cw || $("front").style.display !== "block") return;
@@ -213,6 +221,30 @@ rankArticles = function() {
     }
     return r;
 };
+
+// ---------------------------------------------------------------- 10.10.1: a tap while the hub sleeps only wakes it
+// Before, the tap also did what it landed on (open Settings, an app...) while the loop went on sleeping, so the
+// Kindle froze with that screen up. Now the tap is kept from the page, the loop is told at once (not at most every
+// 10 s), and the page looks for the "awake" state right away. The power button works as before.
+(function() {
+    var last = 0, tries = [];
+    function swallow(e) {
+        if (!HUB.sleeping) { tries = []; return; }
+        // safety: if the loop isn't answering at all (six tries within a minute and still "asleep"), taps work again
+        if (tries.length >= 6 && new Date().getTime() - tries[tries.length - 6] < 60000) return;
+        if (e.stopPropagation) e.stopPropagation();
+        if (e.preventDefault) e.preventDefault();
+        if (e.type !== "touchstart" && e.type !== "mousedown") return;
+        var t = new Date().getTime();
+        lastTouchAt = t;
+        if (t - last < 2000) return;
+        last = t; lastTouchSend = t; tries.push(t); if (tries.length > 6) tries.shift();
+        sendPower("touch=1", null);
+        setTimeout(pollState, 700); setTimeout(pollState, 1600); setTimeout(pollState, 3000);
+    }
+    var ev = ["touchstart", "touchmove", "touchend", "mousedown", "mouseup", "click"];
+    for (var i = 0; i < ev.length; i++) window.addEventListener(ev[i], swallow, true);      // window: before the page's own listeners
+})();
 
 // ---------------------------------------------------------------- a kitchen timer tells the loop (it may tick it while asleep)
 var T10_SENT = -1;

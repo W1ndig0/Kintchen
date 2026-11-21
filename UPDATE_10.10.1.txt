@@ -1,0 +1,21 @@
+KITCHEN HUB 10.10.1 - FIXES THE FREEZING
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE.
+
+FIX
+ 1  THE CAUSE of the freezing in 10.10: when the minute changed, the left rail redrew its clock and lost the
+    status (awake, battery, updated) with it. 10.10 had dropped the check that used to put it back, so from
+    then on every refresh of the bottom bar failed: the sleep timer stopped moving, every tap caused an
+    error, and Settings stopped updating. The rail now keeps the status, and if it is ever lost the next
+    refresh puts it back. A refresh that fails can no longer stop anything else. Reproduced in an old
+    browser like the Kindle's and confirmed fixed.
+ 2  A tap on the sleeping screen opened whatever it landed on (Settings, the calendar...) while the hub went
+    on sleeping, so the Kindle seemed frozen with that screen up. Now a tap while asleep only wakes the hub.
+    The power button works as before.
+ 3  The bottom bar was rebuilt about a second after every tap (the loop answers a tap with a new state),
+    so the next tap on its buttons often did nothing. It is now only rebuilt when something on it changes.
+ 4  Any message from the page during the hourly redraw, or in the seconds before standby, switched the page
+    back to "awake". It now stays on the standby view.
+ 5  Where the clock digits and the weather picture are on the standby page was sent while the loop wasn't
+    listening, so it could get lost. The loop now listens in those seconds, and a tap then keeps the hub
+    awake. The page also tries again later if a send didn't arrive.
+ 6  Two messages sent together kept retrying at the same moment and colliding. Retries are now spread out.

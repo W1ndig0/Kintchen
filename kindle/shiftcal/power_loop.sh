@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.10"
+VERSION="10.10.1"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -280,6 +280,7 @@ read_last_sync() {
 AWAKE_UNTIL=0
 NEXT_WAKE_EPOCH=0
 WAKE_REASON="start"
+UI_SLEEP=0          # 10.10.1: 1 while the page should show the standby view (hourly redraw, getting ready to sleep, asleep)
 write_ui_state() {
     SLEEPING="${1:-0}"
     NEXT_STR="--:--"
@@ -644,7 +645,7 @@ poll_settings_http() {
     # a request id the page repeats on retries: handle each id once, echo it back through state.js
     RID=$(num_or_empty "$(qv rid)")
     if [ -n "$RID" ]; then
-        if [ "$RID" = "$LAST_RID" ]; then write_ui_state 0; return; fi
+        if [ "$RID" = "$LAST_RID" ]; then write_ui_state "$UI_SLEEP"; return; fi
         LAST_RID=$RID; echo "$RID" > "$DIR/.last_rid"
     fi
     if [ "$(qv sync)" = "1" ]; then
@@ -745,7 +746,7 @@ poll_settings_http() {
     if [ -z "$HV" ] && [ -f "$DIR/.update/pending" ]; then HV=$(cut -d' ' -f1 "$DIR/.update/pending" | tr -cd 'A-Za-z0-9.-'); fi
     [ -n "$HV" ] && [ -f "$DIR/.update/pending" ] && sh "$DIR/hub_update.sh" health "$HV" && [ ! -f "$DIR/.update/pending" ] && log "update $HV confirmed by the page"
     V=$(num_or_empty "$(qv autoupd)")
-    if [ -n "$V" ]; then case "$V" in 0|1|2) AUTO_UPDATE=$V ;; esac; save_conf; write_ui_state 0; log "auto update: $AUTO_UPDATE"; fi
+    if [ -n "$V" ]; then case "$V" in 0|1|2) AUTO_UPDATE=$V ;; esac; save_conf; write_ui_state "$UI_SLEEP"; log "auto update: $AUTO_UPDATE"; fi
     DG=$(qv diag)
     [ -n "$DG" ] && log "page: $(urldecode "$DG" | tr -cd 'A-Za-z0-9 :=.,x/-' | cut -c1-160)"
     NTF=$(qv notify)
@@ -783,11 +784,12 @@ poll_settings_http() {
     if [ -n "$VP" ] && [ "$VP" != "$LAST_VP" ]; then LAST_VP=$VP; log "page window ${VP} (screen 1236x1648; less height = the bar's space is still reserved)"; fi
     T_REQ=$(num_or_empty "$(qv touch)")
     if [ -n "$T_REQ" ]; then
+        TOUCH_SEEN=1
         NEWU=$((NOWQ + WAKE_WINDOW))
         [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
         # 10.9: a tap during a quick wake turns it into a full one (page, light, lists from the phone)
         if [ "$QUICK_ACTIVE" = "1" ]; then
-            QUICK_ACTIVE=0; WAKE_REASON=touch; set_light "$LIGHT_AWAKE"; write_ui_state 0; log "tapped during a quick wake - full wake"
+            QUICK_ACTIVE=0; UI_SLEEP=0; WAKE_REASON=touch; set_light "$LIGHT_AWAKE"; write_ui_state 0; log "tapped during a quick wake - full wake"
             cloud_ready && [ "$LISTS_ON_WAKE" = "1" ] && ! sync_running && start_sync lists
         fi
     fi
@@ -863,7 +865,7 @@ poll_settings_http() {
         save_conf
         log "settings saved: interval=${INTERVAL_MIN}m window=${WAKE_WINDOW}s screenshot=${SCREENSAVER_MODE} hide-statusbar=${PILLOW_DISABLE} smart=${SMART_SLEEP} (home ${HOME_MIN}m, work ${AWAY_MIN}m, night ${NIGHT_MIN}m ${NIGHT_FROM}-${NIGHT_TO})"
     fi
-    write_ui_state 0
+    write_ui_state "$UI_SLEEP"      # 10.10.1: what the page should show NOW (was always "awake": a request during an hourly redraw or while getting ready to sleep woke the page up)
 }
 
 # cloud.conf -> mesquite/cloud.js so the page can show the pairing code and sync status
@@ -1381,13 +1383,13 @@ while true; do
     if [ "$QUICK_ACTIVE" = "1" ]; then
         AWAKE_UNTIL=$((NOW + ${HUB_QUICK_SEC:-8}))
         hourly_wanted "$NOW" && { HOURLY_NOW=1; en_add hourly; }
-        QUICK_NEXT=1; write_ui_state 1
+        QUICK_NEXT=1; UI_SLEEP=1; write_ui_state 1
         log "$([ "$HOURLY_NOW" = 1 ] && echo "hourly redraw" || echo "timer wake"), battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
     else
         AWAKE_UNTIL=$((NOW + WAKE_WINDOW)); AWAKE_T0=$NOW
         NEXT_WAKE_EPOCH=0
         set_light "$LIGHT_AWAKE"
-        write_ui_state 0
+        UI_SLEEP=0; write_ui_state 0
         case "$WAKE_REASON" in button|touch) en_add wake_btn ;; esac
         log "awake (${WAKE_REASON}) for ${WAKE_WINDOW}s, battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
         # (10.10: the task-manager probe only runs while Settings > System is open, or for SEND LOG)
@@ -1433,7 +1435,7 @@ while true; do
             sync_running || start_sync lists
         fi
         # 10.10: a sync or edit burst finished: the page re-reads its data once (no timers re-reading it)
-        if sync_running; then SYNC_WAS=1; elif [ "$SYNC_WAS" = "1" ]; then SYNC_WAS=0; DATA_N=$((DATA_N + 1)); read_last_sync; SEEN_SYNC="$LAST_SYNC"; write_ui_state "$([ "$QUICK_ACTIVE" = 1 ] && echo 1 || echo 0)"; fi
+        if sync_running; then SYNC_WAS=1; elif [ "$SYNC_WAS" = "1" ]; then SYNC_WAS=0; DATA_N=$((DATA_N + 1)); read_last_sync; SEEN_SYNC="$LAST_SYNC"; write_ui_state "$UI_SLEEP"; fi
         still_owner || { log "another loop owns $PIDF - exiting"; exit 0; }
     done
     SYNC_PID=""
@@ -1455,9 +1457,17 @@ while true; do
 
     QUICK_NEXT=1
     [ "$LIGHT_AWAKE" != keep ] && set_light 0      # only if you chose a light level for the hub
-    write_ui_state 1
+    UI_SLEEP=1; write_ui_state 1
     write_log_js
-    [ "$QUICK_ACTIVE" = "1" ] && sleep 3 || sleep 6   # give the page time to draw the standby frame before it is captured
+    # give the page time to draw the standby frame before it is captured. 10.10.1: LISTENING while it does: the page
+    # sends where the clock digits and the weather picture are (sclk/swx) right then, and a tap now means "stay awake"
+    # (before, both arrived while the loop slept for these seconds and were lost)
+    TOUCH_SEEN=0; PW_END=$(( $(date +%s) + $([ "$QUICK_ACTIVE" = "1" ] && echo 3 || echo 6) ))
+    while [ "$(date +%s)" -lt "$PW_END" ] && [ "$TOUCH_SEEN" = "0" ]; do poll_settings_http; done
+    if [ "$TOUCH_SEEN" = "1" ]; then
+        log "tapped while going to standby - staying awake"
+        WAKE_REASON=touch; QUICK_NEXT=0; continue
+    fi
 
     if [ "$SCREENSAVER_MODE" != "off" ]; then
         PAINT_FULL=$HOURLY_NOW capture_and_freeze_display

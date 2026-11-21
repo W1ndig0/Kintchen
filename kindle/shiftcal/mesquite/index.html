@@ -1658,7 +1658,7 @@ function exitHub() {
 khMark("main: v9.2 CHROME tiles, sysbar, settings");
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.10";
+var VERSION = "10.10.1";
 var DIAG_SENT = {};      // 10.9.3: set up here, before anything at start-up can call diagOnce (see diagOnce)
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
@@ -2818,7 +2818,7 @@ function sendPower(q, done) {
     var rid = (q.indexOf("touch=") === 0) ? "" : String(++RID_SEQ), tries = 0, fin = false;
     function end(r) { if (fin) return; fin = true; if (rid) delete PENDING[rid]; if (done) done(r); }
     if (rid) PENDING[rid] = function() { end("ok"); };
-    function again() { if (!fin && tries < 4) setTimeout(attempt, 800); }
+    function again() { if (!fin && tries < 4) setTimeout(attempt, 450 + Math.floor(Math.random() * 900)); }      // 10.10.1: jitter
     function attempt() {
         if (fin) return;
         tries++;
@@ -8495,7 +8495,7 @@ function tick() {
     // 10.10: data.js / hub_items.js are re-read only when a sync or edit burst finished (state.js "dataN"),
     // not every 4 s for 2 minutes after a wake and every 60 s after that
 }
-khEvery(4000, tick);      // 10.10: on the shared timer
+khEvery(4000, function() { tick(); });      // 10.10: on the shared timer
 
 /* ---------------- HubPantry (10.4): the pantry rules every device shares ----------------
  * Settings live in the list as cfg item "pantry" (JSON):
@@ -9018,7 +9018,7 @@ appList = function() {
 };
 ICONS.rail = "<rect x='10' y='14' width='22' height='72' fill='%c'/><rect x='40' y='14' width='50' height='32' fill='none' stroke='%c' stroke-width='7'/><rect x='40' y='54' width='50' height='32' fill='none' stroke='%c' stroke-width='7'/>";
 IC_LABEL.rail = "RAIL";
-khEvery(20000, renderRail);      // the clock (only repaints when the minute changes)
+khEvery(20000, function() { renderRail(); });      // the clock (only repaints when the minute changes). 10.10.1: called by name, so the 10.8 wrapper runs and puts the status back into the redrawn rail
 relayout();
 
 khMark("main: 10.6: SETTINGS REFRESH, SMART WAKE SCHEDULE, RAIL ");
@@ -9224,7 +9224,7 @@ function shuffleStep() {
     ROT.cur = nx;
     renderTileById(nx);
 }
-khEvery(2500, shuffleStep);      // 10.8: was every second; shuffles are 10 s or more apart, and fewer wake-ups save battery
+khEvery(2500, function() { shuffleStep(); });      // 10.8: was every second; shuffles are 10 s or more apart, and fewer wake-ups save battery
 khMark("main: 10.7: DEALS PAGE");
 // =====================  10.7: DEALS PAGE  =====================
 // The cloud brain sends EX.deals: wishlist items on sale first, then similar items on sale (same searches,
