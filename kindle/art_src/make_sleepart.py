@@ -2,7 +2,7 @@
 """Kitchen Hub 10.10: builds kindle/shiftcal/sleepart.tar, the pictures for the sleep clock.
 
   clk/<size>/<rot>/<glyph>.png   clock digits (Literata Bold, SIL Open Font License, see OFL-Literata.txt)
-                                 size s m l; rot 0 90 180 270 (the page's screen rotation, CSS clockwise);
+                                 size s m l x; rot 0 90 180 270 (the page's screen rotation, CSS clockwise);
                                  glyph 0-9, b (blank), c (colon), am, pm. Every glyph of a size has the same
                                  height, and all digits the same width, so a digit can be swapped in place.
   clk/<size>/metrics.txt         "digit_w colon_w ampm_w height" for the page (rot 0 pixels)
@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw, ImageFont
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "shiftcal", "sleepart.tar")
 FONT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "Literata-700.ttf")
-SIZES = {"s": 84, "m": 128, "l": 180}           # font size in px
+SIZES = {"s": 84, "m": 128, "l": 180, "x": 300}     # font size in px (x: the night screen, 10.10.2)
 ROTS = (0, 90, 180, 270)
 FILES = {}                                       # path in the archive -> PNG bytes
 

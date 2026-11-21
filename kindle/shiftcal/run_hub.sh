@@ -143,7 +143,9 @@ done
 CR=$(printf '\r')
 for F in "$DIR"/*.sh "$DIR"/*.conf; do
     [ -f "$F" ] && grep -q "$CR" "$F" 2>/dev/null || continue
-    if tr -d '\r' < "$F" > "$F.lf" 2>/dev/null && [ -s "$F.lf" ] && mv "$F.lf" "$F"; then echo "   fixed Windows line endings in $(basename "$F")"
+    # 10.10.3: the new file is made with umask 077 - cloud.conf holds the token and the passphrase and
+    # must not become readable by everything just because it was saved on Windows.
+    if ( umask 077; tr -d '\r' < "$F" > "$F.lf" ) 2>/dev/null && [ -s "$F.lf" ] && mv "$F.lf" "$F"; then echo "   fixed Windows line endings in $(basename "$F")"
     else rm -f "$F.lf"; fail "$(basename "$F") has Windows line endings and could not be fixed"; fi
 done
 pass
@@ -171,7 +173,12 @@ pass
 
 # 9 ------------------------------------------------ settings port
 check "Settings port"
-ps | grep -q '[n]c -l -p 8765' && fail "something is still using the hub's settings port"
+# 10.10.3: a listener left behind by a killed loop is ours - stop it instead of refusing to start at all
+if ps | grep -q '[n]c -l -p 8765'; then
+    for P in $(hc_nc_pids); do kill "$P" 2>/dev/null; done
+    sleep 2
+    ps | grep -q '[n]c -l -p 8765' && fail "something is still using the hub's settings port"
+fi
 pass
 
 # 10 ----------------------------------------------- start the page

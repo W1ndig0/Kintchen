@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.10.1"
+VERSION="10.10.3"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -105,6 +105,7 @@ load_conf() {
     case "$AUTO_UPDATE" in 0|1|2) ;; *) AUTO_UPDATE=1 ;; esac
     case "$FREEZE_POWERD" in 0|1) ;; *) FREEZE_POWERD=1 ;; esac
     case "$LOCAL_ONLY" in 0|1) ;; *) LOCAL_ONLY=0 ;; esac
+    case "$PILLOW_DISABLE" in 0|1|2) ;; *) PILLOW_DISABLE=2 ;; esac      # 10.10.3: an empty value here also broke state.js
     case "$QUICK_WAKE" in 0|1) ;; *) QUICK_WAKE=1 ;; esac
     case "$CLOCK_MODE" in 15|min) ;; *) CLOCK_MODE=15 ;; esac
     case "$SLEEP_CLOCK" in min|15|hour|off) ;; *) SLEEP_CLOCK=min ;; esac
@@ -252,7 +253,7 @@ EOT
 }
 
 write_log_js() {
-    tail -n 40 "$LOG" 2>/dev/null | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$/",/' > "$LOG_JS.body"
+    tail -n 40 "$LOG" 2>/dev/null | tr -d '\r' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$/",/' > "$LOG_JS.body"
     { echo "window.HUB_LOG = ["; cat "$LOG_JS.body"; echo "\"\"];"; } > "$LOG_JS.tmp"
     mv "$LOG_JS.tmp" "$LOG_JS"
     rm -f "$LOG_JS.body"
@@ -277,6 +278,15 @@ read_last_sync() {
     LAST_SYNC_STR=$(fmt_epoch "$LS")
 }
 
+# 10.10.3: anything that goes into state.js as a NUMBER goes through here. `grep -c` on an empty file
+# prints 0 AND exits 1, so "$(grep -c . f || echo 0)" used to put TWO zeros in state.js: the whole file
+# stopped being valid JavaScript, the page kept its last state for ever (frozen countdown, never asleep,
+# never awake) and nothing said so in the log, because a script that fails to parse still "loads".
+n0() { case "$1" in ''|*[!0-9]*) echo 0 ;; *) echo "$1" ;; esac; }
+EIPS_XY_OK=0
+read_caps() { EIPS_XY_OK=0; grep -q '^EIPS_XY=1' "$DIR/.sleepcaps" 2>/dev/null && EIPS_XY_OK=1; }
+AWAYS_N=0                                      # lines in .away, counted only when it changes
+count_aways() { AWAYS_N=$(n0 "$(awk 'NF { n++ } END { print n + 0 }' "$DIR/.away" 2>/dev/null)"); }
 AWAKE_UNTIL=0
 NEXT_WAKE_EPOCH=0
 WAKE_REASON="start"
@@ -285,7 +295,7 @@ write_ui_state() {
     SLEEPING="${1:-0}"
     NEXT_STR="--:--"
     [ "$SLEEPING" = "1" ] && [ "$NEXT_WAKE_EPOCH" -gt 0 ] && NEXT_STR=$(fmt_epoch "$NEXT_WAKE_EPOCH")
-    B_NOW=$(battery_pct)
+    B_NOW=${B:-$(battery_pct)}      # 10.10.3: the reading from this wake (state.js is written on every request)
     case "$SCREENSAVER_MODE" in off) SS_LEGACY=0 ;; eips_slots) SS_LEGACY=2 ;; *) SS_LEGACY=1 ;; esac
     WS_NOW=$(date +%s); is_night_at "$WS_NOW" && SMODE=night || SMODE=home
     SC_BY_NOW=page; [ "$SLEEPING" = "1" ] && SC_BY_NOW=$(clock_by)      # 10.10: who draws the standby minute
@@ -308,12 +318,12 @@ window.HUB_STATE = {
     screensaverMode: "$SCREENSAVER_MODE",
     pillowDisabled: $PILLOW_DISABLE,
     battery: "${B_NOW:-?}",
-    batteryHoursLeft: $BATT_HOURS_LEFT,
-    charging: $CHARGING,
-    lastRid: $LAST_RID,
+    batteryHoursLeft: $(n0 "$BATT_HOURS_LEFT"),
+    charging: $(n0 "$CHARGING"),
+    lastRid: $(n0 "$LAST_RID"),
     booted: $([ "$BOOT" = "0" ] && echo 1 || echo 0),
     smart: $SMART_SLEEP, homeMin: $HOME_MIN, awayMin: $AWAY_MIN, nightMin: $NIGHT_MIN, nightFrom: $NIGHT_FROM, nightTo: $NIGHT_TO,
-    where: "${SMODE:-fixed}", aways: $(grep -c . "$DIR/.away" 2>/dev/null || echo 0),
+    where: "${SMODE:-fixed}", aways: $AWAYS_N,
     snoozeUntil: 0,
     quick: ${QUICK_NEXT:-0}, quickWake: $QUICK_WAKE, clockMode: "$CLOCK_MODE", frontlight: $([ "$LIGHT_AWAKE" = keep ] && echo -1 || echo "$LIGHT_AWAKE"),
     rate7: ${RATE7:-0}, hours7: ${HRS7:-0}, wakesPerDay: ${WPD:-0},
@@ -393,7 +403,7 @@ en_add() {      # en_add key amount   (safe from the background syncs: one small
 en_sum() { awk -v k="$1" '$1 == k { s += $2 } END { print s + 0 }' "$EN_F" 2>/dev/null || echo 0; }
 en_day_check() {      # a new day: write yesterday's report, start again
     ED=$(date +%Y-%m-%d)
-    [ -f "$EN_F" ] || { echo "day $ED" > "$EN_F"; return; }
+    [ -f "$EN_F" ] || { echo "day $ED" > "$EN_F"; battery_pct > "$DIR/.energy_b0"; return; }
     OD=$(sed -n 's/^day //p' "$EN_F" | head -1)
     [ "$OD" = "$ED" ] && return
     en_report "$OD"
@@ -401,7 +411,7 @@ en_day_check() {      # a new day: write yesterday's report, start again
     echo "$(battery_pct)" > "$DIR/.energy_b0"
 }
 en_report() {     # $1 = the day the counters belong to
-    awk -v day="${1:-today}" -v b0="$(cat "$DIR/.energy_b0" 2>/dev/null)" -v b1="$(battery_pct)" -v rate="${RATE7:-0}" -v left="$(awk -v h="${HRS7:-0}" 'BEGIN { printf "%.1f", h / 24 }')" '
+    awk -v day="${1:-today}" -v b0="$(cat "$DIR/.energy_b0" 2>/dev/null)" -v b1="$(battery_pct)" -v rate="${RATE7:-0}" -v left="$(awk -v h="${LEFT7:-0}" 'BEGIN { printf "%.1f", h / 24 }')" '
         $1 != "day" { s[$1] += $2 }
         END {
             ta = s["tick_cs"] / 100; tn = s["ticks"] + 0; avg = tn ? ta / tn : 0
@@ -818,7 +828,7 @@ poll_settings_http() {
     V=$(qv clockmode);   case "$V" in min) SLEEP_CLOCK=min; CHANGED=1 ;; 15) SLEEP_CLOCK=15; CHANGED=1 ;; esac      # (10.9 pages)
     V=$(num_or_empty "$(qv timerend)"); [ -n "$V" ] && TIMER_END=$V      # a kitchen timer started (0 = stopped)
     # where the standby page put its clock digits and weather picture (screen pixels), for the sleep clock
-    V=$(qv sclk); case "$V" in [sml]_*) printf '%s\n' "$V" | tr '_' ' ' | tr -cd 'a-z0-9 \n' > "$DIR/.sleep_geo" ;; none) rm -f "$DIR/.sleep_geo" ;; esac
+    V=$(qv sclk); case "$V" in [smlx]_*) printf '%s\n' "$V" | tr '_' ' ' | tr -cd 'a-z0-9 \n' > "$DIR/.sleep_geo" ;; none) rm -f "$DIR/.sleep_geo" ;; esac
     V=$(qv swx);  case "$V" in [a-z]*_*) printf '%s\n' "$V" | tr '_' ' ' | tr -cd 'a-z0-9 \n' > "$DIR/.sleep_wx" ;; none) rm -f "$DIR/.sleep_wx" ;; esac
     V=$(qv light)
     if [ "$V" = "keep" ]; then LIGHT_AWAKE=keep; CHANGED=1; log "frontlight: left to the Kindle"
@@ -841,7 +851,7 @@ poll_settings_http() {
     V=$(qv aw | tr -cd '0-9,-')
     if [ -n "$V" ] || [ "$(qv aw0)" = "1" ]; then
         printf '%s' "$V" | tr ',' '\n' | sed -n 's/^\([0-9]\{9,11\}\)-\([0-9]\{9,11\}\)$/\1 \2/p' | head -n 30 > "$DIR/.away.tmp"
-        if ! cmp -s "$DIR/.away.tmp" "$DIR/.away"; then mv "$DIR/.away.tmp" "$DIR/.away"; log "work times from the calendar: $(grep -c . "$DIR/.away") in the next week"; else rm -f "$DIR/.away.tmp"; fi
+        if ! cmp -s "$DIR/.away.tmp" "$DIR/.away"; then mv "$DIR/.away.tmp" "$DIR/.away"; count_aways; log "work times from the calendar: $AWAYS_N in the next week"; else rm -f "$DIR/.away.tmp"; fi
     fi
     V=$(num_or_empty "$(qv window)");   [ -n "$V" ] && { WAKE_WINDOW=$V; [ "$WAKE_WINDOW" -lt "$MIN_WINDOW" ] && WAKE_WINDOW=$MIN_WINDOW; CHANGED=1; }
     V=$(num_or_empty "$(qv ss)")
@@ -856,7 +866,9 @@ poll_settings_http() {
         apply_pillow
         CHANGED=1
     fi
-    if [ "$(qv rotate)" = "1" ]; then
+    # 10.10.3: "orient", not "rotate": rotate=1 is MAKE NEW KEYS (above), and it used to turn the Kindle
+    # on its side as well, because both handlers read the same name.
+    if [ "$(qv orient)" = "1" ]; then
         CUR_ROT=$(lipc-get-prop com.lab126.winmgr orientationLock 2>/dev/null)
         if [ "$CUR_ROT" = "L" ]; then lipc-set-prop com.lab126.winmgr orientationLock U 2>/dev/null
         else lipc-set-prop com.lab126.winmgr orientationLock L 2>/dev/null; fi
@@ -1137,7 +1149,7 @@ suspend_for() {
         # time (3 s, then 6 s) and log only the first refusal, so the log stays readable.
         [ "$ATTEMPTS" -eq 0 ] && log "suspend refused (rc=$RC, slept ${SLEPT}s) - retrying with back-off"
         ATTEMPTS=$((ATTEMPTS + 1))
-        B=$((3 * ATTEMPTS)); [ "$B" -gt 6 ] && B=6; sleep "$B"
+        SB=$((3 * ATTEMPTS)); [ "$SB" -gt 6 ] && SB=6; sleep "$SB"      # 10.10.3: not B - that is the battery percentage (saver mode read it as 3%)
     done
     thaw_powerd
     return $RESULT
@@ -1174,7 +1186,7 @@ tick_secs() {        # seconds between clock ticks at epoch $1 (0 = no ticks)
 }
 tick_label() { tick_secs "$1"; case "$TK" in 60) echo "every minute ($(clock_by))" ;; 900) echo "every 15 min ($(clock_by))" ;; *) echo "$CLK_M (no ticks)" ;; esac; }
 clock_by() {         # who draws the minute: the loop (pictures at x,y) or the page (it redraws itself)
-    if [ "$CLOCK_DRAW" = "auto" ] && grep -q '^EIPS_XY=1' "$DIR/.sleepcaps" 2>/dev/null && [ -s "$DIR/.sleep_geo" ] && [ -d "$ART/clk" ] &&
+    if [ "$CLOCK_DRAW" = "auto" ] && [ "$EIPS_XY_OK" = "1" ] && [ -s "$DIR/.sleep_geo" ] && [ -d "$ART/clk" ] &&
        ! { [ "$TIMER_TICK" = "1" ] && [ "${TIMER_END:-0}" -gt "$(date +%s)" ]; }; then echo loop; else echo page; fi
 }
 next_wake() {        # NEXT_WAKE_EPOCH + NW_WHY from the hourly redraws, the daily session and a chosen sync interval
@@ -1224,6 +1236,7 @@ play_wx_anim() {     # ~10 s simple loop of the current weather over the standby
     WT0=$(date +%s); WN=0
     while [ $(( $(date +%s) - WT0 )) -lt 10 ]; do
         for WFR in 1 2 3 4 5 6 7 8; do
+            [ $(( $(date +%s) - WT0 )) -lt 10 ] || break      # 10.10.3: the 10 s hold inside the loop too, on a slow screen
             [ -f "$WD/$WFR.png" ] || continue
             # the fast mode can be refused on some firmware: then the frames are drawn the normal way
             eips -g "$WD/$WFR.png" -x "$WX" -y "$WY" $WFL >/dev/null 2>&1 || { [ -n "$WFL" ] && { WFL=""; sed -i 's/^EIPS_W=1/EIPS_W=0/' "$DIR/.sleepcaps"; log "fast screen mode refused - animation uses the normal mode"; }; }
@@ -1307,6 +1320,8 @@ if [ -f "$DIR/sleepart.tar" ] && { [ ! -f "$ART/.v" ] || [ "$DIR/sleepart.tar" -
     else rm -rf "$ART.new"; log "sleep clock pictures: the archive could not be unpacked - the page draws the clock"; fi
 fi
 probe_eips
+read_caps      # 10.10.3: once a cycle, not once per state write
+count_aways
 en_day_check
 kill_stray_nc
 apply_pillow
@@ -1347,6 +1362,7 @@ FIRST=1
 while true; do
     still_owner || { log "another loop owns $PIDF - exiting"; exit 0; }
     load_conf
+    read_caps
     read_last_sync
     STEP=$((INTERVAL_MIN * 60))
 
@@ -1387,7 +1403,7 @@ while true; do
         log "$([ "$HOURLY_NOW" = 1 ] && echo "hourly redraw" || echo "timer wake"), battery ${B}%$( [ "$CHG" = "1" ] && echo ' charging')"
     else
         AWAKE_UNTIL=$((NOW + WAKE_WINDOW)); AWAKE_T0=$NOW
-        NEXT_WAKE_EPOCH=0
+        NEXT_WAKE_EPOCH=0; QUICK_NEXT=0
         set_light "$LIGHT_AWAKE"
         UI_SLEEP=0; write_ui_state 0
         case "$WAKE_REASON" in button|touch) en_add wake_btn ;; esac
@@ -1417,7 +1433,6 @@ while true; do
     write_log_js
 
     # awake window: wall clock, touches push the deadline out, waits for a running sync
-    SEEN_SYNC="$LAST_SYNC"
     while :; do
         NOWW=$(date +%s)
         if [ "$NOWW" -ge "$AWAKE_UNTIL" ]; then
@@ -1435,7 +1450,7 @@ while true; do
             sync_running || start_sync lists
         fi
         # 10.10: a sync or edit burst finished: the page re-reads its data once (no timers re-reading it)
-        if sync_running; then SYNC_WAS=1; elif [ "$SYNC_WAS" = "1" ]; then SYNC_WAS=0; DATA_N=$((DATA_N + 1)); read_last_sync; SEEN_SYNC="$LAST_SYNC"; write_ui_state "$UI_SLEEP"; fi
+        if sync_running; then SYNC_WAS=1; elif [ "$SYNC_WAS" = "1" ]; then SYNC_WAS=0; DATA_N=$((DATA_N + 1)); read_last_sync; write_ui_state "$UI_SLEEP"; fi
         still_owner || { log "another loop owns $PIDF - exiting"; exit 0; }
     done
     SYNC_PID=""
@@ -1463,10 +1478,15 @@ while true; do
     # sends where the clock digits and the weather picture are (sclk/swx) right then, and a tap now means "stay awake"
     # (before, both arrived while the loop slept for these seconds and were lost)
     TOUCH_SEEN=0; PW_END=$(( $(date +%s) + $([ "$QUICK_ACTIVE" = "1" ] && echo 3 || echo 6) ))
-    while [ "$(date +%s)" -lt "$PW_END" ] && [ "$TOUCH_SEEN" = "0" ]; do poll_settings_http; done
-    if [ "$TOUCH_SEEN" = "1" ]; then
-        log "tapped while going to standby - staying awake"
-        WAKE_REASON=touch; QUICK_NEXT=0; continue
+    while [ "$(date +%s)" -lt "$PW_END" ] && [ "$TOUCH_SEEN" = "0" ] && [ "$(date +%s)" -ge "$AWAKE_UNTIL" ]; do poll_settings_http; done
+    # 10.10.3: a tap, but also a SYNC, an edit or a job asked for in these seconds (they all push AWAKE_UNTIL
+    # out). Before, only a tap stopped the Kindle going to sleep: tapping SYNC just as it nodded off started a
+    # sync that the suspend then cut off, leaving Wi-Fi on.
+    if [ "$TOUCH_SEEN" = "1" ] || [ "$(date +%s)" -lt "$AWAKE_UNTIL" ] || sync_running; then
+        # "job", not "touch", when nobody tapped: the battery report counts button wakes, and this is not one
+        if [ "$TOUCH_SEEN" = "1" ]; then WAKE_REASON=touch; log "tapped while going to standby - staying awake"
+        else WAKE_REASON=job; log "asked to stay awake while going to standby (something is still running)"; fi
+        QUICK_NEXT=0; continue
     fi
 
     if [ "$SCREENSAVER_MODE" != "off" ]; then
@@ -1475,7 +1495,7 @@ while true; do
         [ "$HOURLY_NOW" = "1" ] && [ "$WX_ANIM" = "1" ] && ! saver_on && play_wx_anim
     fi
     QUICK_ACTIVE=0; HOURLY_NOW=0
-    CLK_LAST=$(clock_glyphs)                   # what the page just drew; ticks only redraw digits that change
+    CLK_LAST=""          # 10.10.2: the first tick draws every slot (the page may not have shown the current time)
 
     if [ "$MODE" = "eco" ]; then
         sleep_clock "$NEXT_WAKE_EPOCH"

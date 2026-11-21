@@ -22,11 +22,15 @@ function khSay(q, tries) {      // the loop listens one request at a time: a mis
 function khMark(s) { KH_STAGE = s; }
 // 10.10: one shared 2.5 s timer instead of ten separate ones: each job runs when its time is due. Fewer
 // wake-ups of the browser's script engine while the hub is awake (it stops completely while the Kindle sleeps).
-var KH_JOBS = [];
+var KH_JOBS = [], KH_LAST = new Date().getTime();
 function khEvery(ms, fn) { KH_JOBS.push({ ms: ms, fn: fn, at: new Date().getTime() }); }
 setInterval(function() {
-    var t = new Date().getTime();
-    for (var i = 0; i < KH_JOBS.length; i++) { var j = KH_JOBS[i]; if (t - j.at >= j.ms - 300) { j.at = t; try { j.fn(); } catch (e) {} } }
+    var t = new Date().getTime(), i, j;
+    // 10.10.3: the Kindle was asleep (the clock jumped): every job is "overdue" at once. Running them all in
+    // one go is what made the screen lag for a moment after each wake. The wake itself is handled by onWake.
+    if (t - KH_LAST > 20000) { for (i = 0; i < KH_JOBS.length; i++) KH_JOBS[i].at = t; KH_LAST = t; return; }
+    KH_LAST = t;
+    for (i = 0; i < KH_JOBS.length; i++) { j = KH_JOBS[i]; if (t - j.at >= j.ms - 300) { j.at = t; try { j.fn(); } catch (e) {} } }
 }, 2500);
 // 10.9.4: steps are only remembered (they used to be sent synchronously, one by one: that made start-up ~9 s
 // slower and set off the Kindle browser's "JavaScript execution exceeded timeout"). Errors are still sent.
@@ -1658,7 +1662,7 @@ function exitHub() {
 khMark("main: v9.2 CHROME tiles, sysbar, settings");
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.10.1";
+var VERSION = "10.10.3";
 var DIAG_SENT = {};      // 10.9.3: set up here, before anything at start-up can call diagOnce (see diagOnce)
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
@@ -3514,9 +3518,8 @@ var HubCrypt = (function() {
         m.push(0x80);
         while (m.length % 64 !== 56) m.push(0);
         var bits = l * 8;
-        m.push(0, 0, 0, Math.floor(bits / 4294967296) & 255, (bits >>> 24) & 255, (bits >>> 16) & 255, (bits >>> 8) & 255, bits & 255);
-        m.splice(m.length - 8, 4); m.splice(m.length - 4, 0, 0, 0, 0, 0);
-        m = m.slice(0, m.length - 4).concat([(bits >>> 24) & 255, (bits >>> 16) & 255, (bits >>> 8) & 255, bits & 255]);
+        // 64-bit big-endian message length (high word is 0 for anything under 512 MB)
+        m.push(0, 0, 0, 0, (bits >>> 24) & 255, (bits >>> 16) & 255, (bits >>> 8) & 255, bits & 255);
         var w = new Array(64);
         for (i = 0; i < m.length; i += 64) {
             for (j = 0; j < 16; j++) w[j] = (m[i + 4 * j] << 24) | (m[i + 4 * j + 1] << 16) | (m[i + 4 * j + 2] << 8) | m[i + 4 * j + 3];
@@ -4679,7 +4682,7 @@ bindTap($("t-rcp"), function() { if (!consumed($("t-rcp"))) tileTap("rcp", funct
 bindTap($("t-shop"), function() { if (!consumed($("t-shop"))) tileTap("shop", openShop); });
 bindTap($("sv-back"), closeShop);
 bindTap($("sv-more"), function() { SV_SKIP = $("sv-more").__next || 0; renderShopView(); });
-bindTap($("sv-qr"), openShopQR);
+bindTap($("sv-qr"), function() { openShopQR(); });      // 10.10.3: by name, so the 10.9 live-list version runs
 bindTap($("sv-qrclose"), function() { $("sv-qrbox").style.display = "none"; });
 bindTap($("sv-type"), function() {
     kbOpen("Add to the shopping list", "", function(t) { if (t) itemEdit(HubData.newId("k"), "shop", "open", t); }, shopSugg);
@@ -6923,7 +6926,7 @@ addIconBtn = function(parent, name, fn, filled) {
 var __statusText = statusText;
 statusText = function() {
     var s = __statusText();
-    if (HUB.sleeping) return { t: "ASLEEP", s: (HUB.next && HUB.next !== "--:--" ? "WAKES " + HUB.next + " &middot; " : "") + "PRESS THE BUTTON" };
+    if (HUB.sleeping) return { t: "ASLEEP", s: HUB.next && HUB.next !== "--:--" ? "WAKES " + HUB.next : "" };      // 10.10.2: "press the button" is already its own chunk on the bar
     if (s.t === "AWAKE" && /STANDBY/.test(s.s)) s.s = s.s.replace("TO STANDBY", "UNTIL SLEEP").replace("GOING UNTIL SLEEP", "SLEEPING NOW");
     return s;
 };
