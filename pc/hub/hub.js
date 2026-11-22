@@ -60,11 +60,13 @@ if (!cfg.pkgToken) { cfg.pkgToken = require("crypto").randomBytes(16).toString("
 if (!cfg.calToken) { cfg.calToken = require("crypto").randomBytes(16).toString("hex"); fs.writeFileSync(path.join(DATA, "config.json"), JSON.stringify(cfg, null, 1)); }
 const { Pusher } = require("./lib/webpush.js");
 const { Books } = require("./lib/books.js");
+const { Prices } = require("./lib/prices.js");
+const prices = new Prices({ dataDir: DATA, log, postal: cfg.postal });
 const books = new Books({ booksDir: cfg.booksDir || path.join(os.homedir(), "Documents", "Kitchen Hub Books"), dataDir: DATA, store, log });
 const pusher = new Pusher(DATA, log);
 const jobs = new BrainHost({ store, dataDir: DATA, log, env: cfg.jobsEnv || {}, onAlert: a => pusher.send(a).catch(() => {}) });
 const server = createServer({ store, auth, dataDir: DATA, webDir: path.join(__dirname, "web"),
-                              kindleDir: path.join(ROOT, "kindle", "shiftcal", "mesquite"), log, jobs, pusher, books, calToken: cfg.calToken, pkgToken: cfg.pkgToken, shiftcalDir: path.join(ROOT, "kindle", "shiftcal"), port: PORT, publicUrl: cfg.publicUrl,
+                              kindleDir: path.join(ROOT, "kindle", "shiftcal", "mesquite"), log, jobs, pusher, books, prices, calToken: cfg.calToken, pkgToken: cfg.pkgToken, shiftcalDir: path.join(ROOT, "kindle", "shiftcal"), port: PORT, publicUrl: cfg.publicUrl,
                               shared: { "hubdata.js": path.join(ROOT, "cloud", "hubdata.js"), "qr.js": path.join(ROOT, "kindle", "shiftcal", "mesquite", "qr.js") } });
 server.on("error", e => { log("cannot start: " + e.message + (e.code === "EADDRINUSE" ? " (is the hub already running?)" : "")); process.exit(1); });
 jobs.start().then(() => {

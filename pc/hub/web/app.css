@@ -47,3 +47,8 @@ body.desktop #nav button.sel { background: var(--bg); }
 body.desktop #nav .desk { display: block; }
 body.desktop main { padding: 1.5em 2em; max-width: 1400px; }
 pre { background: var(--bg); padding: .8em; border-radius: 8px; overflow: auto; font-size: .85em; user-select: all; }
+select { font: inherit; padding: .5em; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--fg); }
+.tot { display: grid; grid-template-columns: repeat(auto-fill, minmax(13em, 1fr)); gap: .6em; margin-bottom: 1em; }
+.tot .card b { font-size: 1.5em; display: block; } .tot .best { border: 2px solid var(--fg); }
+table.pc { width: 100%; border-collapse: collapse; font-size: .9em; } table.pc td, table.pc th { border-bottom: 1px solid var(--line); padding: .5em .4em; text-align: left; vertical-align: top; }
+table.pc select { max-width: 14em; font-size: .85em; } .wrap { overflow-x: auto; }

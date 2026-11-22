@@ -209,6 +209,30 @@ function createServer(opts) {
                                     books: Object.keys(opts.books.known).map(id => { const k = opts.books.known[id]; return { id, name: k.name, ext: k.ext, size: k.size, conv: k.conv }; }) });
         }
         if (p === "/api/books/scan" && m === "POST" && opts.books) return send(res, 200, { changes: opts.books.scan(now()) });
+        if (p.startsWith("/api/prices") && opts.prices) {
+            const P = opts.prices; let j = {}; if (m === "POST" && !/\.csv$/.test(p)) { try { j = JSON.parse(body || "{}"); } catch (e) {} }
+            if (p === "/api/prices/check" && m === "POST") {
+                const HubData = require("../../../cloud/hubdata.js");
+                const list = HubData.items(store.text, "shop").filter(i => i.state === "open" && i.text[0] !== "~")
+                    .map(i => { const s = HubData.HubCal.parseShop(i.text); return { name: s.name, qty: s.qty }; }).filter(i => i.name);
+                if (!list.length) return err(res, 400, "the shopping list is empty");
+                const r = await P.check(list, now());
+                if (opts.pusher && j.alert !== false) opts.pusher.send({ title: "Price check", body: r.summary, prio: 3 }).catch(() => {});
+                return send(res, 200, r);
+            }
+            if (p === "/api/prices/last" && m === "GET") return send(res, 200, P.last() || {});
+            if (p === "/api/prices/book" && m === "GET") return send(res, 200, { book: P.db.book, stores: require("./prices.js").STORES.map(s => ({ id: s.id, name: s.name })) });
+            if (p === "/api/prices/book" && m === "POST") { const x = P.addBook(j, now()); return x ? send(res, 200, x) : err(res, 400, "need a store, an item and a price"); }
+            const pb = /^\/api\/prices\/book\/(p[0-9a-f]{10})$/.exec(p);
+            if (pb && m === "DELETE") return P.delBook(pb[1]) ? send(res, 200, { ok: 1 }) : err(res, 404, "no such price");
+            if (p === "/api/prices/book.csv" && m === "GET") return send(res, 200, P.exportCsv(), "text/csv; charset=utf-8", { "Content-Disposition": "attachment; filename=price-book.csv" });
+            if (p === "/api/prices/book.csv" && m === "POST") return send(res, 200, { added: P.importCsv(body.toString("utf8"), now()) });
+            if (p === "/api/prices/pick" && m === "POST") {
+                if (!j.item || !require("./prices.js").STORES.some(s => s.id === j.store)) return err(res, 400, "bad pick");
+                P.pick(j.item, j.store, j.reset ? null : j.none ? { none: 1 } : { name: String(j.name || "").slice(0, 160), price: Number(j.price) || 0 });
+                return send(res, 200, { ok: 1 });
+            }
+        }
         if (p === "/api/view" && m === "POST") {       // a cookie so the virtual Kindle frame can load its data files
             const v = crypto.randomBytes(24).toString("hex"), until = now() + 12 * 3600000;
             for (const [k, t] of views) if (t < now()) views.delete(k);

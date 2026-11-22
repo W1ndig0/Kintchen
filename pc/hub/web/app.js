@@ -229,6 +229,72 @@
         }).catch(function (e) { alert(e.message); });
     };
 
+    // ---------- price check + price book (phone and desktop) ----------
+    var STORES = [["costco", "Costco"], ["superstore", "Superstore"], ["walmart", "Walmart"], ["saveon", "Save-On-Foods"]];
+    function money(v) { return "$" + Number(v).toFixed(2); }
+    function renderCheck(r) {
+        if (!r || !r.totals) { $("pc-totals").innerHTML = ""; $("pc-items").innerHTML = ""; return; }
+        $("pc-msg").textContent = "Checked " + ago(r.at) + ".";
+        $("pc-totals").innerHTML = "<div class='tot'>" + r.totals.map(function (t, i) {
+            return "<div class='card" + (i === 0 ? " best" : "") + "'><span class='msg'>" + (i === 0 ? "Cheapest" : !t.common ? "nothing to compare" : (t.more >= 0 ? money(t.more) + " more" : money(-t.more) + " less") + " for the same " + t.common + " item" + (t.common === 1 ? "" : "s")) + "</span><b>" + esc(t.name) + " " + money(t.total) + "</b>" +
+                   (t.missing.length ? "<span class='msg'>Missing: " + esc(t.missing.join(", ")) + "</span>" : "<span class='msg'>Has everything</span>") + "</div>";
+        }).join("") + "</div>";
+        var h = "<div class='wrap'><table class='pc'><tr><th>Item</th>" + STORES.map(function (s) { return "<th>" + s[1] + "</th>"; }).join("") + "</tr>";
+        r.items.forEach(function (it, ii) {
+            h += "<tr><td><b>" + esc(it.name) + "</b>" + (it.qty > 1 ? " ×" + it.qty : "") + "</td>";
+            STORES.forEach(function (s) {
+                var c = it.stores[s[0]], pk = c.pick;
+                var opts = "<option value=''>" + (pk ? "change…" : "choose…") + "</option>" + c.options.map(function (o, oi) {
+                    return "<option value='o" + oi + "'>" + esc(money(o.price) + " " + o.name.slice(0, 60) + (o.kind === "flyer" ? " (flyer)" : o.kind === "price book" ? " (your price)" : "")) + "</option>"; }).join("") +
+                    "<option value='none'>not sold here</option><option value='manual'>type a price…</option>" + (c.picked ? "<option value='reset'>forget my pick</option>" : "");
+                h += "<td>" + (pk ? "<b>" + money(pk.price) + "</b> <span class='n'>" + esc(pk.name.slice(0, 50)) + (pk.unit ? " · " + money(pk.unit.value) + "/" + pk.unit.per : "") + "</span>" : "<span class='n'>missing</span>") +
+                     "<br><select data-i='" + ii + "' data-s='" + s[0] + "'>" + opts + "</select></td>";
+            });
+            h += "</tr>";
+        });
+        $("pc-items").innerHTML = h + "</table></div><p class='msg'>Your picks are remembered for next time. Flyer prices are this week's sales.</p>";
+        LASTCHECK = r;
+    }
+    var LASTCHECK = null;
+    $("pc-items").onchange = function (e) {
+        var sel = e.target; if (sel.tagName !== "SELECT" || !sel.value) return;
+        var it = LASTCHECK.items[+sel.dataset.i], st = sel.dataset.s, v = sel.value, body = { item: it.name, store: st };
+        if (v === "none") body.none = 1; else if (v === "reset") body.reset = 1;
+        else if (v === "manual") { var pr = prompt("Price at this store for " + it.name + " ($)"); if (!pr || !(+pr > 0)) return; body.name = it.name; body.price = +pr;
+            call("POST", "/api/prices/book", { store: st, item: it.name, product: it.name, price: +pr }); }
+        else { var o = it.stores[st].options[+v.slice(1)]; body.name = o.name; body.price = o.price; }
+        call("POST", "/api/prices/pick", body).then(function () { $("pc-msg").textContent = "Saved. Checking again…"; return call("POST", "/api/prices/check", { alert: false }); }).then(renderCheck)
+            .catch(function (e2) { $("pc-msg").textContent = e2.message; });
+    };
+    $("pc-go").onclick = function () {
+        $("pc-msg").textContent = "Checking the four stores… (about a second per item)";
+        call("POST", "/api/prices/check").then(renderCheck).catch(function (e) { $("pc-msg").textContent = e.message; });
+    };
+    function renderBook() {
+        call("GET", "/api/prices/book").then(function (b) {
+            $("pb-store").innerHTML = b.stores.map(function (s) { return "<option value='" + s.id + "'>" + esc(s.name) + "</option>"; }).join("");
+            $("pb-list").innerHTML = b.book.slice().reverse().map(function (x) {
+                var old = (Date.now() - Date.parse(x.added)) / 864e5 > 60;
+                return "<li><span class='t'>" + esc(x.item) + " <span class='n'>" + esc(x.product) + " · " + esc(x.store) + " · " + esc(x.added) + (old ? " · over 2 months old" : "") + "</span></span><b>" + money(x.price) + "</b><button class='x' data-del='" + x.id + "'>✕</button></li>";
+            }).join("") || "<li class='msg'>No prices yet.</li>";
+        }).catch(function (e) { setOnline(false, e); });
+        call("GET", "/api/prices/last").then(renderCheck).catch(function () {});
+    }
+    $("pb-add").onsubmit = function (e) {
+        e.preventDefault();
+        call("POST", "/api/prices/book", { store: $("pb-store").value, item: $("pb-item").value, product: $("pb-product").value, price: $("pb-price").value })
+            .then(function () { $("pb-item").value = $("pb-product").value = $("pb-price").value = ""; renderBook(); }).catch(function (e2) { alert(e2.message); });
+    };
+    $("pb-list").onclick = function (e) { var b = e.target.closest("button[data-del]"); if (b) call("DELETE", "/api/prices/book/" + b.dataset.del).then(renderBook); };
+    $("pb-csv").onclick = function (e) {
+        e.preventDefault();
+        call("GET", "/api/prices/book.csv").then(function (t) { var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([t], { type: "text/csv" })); a.download = "price-book.csv"; a.click(); });
+    };
+    $("pb-import").onchange = function () {
+        var f = this.files[0]; if (!f) return;
+        f.text().then(function (t) { return call("POST", "/api/prices/book.csv", t); }).then(function (r) { alert(r.added + " prices added"); renderBook(); });
+    };
+
     // ---------- desktop: books ----------
     function renderBooks() {
         call("GET", "/api/books").then(function (b) {
@@ -253,7 +319,7 @@
         TAB = t;
         Array.prototype.forEach.call(document.querySelectorAll("#nav button"), function (b) { b.classList.toggle("sel", b.getAttribute("data-tab") === t); });
         Array.prototype.forEach.call(document.querySelectorAll("main section"), function (s) { s.classList.toggle("hidden", s.id !== "tab-" + t); });
-        if (t === "list") push(); if (t === "status") renderStatus(); if (t === "kindle") openKindle(); if (t === "queue") renderQueue(); if (t === "devices") renderDevices(); if (t === "books") renderBooks();
+        if (t === "list") push(); if (t === "status") renderStatus(); if (t === "kindle") openKindle(); if (t === "queue") renderQueue(); if (t === "devices") renderDevices(); if (t === "books") renderBooks(); if (t === "prices") renderBook();
     }
     $("nav").onclick = function (e) { var b = e.target.closest("button[data-tab]"); if (b) show(b.getAttribute("data-tab")); };
     window.addEventListener("resize", function () { applyLayout(); if (TAB === "kindle") fitKindle(); });
