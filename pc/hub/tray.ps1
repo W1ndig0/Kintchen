@@ -1,5 +1,5 @@
-# Kitchen Hub tray icon: shows the hub is running and opens desktop mode. Started at sign-in by install.ps1.
-# It does not run the hub itself (that's the "Kitchen Hub" scheduled task, which starts at boot, signed in or not).
+# Kitchen Hub tray icon: shows the hub is running and opens the control panel. Started with the hub at sign-in
+# (start-hidden.vbs). The hub itself runs in run-hub.cmd, which starts it again whenever it stops.
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $port = 8770
 $cfg = Join-Path $env:LOCALAPPDATA "KitchenHub\config.json"
@@ -13,7 +13,10 @@ $icon.Visible = $true
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 [void]$menu.Items.Add("Open Kitchen Hub", $null, { Start-Process $url })
 [void]$menu.Items.Add("Open data folder", $null, { Start-Process (Join-Path $env:LOCALAPPDATA "KitchenHub") })
-[void]$menu.Items.Add("Restart the hub", $null, { Stop-ScheduledTask -TaskName "Kitchen Hub" -ErrorAction SilentlyContinue; Start-ScheduledTask -TaskName "Kitchen Hub" })
+$here = $PSScriptRoot
+$hubProcs = { Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*$here*hub.js*" } }
+# restart = stop node; run-hub.cmd starts it again within a few seconds
+[void]$menu.Items.Add("Restart the hub", $null, { & $hubProcs | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } })
 [void]$menu.Items.Add("Close this icon", $null, { $icon.Visible = $false; [System.Windows.Forms.Application]::Exit() })
 $icon.ContextMenuStrip = $menu
 $icon.add_MouseDoubleClick({ Start-Process $url })

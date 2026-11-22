@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Kitchen Hub v11 - the hub on the PC. Start: node pc/hub/hub.js   (install.ps1 makes Windows start it at boot)
+/* Kitchen Hub v11 - the hub on the PC. Start: node pc/hub/hub.js   ("Install Kitchen Hub.cmd" makes it start at sign-in)
  * This file only chooses which copy of the hub to run:
  *   - a kit installed from a .zip in desktop mode (Status > Install a kit file) - so new versions can come
  *     without GitHub - when config.json names one ("kitDir") and it is there

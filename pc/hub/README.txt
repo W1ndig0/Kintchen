@@ -8,14 +8,17 @@ WHAT'S HERE
   hub.js          the hub (Node.js, no extra packages)
   lib/            store (the list, plain text), auth (pairing + signed requests), server (web + API)
   web/            the app: phone layout, and desktop mode on wide screens (or the "Desktop mode" switch)
-  install.ps1     sets it up on Windows 10 (start at boot, firewall, tray icon)
+  setup.ps1       sets it up (run by "Install Kitchen Hub.cmd" in the kit folder)
+  run-hub.cmd     keeps the hub running; start-hidden.vbs starts it without windows
   tray.ps1        the tray icon (open, data folder, restart)
 
-INSTALL (Windows 10)
-  1. Install Node.js LTS from https://nodejs.org
-  2. PowerShell as administrator, in the repo folder:
-       powershell -ExecutionPolicy Bypass -File pc\hub\install.ps1
-  3. Double-click the tray icon (or open http://127.0.0.1:8770/).
+INSTALL (Windows 10) - no administrator, no password
+  1. Unzip the kit to a folder that can stay, e.g. C:\KitchenHub (not Downloads).
+  2. Double-click "Install Kitchen Hub.cmd" in that folder. It installs Node.js if needed (winget), makes the
+     hub start by itself when you sign in to Windows, starts it, and opens the control panel.
+  3. If Windows asks "Allow Node.js on networks?": tick Private networks, click Allow.
+  The PC must sign in to Windows after a restart (automatic sign-in is fine) for the hub to start.
+  Tray icon: open, data folder, restart. "Uninstall Kitchen Hub.cmd" stops it and removes it from startup.
   To bring your current list over: save hub.tsv from your gist as %LOCALAPPDATA%\KitchenHub\import.tsv,
   put your passphrase in import.pass in the same folder, restart the hub (tray > Restart). The items are
   unlocked to plain text (the passphrase moves into config.json so items still locked on the fridge are
