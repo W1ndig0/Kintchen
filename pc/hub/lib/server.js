@@ -171,6 +171,12 @@ function createServer(opts) {
                 const sig = crypto.createHmac("sha256", Buffer.from(dev.secret, "hex")).update(t).digest("hex");
                 return send(res, 200, t, "text/plain; charset=utf-8", { "X-KH-Body": sig, "X-KH-Files": share + "/upd/" + opts.pkgToken + "/kindle" });
             }
+            if (p === "/api/kindle/alert" && m === "POST") {      // the fridge's own alerts (timer done, charge me)
+                const text = body.toString("utf8").replace(/[\r\n]+/g, " ").trim().slice(0, 200);
+                if (opts.jobs) opts.jobs.addAlert({ at: now(), title: "Kitchen Hub", body: text, tags: "fridge", prio: 4 });
+                else if (opts.pusher) opts.pusher.send({ title: "Kitchen Hub", body: text, prio: 4 }).catch(() => {});
+                return send(res, 200, { ok: 1 });
+            }
             if (p === "/api/kindle/rsearch" && m === "GET") {
                 const d = path.join(dataDir, "pkgcache"); fs.mkdirSync(d, { recursive: true });
                 const t = await (opts.rsearch || require("../../../cloud/package.js").search)(d, url.searchParams.get("q") || "");

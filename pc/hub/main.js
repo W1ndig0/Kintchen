@@ -73,6 +73,6 @@ jobs.start().then(() => {
     server.listen(PORT, "0.0.0.0", () => log("Kitchen Hub " + VERSION + " on port " + PORT + ", data in " + DATA));
     const scanBooks = () => { try { books.scan(); } catch (e) { log("books: " + e.message); } };
     scanBooks(); setInterval(scanBooks, 2 * 60000);
-    if (!process.argv.includes("--no-jobs")) { jobs.schedule(); setTimeout(() => jobs.run("start"), 20000); }
+    if (!process.argv.includes("--no-jobs")) { jobs.schedule(); setTimeout(() => { const m = new Date().getMinutes(); if (!((m >= 0 && m < 7) || (m >= 30 && m < 37))) jobs.run("start"); }, 20000); }      // not when a scheduled run is due within minutes (that would run twice)
 });
 process.on("SIGINT", () => { log("stopped"); process.exit(0); });

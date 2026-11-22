@@ -235,7 +235,7 @@ module.exports = async function runExtras(ctx) {
     out.nhlst = st.nhlst || null;
     // game reminder (opt-in on the fridge: Fun > Canucks > GAME REMINDERS)
     const funCfg = (() => { const c = items("cfg").find(x => x.id === "fun" && x.text); try { const o = c ? JSON.parse(c.text) : {}; return o && typeof o === "object" && !Array.isArray(o) ? o : {}; } catch (e) { return {}; } })();
-    if (funCfg.gamepush) for (const g of out.nhl) {
+    if (funCfg.gamepush && !/(^|,)game(,|$)/.test(process.env.DROP_ALERTS || "")) for (const g of out.nhl) {      // v11: switched off on the PC
         const left = (Date.parse(g.start) - NOW) / 60000;
         if ((g.state === "FUT" || g.state === "PRE") && left > 0 && left <= 60 && !sent("game" + g.start)) { mark("game" + g.start); await push("Canucks: " + g.away + " @ " + g.home, "Puck drop in " + Math.round(left) + " min.", "ice_hockey", 2); }
     }

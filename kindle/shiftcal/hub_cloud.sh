@@ -220,7 +220,7 @@ pc_sync() {
     echo "ok $(date +%s)" > "$STF"
     NOWS=$(date +%s)
     [ $((NOWS - $(num0 "$DIR/.status_at"))) -ge 1200 ] && do_status
-    [ "${DAILY_LOG:-1}" = "1" ] && [ $((NOWS - $(num0 "$DIR/.log_up_at"))) -ge 86400 ] && do_log
+    # (no log here: the loop sends the log after every full sync and the daily session - sending it here too made two)
     cmp -s "$LOCAL" "$T/up.$$" || say "lists synced with the PC, $N items"
     write_js
 }
@@ -237,6 +237,11 @@ pc_manifest() {
     case "$U" in "$PC_URL"/upd/*) ;; *) say "update list from the PC: odd files address - refused"; return 1 ;; esac
     head -1 "$T/b.$$" | grep -q '^version ' || return 1
     mv "$T/b.$$" "$1"; printf '%s\n' "$U" > "$2"; rm -f "$T/h.$$"
+}
+pc_alert() {      # $1 = text: the PC sends it to your phone (instead of ntfy)
+    printf '%s' "$1" | tr -d '\r\n' | cut -c1-200 > "$T/al.$$"
+    CODE=$(pc_api POST /api/kindle/alert "$T/al.$$"); rm -f "$T/al.$$" "$T/h.$$" "$T/b.$$"
+    [ "$CODE" = "200" ]
 }
 pc_rsearch() {     # $1 = what to search -> mesquite/rsearch.js (the PC does the search)
     Q=$(printf '%s' "$1" | tr -cd 'A-Za-z0-9 -' | cut -c1-40 | sed 's/ /+/g')
@@ -358,4 +363,5 @@ case "$1" in
     rsearch) pc_mode && pc_rsearch "$2" ;;
     pcmode) pc_mode ;;
     manifest) pc_mode && pc_manifest "$2" "$3" ;;
+    alert) pc_mode && pc_alert "$2" ;;
 esac

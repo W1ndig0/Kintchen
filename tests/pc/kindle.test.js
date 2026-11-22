@@ -63,6 +63,16 @@ const sh = (args, dir, extra) => new Promise(res => {
         await sh([kdir + "/hub_cloud.sh", "sync"], kdir);
         assert.ok(fs.readFileSync(kdir + "/mesquite/hub_items.js", "utf8").indexOf("timer|10") > 0);
     });
+    await t("the fridge's own alerts (timer, battery) go to the PC, not ntfy", async () => {
+        const got = []; const fake = { addAlert: a => got.push(a), alerts: () => [], running: null, last: null };
+        const s4 = createServer({ store, auth, dataDir: data, webDir: ROOT + "/pc/hub/web", kindleDir: K + "/mesquite", ownerLocal: false, pkgToken, calToken, jobs: fake });
+        await new Promise(r => s4.listen(0, "127.0.0.1", r));
+        const k4 = fs.mkdtempSync(path.join(os.tmpdir(), "khK4-")); cp.execSync("cp -r " + K + "/. " + k4 + "/");
+        fs.writeFileSync(k4 + "/cloud.conf", "PC_URL=http://127.0.0.1:" + s4.address().port + "\nPC_ID=" + key.id + "\nPC_KEY=" + key.secret + "\n");
+        const r = await sh([k4 + "/hub_cloud.sh", "alert", "Timer done: pasta"], k4);
+        s4.close();
+        assert.strictEqual(r.code, 0); assert.strictEqual(got.length, 1); assert.strictEqual(got[0].body, "Timer done: pasta");
+    });
     await t("recipe search runs on the PC", async () => {
         await sh([kdir + "/hub_cloud.sh", "rsearch", "leek soup"], kdir);
         assert.ok(/HUB_RSEARCH=\{q:"leek soup"/.test(fs.readFileSync(kdir + "/mesquite/rsearch.js", "utf8")));

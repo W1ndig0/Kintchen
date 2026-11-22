@@ -951,20 +951,20 @@ td.bothoff { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.12)
         <div class="hv-pane" id="pane-phone" style="display:none">
             <div class="hv-cols">
                 <div style="width:40%">
-                    <div class="hv-row"><div class="hv-lbl">Pair your phone</div><div id="ph-qr"></div><div class="hv-hint" id="ph-qrhint"></div></div>
-                    <div class="hv-row"><div class="hv-lbl">Calendar &amp; TV</div><div id="ph-codes"><div class="hv-hint">The calendar and TV codes appear after the cloud brain's first run.</div></div></div>
+                    <div class="hv-row"><div class="hv-lbl">Your PC</div><div id="ph-qr"></div><div class="hv-hint" id="ph-qrhint"></div></div>
+                    <div class="hv-row"><div class="hv-lbl">Calendar</div><div id="ph-codes"><div class="hv-hint">The calendar code appears after the PC's first sync with the fridge.</div></div></div>
                 </div>
                 <div>
-                    <div class="hv-row"><div class="hv-lbl">Lists in the cloud</div><div id="ph-status" style="font-size:.85em;line-height:1.5;margin-top:.3em"></div></div>
+                    <div class="hv-row"><div class="hv-lbl">Lists</div><div id="ph-status" style="font-size:.85em;line-height:1.5;margin-top:.3em"></div></div>
                     <div class="hv-row"><span class="opt-btn big" id="ph-sync">SYNC LISTS NOW</span></div>
-                    <div class="hv-row"><div class="hv-lbl">Timer alerts on your phone</div><div id="ph-ntfy"></div></div>
+                    <div class="hv-row"><div class="hv-lbl">Alerts on your phone</div><div id="ph-ntfy"></div></div>
                     <div class="hv-row"><div class="hv-lbl">Sync lists on button wake</div><div id="opt-cloudwake"></div>
-                        <div class="hv-hint">On: pressing the power button also fetches list changes from your phone (a few seconds of Wi-Fi).</div></div>
+                        <div class="hv-hint">On: pressing the power button also fetches list changes from your PC (a few seconds of Wi-Fi).</div></div>
                 </div>
             </div>
         </div>
         <div class="hv-pane" id="pane-updates" style="display:none">
-            <div class="hv-row"><div class="hv-lbl">Cloud brain &amp; updates</div><div id="ph-gh"></div></div>
+            <div class="hv-row"><div class="hv-lbl">Updates</div><div id="ph-gh"></div></div>
         </div>
         <div class="hv-pane" id="pane-people" style="display:none"></div>
         <div class="hv-pane" id="pane-pay" style="display:none"></div>
@@ -1664,7 +1664,7 @@ function exitHub() {
 khMark("main: v9.2 CHROME tiles, sysbar, settings");
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "11.0";
+var VERSION = "11.1";
 var DIAG_SENT = {};      // 10.9.3: set up here, before anything at start-up can call diagOnce (see diagOnce)
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
@@ -4160,7 +4160,7 @@ function renderShopView() {
     }
 }
 function cloudFootText() {
-    if (!window.HUB_CLOUD || !window.HUB_CLOUD.gist) return "Saved on the fridge. Pair a phone in Settings &rsaquo; Phone to take the list with you.";
+    if (!window.HUB_CLOUD || !(window.HUB_CLOUD.gist || window.HUB_CLOUD.pc)) return "Saved on the fridge. Pair the fridge with your PC to have the list on your phone too.";
     if (CLOUD_ST && CLOUD_ST.indexOf("ok") !== 0 && CLOUD_ST !== "never" && CLOUD_ST !== "not set up") return "&#9679; " + esc(CLOUD_ST);
     if (CLOUD_PEND) return "Saved here &middot; reaches your phone on the next sync.";
     return "In sync with your phone.";
@@ -4595,7 +4595,7 @@ function renderPhonePane() {
         try { qr.innerHTML = qrSvg(link); } catch (e) { qr.innerHTML = ""; }
         hint.innerHTML = "Scan with your phone's camera. It opens <b>" + esc(pg) + "</b> and pairs the phone &mdash; nothing to install." +
             (pg !== C.pages ? "<br>(cloud.conf has the repo address; the hub is using its website address instead.)" : "") +
-            "<br>Page not found on the phone? In the GitHub repo: Settings &rsaquo; Pages &rsaquo; Deploy from a branch &rsaquo; main &rsaquo; Save, then wait a minute.";
+            "";
     } else if (C && C.gist && C.token && !/paste_/.test(C.gist + C.token)) {
         qr.innerHTML = "";
         hint.innerHTML = "Almost there: add PAGES_URL= to cloud.conf (your repo address works) and the pairing code appears here.";
@@ -5243,7 +5243,7 @@ function appList() {
         ["news", "News", ARTICLES.length ? ARTICLES.length + " stories" : "headlines", function() { if (ARTICLES.length) openArticle(0); }],
         ["chart", "Markets", "choose symbols", openMarketsEditor],
         ["grid", "Edit tiles", "sizes, order, pages", enterEdit],
-        ["phone", "Phone", window.HUB_CLOUD && window.HUB_CLOUD.gist ? "paired lists" : "pair your phone", function() { openHub(); selectTab("phone"); }],
+        ["phone", "PC", window.HUB_CLOUD && window.HUB_CLOUD.pc ? "paired with your PC" : "pair with your PC", function() { openHub(); selectTab("phone"); }],
         ["cog", "Settings", "power, layout, feel", openHub]
     ];
 }
@@ -6286,9 +6286,9 @@ function icsLink() { var C = window.HUB_CLOUD || {}; return C.ics ? C.ics.replac
 function gitHubPane() {
     var box = $("ph-gh"), C = window.HUB_CLOUD || {};
     if (!box) return;
-    if (!C.gist) { box.innerHTML = "<div class='hv-hint'>Set up cloud.conf first (the lists), then the GitHub kit (see GITHUB_SETUP.txt).</div>"; return; }
+    if (!C.gist) { box.innerHTML = "<div class='hv-hint'>Pair the fridge with your PC (control panel &rsaquo; Devices).</div>"; return; }
     var h = "<div class='hv-hint'>Cloud brain: <b>" + (C.brainAt ? "ran " + ago(C.brainAt) : "not running yet") + "</b>" +
-            (C.brainAt ? "" : " &mdash; upload the GitHub kit and add the 4 secrets (GITHUB_SETUP.txt).") +
+            (C.brainAt ? "" : "") +
             " &middot; Weather/news from the cloud: <b>" + (C.cdataAt ? ago(C.cdataAt) : "not yet") + "</b></div>";
     h += "<div style='margin:.3em 0'><span class='hv-lbl' style='margin-right:.5em'>Data from the cloud (faster, saves battery)</span><span id='opt-cdata'></span></div>";
     h += "<div style='margin:.3em 0'><span class='opt-btn' id='gh-upd'>CHECK FOR UPDATE</span> <span class='opt-btn' id='gh-log'>SEND LOG</span> <span class='opt-btn' id='gh-bk'>BACK UP SETTINGS</span> <span class='opt-btn' id='gh-rs'>RESTORE SETTINGS</span></div>";
@@ -6305,7 +6305,7 @@ function gitHubPane() {
     bindTap($("gh-upd"), function() {
         var install = UPD && UPD.state === "available";
         sendPower("job=update-" + (install ? "install" : "check"));
-        $("gh-msg").innerHTML = install ? "Downloading the update&hellip; the hub restarts by itself when it's done." : "Checking your GitHub site&hellip;";
+        $("gh-msg").innerHTML = install ? "Downloading the update&hellip; the hub restarts by itself when it's done." : "Checking for an update&hellip;";
         pollUpdate(0);
     });
     bindTap($("gh-log"), function() { sendPower("job=logup"); $("gh-msg").innerHTML = "Uploading the log to your cloud gist (the phone app shows it under Fridge)."; });
@@ -6314,7 +6314,7 @@ function gitHubPane() {
 }
 function updText() {
     var u = UPD;
-    if (!u) return "Updates come from the kindle folder on your GitHub site.";
+    if (!u) return "Updates come from your PC.";
     if (u.state === "available") return "<b>Update " + esc(u.nv) + " is ready</b> (" + u.files + " files). Tap CHECK FOR UPDATE again to install it.";
     if (u.state === "current") return "Up to date (" + esc(u.cur) + ").";
     if (u.state === "installed") return "Installed " + esc(u.nv) + " &mdash; restarting&hellip;";
@@ -7387,7 +7387,7 @@ var XVR = {
             var wf = cfgJSON("wifi");
             h += "<div class='xv-bar'>" + btn("wifiSet", "", wf.ssid ? "CHANGE" : "SET UP GUEST WI-FI", "big sel") + "</div>";
             if (wf.ssid) h += "<div class='wf-card'><div class='wf-qr'>" + qrSvg("WIFI:T:" + (wf.sec || "WPA") + ";S:" + String(wf.ssid).replace(/([\\;,:"])/g, "\\$1") + ";P:" + String(wf.pass || "").replace(/([\\;,:"])/g, "\\$1") + ";;") + "</div><div class='wf-t'>Guest Wi-Fi<br><b>" + esc(wf.ssid) + "</b><br>" + esc(wf.pass || "") + "<div class='hv-hint'>Point a phone camera at the code to join.</div></div></div>";
-            else h += "<div class='sv-empty'>Show your Wi-Fi as a QR code guests can scan. The password is stored locked in your gist.</div>";
+            else h += "<div class='sv-empty'>Show your Wi-Fi as a QR code guests can scan. The password is kept with your lists on your PC.</div>";
         }
         return h;
     },
@@ -8100,7 +8100,7 @@ gitHubPane = function() {
     if (!box || !$("gh-msg")) return;
     var d = document.createElement("div");
     d.innerHTML = "<div style='margin:.4em 0'><span class='hv-lbl' style='margin-right:.5em'>Updates</span><span id='opt-autoupd'></span></div>" +
-        "<div class='hv-hint'>&ldquo;At night&rdquo; installs new versions from your GitHub site after 2 am. If a new version doesn't start properly it is undone by itself, and that version is skipped from then on.</div>" +
+        "<div class='hv-hint'>&ldquo;At night&rdquo; installs new versions from your PC after 2 am. If a new version doesn't start properly it is undone by itself, and that version is skipped from then on.</div>" +
         "<div style='margin:.3em 0'><span class='opt-btn' id='gh-rb'>GO BACK TO THE PREVIOUS VERSION</span> <span class='opt-btn' id='gh-new'>WHAT'S NEW</span></div>";
     $("gh-msg").parentNode.insertBefore(d, $("gh-msg").nextSibling);
     chipRow("opt-autoupd", [0, 1, 2], ["Only when I tap", "Tell me", "At night"], S.autoUpd === undefined ? 1 : +S.autoUpd, function(v) { S.autoUpd = v; sendPower("autoupd=" + v); });
@@ -9626,5 +9626,6 @@ khNow("main: finished");     // 10.9.2 black box
 </script>
 <script src="v109.js"></script>
 <script src="v1010.js"></script>
+<script src="v11.js"></script>
 </body>
 </html>

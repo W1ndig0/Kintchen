@@ -1,0 +1,21 @@
+KITCHEN HUB 11.1 - NO MORE GITHUB ON THE FRIDGE
+Installs by itself from your PC: Settings > Updates > CHECK FOR UPDATE.
+The fridge's screens now only talk about your PC, and a few things that happened twice now happen once.
+
+WHAT CHANGED
+ 1  SETTINGS > PC (WAS PHONE). Which PC the fridge is paired with, the last sync, the calendar code. No
+    GitHub, gist, token or pairing link anywhere. Phones and computers pair in the PC's control panel.
+ 2  SETTINGS > UPDATES. Updates come from your PC: check, install, go back, what's new, and the night
+    install. SEND LOG goes to the PC.
+ 3  SETTINGS > SECURITY. Just the authenticator and your PC. Keys, GitHub steps and the GitHub token are gone.
+ 4  BOOKS. Your PC's Kitchen Hub Books folder. The cloud and the Project Gutenberg tab are gone.
+ 5  ALERTS FROM THE FRIDGE (timer done, charge me) go to your phone through the PC instead of ntfy.
+ 6  OLD LOCKED ITEMS. The fridge turns items still locked with the old passphrase back into plain text
+    itself, so they read properly on the PC and the phone without giving the PC the passphrase.
+
+THINGS THAT HAPPENED TWICE
+ 7  The log went to the PC twice after a sync (once by the list sync, once by the loop). Now once.
+ 8  Alerts you switched off (weather warnings and winter heads-up, Canucks game reminders, fridge update
+    notices) were still being sent by the PC's jobs. They aren't any more.
+ 9  Starting the PC hub just before a scheduled run ran the jobs twice in a minute. Now it waits.
+10  The night update only ran if cloud.conf still had a GitHub address. It now runs with the PC too.

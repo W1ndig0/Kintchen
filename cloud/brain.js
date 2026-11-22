@@ -191,6 +191,7 @@ function peopleCfg() {
 
 // ---------- ntfy ----------
 let pushes = 0;
+const DROP = {}; String(process.env.DROP_ALERTS || "").split(",").forEach(k => { if (k) DROP[k.trim()] = 1; });
 async function push(title, body, tags, prio) {
     if (!TOPIC) return false;
     if (OFFLINE && !process.env.NTFY_URL) return false;
@@ -591,7 +592,8 @@ async function main() {
             }
         }
         // 10.1.1: Prince George winter - block heater and snow, the evening before
-        if (w && w.daily && HOUR >= 19 && HOUR < 22) {
+        // v11: DROP_ALERTS = alerts the owner switched off on the PC (weather = winter heads-up + EC warnings, update = fridge updater)
+        if (w && w.daily && HOUR >= 19 && HOUR < 22 && !DROP.weather) {
             const lo = w.daily.temperature_2m_min && w.daily.temperature_2m_min[1], sn = w.daily.snowfall_sum && w.daily.snowfall_sum[1];
             if (lo !== undefined && lo !== null && lo <= -15 && !sent("bh" + TODAY)) { mark("bh" + TODAY); await push("Plug in the block heater", "Low of " + Math.round(lo) + "\u00b0 overnight.", "snowflake", 3); }
             if (sn >= 5 && !sent("sn" + TODAY)) { mark("sn" + TODAY); await push("Snow tomorrow: about " + Math.round(sn) + " cm", "Leave a few minutes early, and the shovel's by the door.", "snowman", 3); }
@@ -630,6 +632,8 @@ async function main() {
             else if (kindle.left7 > 0 && kindle.left7 <= 18 && !kindle.reminded && !brain.battWarned && !quiet) { brain.battWarned = NOW; await push("Fridge hub battery " + kindle.pct + "%", "About " + kindle.left7 + " h left at the current rate.", "battery", 4); }
         }
         // 10.2: the fridge's updater: a new version is running, an update was undone, or one is waiting
+        if (kindle && kindle.upd && kindle.upd !== brain.updSeen && DROP.update) brain.updSeen = kindle.upd;
+        if (kindle && kindle.avail && DROP.update) brain.availSeen = kindle.avail;
         if (kindle && kindle.upd && kindle.upd !== brain.updSeen) {
             const f = String(kindle.upd).split(" ");
             if (brain.updSeen !== undefined) {
@@ -643,7 +647,7 @@ async function main() {
             await push("Update " + kindle.avail + " is ready for the fridge", "Install it from the phone app (Fridge tab) or Settings > Phone on the fridge.", "arrow_up", 2);
         }
         // new weather warnings
-        const ec = process.env.OFFLINE_WX ? null : await get("https://weather.gc.ca/rss/weather/53.912_-122.776_e.xml", 12000);
+        const ec = process.env.OFFLINE_WX || DROP.weather ? null : await get("https://weather.gc.ca/rss/weather/53.912_-122.776_e.xml", 12000);
         if (ec) {
             const warn = ec.split("</entry>").filter(e => /term="Warnings and Watches"/i.test(e)).map(e => (/<title>([^<]*)<\/title>/.exec(e) || [])[1]).filter(t => t && !/No watches or warnings/i.test(t));
             for (const t of warn) { const k = "wx" + TODAY + t.slice(0, 60); if (!sent(k)) { mark(k); await push(decodeEnts(t), "Environment Canada - Prince George", "cloud_with_snow", 4); } }

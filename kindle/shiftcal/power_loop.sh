@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="11.0"
+VERSION="11.1"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -509,13 +509,13 @@ start_sync() {   # 10.10: "" = full SYNC (you asked) | lists = edit burst (lists
                     { [ -s "$DIR/.books_want" ] || [ -s "$DIR/.books_have" ]; } && nice -n 10 sh "$DIR/hub_books.sh"
                 fi
                 # 10.10: the nightly update check rides along with the daily session (no Wi-Fi of its own)
-                if [ "$1" = "daily" ] && [ "$AUTO_UPDATE" != "0" ] && grep -q 'PAGES_URL="*http' "$DIR/cloud.conf" 2>/dev/null; then
+                if [ "$1" = "daily" ] && [ "$AUTO_UPDATE" != "0" ] && grep -q '^PAGES_URL="*http\|^PC_KEY=[0-9a-f]' "$DIR/cloud.conf" 2>/dev/null; then      # v11: or from the PC
                     date +%Y-%m-%d > "$DIR/.update_auto_day"
                     if [ "$AUTO_UPDATE" = "2" ] && [ ! -f "$DIR/.update/pending" ]; then
                         sh "$DIR/hub_update.sh" auto && { log "night update installed - restarting the hub"; echo "night update installed" > "$DIR/.relaunch"; }
                     else sh "$DIR/hub_update.sh" check; fi
                 fi
-                # the log (with the energy report) goes to your cloud gist with every sync and the daily session
+                # the log (with the energy report) goes to the PC (or the cloud gist) with every sync and the daily session
                 if cloud_ready && { [ "$1" = "daily" ] || [ -z "$1" ] || log_due; }; then
                     [ "$1" = "daily" ] && [ -f "$DIR/hub_sys.sh" ] && sh "$DIR/hub_sys.sh" >/dev/null 2>&1      # one system snapshot a day for the log
                     LU0=$(cat "$DIR/.log_up_at" 2>/dev/null)
@@ -932,7 +932,11 @@ notify_phone() {
             # send a FILE (e.g. cloud.conf) instead. A file (not stdin) because kcurl may try more than once.
             NF=$(mktemp 2>/dev/null) || NF="/tmp/kh_ntfy.$$"
             ( umask 077; printf '%s' "$1" > "$NF" )
-            C=$(kcurl -s --connect-timeout 8 --max-time 20 -o /dev/null -w '%{http_code}' -H "Title: Kitchen Hub" -H "Tags: alarm_clock" -H "Priority: high" --data-binary "@$NF" "https://ntfy.sh/$TOPIC" 2>/dev/null)
+            if sh "$DIR/hub_cloud.sh" pcmode; then      # v11: paired with the PC - it sends the alert to your phone (no ntfy)
+                if sh "$DIR/hub_cloud.sh" alert "$1"; then C=pc; else C=pc-failed; fi
+            else
+                C=$(kcurl -s --connect-timeout 8 --max-time 20 -o /dev/null -w '%{http_code}' -H "Title: Kitchen Hub" -H "Tags: alarm_clock" -H "Priority: high" --data-binary "@$NF" "https://ntfy.sh/$TOPIC" 2>/dev/null)
+            fi
             rm -f "$NF"
             log "phone alert sent ($C): $(printf '%s' "$1" | cut -c1-80)"
         else log "phone alert: no Wi-Fi"; fi
@@ -1001,9 +1005,11 @@ write_cloud_js() {
           COK=0; hub_cloud_allowed && COK=1
           # v11: with the PC hub nothing is locked (the PC unlocks old items with the passphrase you gave it once) and
           # pairing replaces the authenticator gate; the old passphrase stays as pass0 for anything not yet unlocked
-          if [ -n "$PC_KEY" ] && [ -n "$PC_URL" ]; then COK=1; PASSPHRASE_OLD=$PASSPHRASE; PASSPHRASE=""; LEG=0; fi
+          PCU=""
+          if [ -n "$PC_KEY" ] && [ -n "$PC_URL" ]; then COK=1; PASSPHRASE_OLD=$PASSPHRASE; PASSPHRASE=""; LEG=0; PCU=$PC_URL
+              GIST_ID=""; GH_TOKEN=""; PAGES_URL=""; fi        # v11: nothing about GitHub reaches the page once the PC is paired
           KAT=$(cat "$DIR/.keys_at" 2>/dev/null | tr -cd '0-9')
-          printf 'window.HUB_CLOUD={pages:"%s",gist:"%s",token:"%s",pass:"%s",pass0:"%s",legacy:%s,mon:"%s",cok:%s,keysAt:%s,wake:%s,ntfy:"%s",alerts:%s,cdata:%s,cdataAt:%s,ics:"%s",ics2:"%s",tv:"%s",cgist:"%s",brainAt:%s};\n' "$(Q "$PAGES_URL")" "$(Q "$GIST_ID")" "$(Q "$GH_TOKEN")" "$(Q "$PASSPHRASE")" "$(Q "$PASSPHRASE_OLD")" "$LEG" "$(Q "$MON_TOPIC")" "$COK" "${KAT:-0}" "$LISTS_ON_WAKE" "$NT" "$PHONE_ALERTS" \
+          printf 'window.HUB_CLOUD={pc:"%s",pages:"%s",gist:"%s",token:"%s",pass:"%s",pass0:"%s",legacy:%s,mon:"%s",cok:%s,keysAt:%s,wake:%s,ntfy:"%s",alerts:%s,cdata:%s,cdataAt:%s,ics:"%s",ics2:"%s",tv:"%s",cgist:"%s",brainAt:%s};\n' "$(Q "$PCU")" "$(Q "$PAGES_URL")" "$(Q "$GIST_ID")" "$(Q "$GH_TOKEN")" "$(Q "$PASSPHRASE")" "$(Q "$PASSPHRASE_OLD")" "$LEG" "$(Q "$MON_TOPIC")" "$COK" "${KAT:-0}" "$LISTS_ON_WAKE" "$NT" "$PHONE_ALERTS" \
               "$USE_CLOUD_DATA" "${CDA:-0}" "$(LK ICS_URL)" "$(LK ICS2_URL)" "$(LK TV_REF)" "$(LK CLOUD_GIST)" "${BA:-0}" > "$MESQ/cloud.js.tmp" && mv "$MESQ/cloud.js.tmp" "$MESQ/cloud.js" )
     else
         printf 'window.HUB_CLOUD={pages:"",gist:"",token:"",pass:"",pass0:"",legacy:0,mon:"",cok:0,keysAt:0,wake:%s,ntfy:"%s",alerts:%s};\n' "$LISTS_ON_WAKE" "$NT" "$PHONE_ALERTS" > "$MESQ/cloud.js"
