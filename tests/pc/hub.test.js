@@ -71,12 +71,12 @@ function signed(key, method, p, body, ts) {
         assert.strictEqual(a.list()[0].name, "Phonescript");
         assert.ok(a.pair(c3, "again", "phone").error, "single use");
     });
-    await t("import: locked gist lines become plain; wrong passphrase skips instead of storing locked", () => {
-        const { importLines } = require(ROOT + "/pc/hub/lib/import.js");
-        const src = HubData.HEADER + "\n" + HubData.makeLine(5, "a", "shop", "open", HubCrypt.lock("Milk", "pw")) + "\n" + HubData.makeLine(6, "b", "shop", "open", "Plain") + "\n";
-        const r = importLines(src, "pw");
-        assert.strictEqual(r.unlocked, 1); assert.ok(/\tMilk\n/.test(r.text) && /\tPlain\n/.test(r.text));
-        const w = importLines(src, "nope"); assert.strictEqual(w.stillLocked, 1); assert.ok(!/~/.test(w.text));
+    await t("old locked items are unlocked as they arrive, newer than the locked copy; wrong passphrase leaves them", () => {
+        const d = tmp(), st = new Store(d); st.legacyPass = "pw";
+        st.merge(HubData.makeLine(5, "a", "shop", "open", HubCrypt.lock("Milk", "pw")) + "\n" + HubData.makeLine(6, "b", "shop", "open", HubCrypt.lock("Ham", "other")));
+        const a = st.items().find(i => i.id === "a"), b = st.items().find(i => i.id === "b");
+        assert.strictEqual(a.text, "Milk"); assert.strictEqual(a.ts, 6); assert.ok(HubCrypt.isLocked(b.text));
+        assert.ok(!st.merge(HubData.makeLine(5, "a", "shop", "open", HubCrypt.lock("Milk", "pw"))), "the fridge's old locked copy doesn't win back");
     });
     await t("home-network filter", () => {
         ["127.0.0.1", "::1", "192.168.1.20", "10.0.0.5", "172.20.1.1", "100.101.102.103", "::ffff:192.168.0.9", "fd7a:115c:a1e0::1"].forEach(a => assert.ok(homeAddr(a), a));

@@ -19,13 +19,26 @@ class Store {
         this.file = path.join(dir, "hub.tsv");
         if (!fs.existsSync(this.file)) atomicWrite(this.file, HubData.HEADER + "\n");
         this.text = HubData.merge([fs.readFileSync(this.file, "utf8")], Date.now());
+        this.legacyPass = "";
         this.listeners = [];
     }
     etag() { return '"' + crypto.createHash("sha256").update(this.text).digest("hex").slice(0, 16) + '"'; }
     items() { return HubData.items(this.text); }
+    // v11 has no passphrase. Items still locked with the old one (from the fridge's own copy, or the gist import) are
+    // unlocked here with legacyPass and written back one millisecond newer, so the plain version wins everywhere.
+    unlockOld(text, now) {
+        if (!this.legacyPass || text.indexOf("\t~") < 0) return text;
+        const { HubCrypt } = HubData, add = [];
+        HubData.items(text).forEach(it => {
+            if (!HubCrypt.isLocked(it.text)) return;
+            const t = HubCrypt.unlock(it.text, this.legacyPass);
+            if (t !== null) add.push(HubData.makeLine(it.ts + 1, it.id, it.kind, it.state, t));
+        });
+        return add.length ? HubData.merge([text, add], now) : text;
+    }
     // lines: a store text or an array of item lines -> true when something changed
     merge(lines, now) {
-        const next = HubData.merge([this.text, lines], now || Date.now());
+        const next = this.unlockOld(HubData.merge([this.text, lines], now || Date.now()), now || Date.now());
         if (next === this.text) return false;
         if (fs.existsSync(this.file)) fs.copyFileSync(this.file, this.file + ".bak");
         atomicWrite(this.file, next);

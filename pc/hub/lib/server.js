@@ -17,7 +17,14 @@ const MAX_BODY = 2 * 1024 * 1024;
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
                 ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml",
                 ".webmanifest": "application/manifest+json", ".ico": "image/x-icon", ".txt": "text/plain; charset=utf-8" };
-const QUEUE_ACTIONS = /^(sync|update-check|update-install|log|reload|timer:\d{1,3}|note:.{1,280}|screen:[a-z0-9_-]{1,24}|front:(on|off)|contrast:\d{1,2})$/;
+// fridge actions -> the "cmd" item text the fridge page already understands (runCommands in the page)
+const QUEUE_ACTIONS = /^(sync|update-check|update-install|update-rollback|log|reload|timer:\d{1,3}|note:[^\t\n]{1,280}|screen:(front|tiles)|contrast:(normal|strong|max)|open:(recipes|list|calendar|board))$/;
+function cmdFor(a) {
+    if (a === "sync" || a === "log" || a === "reload") return { kind: "cmd", text: a };
+    if (/^update-/.test(a)) return { kind: "cmd", text: "update|" + a.slice(7) };
+    if (/^note:/.test(a)) return { kind: "msg", text: a.slice(5).replace(/\|/g, "/") };
+    const i = a.indexOf(":"); return { kind: "cmd", text: a.slice(0, i) + "|" + a.slice(i + 1) };
+}
 
 function homeAddr(a) {
     a = String(a || "").replace(/^::ffff:/, "");
@@ -31,12 +38,12 @@ function homeAddr(a) {
     return /^f[cd][0-9a-f]{2}:/i.test(a) || /^fe80:/i.test(a);       // IPv6 private / link-local (Tailscale uses fd7a:)
 }
 // the address other devices should use: config publicUrl (e.g. the Tailscale https name), else Tailscale IP, else home IP
-function shareUrl(publicUrl, port) {
-    if (publicUrl) return String(publicUrl).replace(/\/+$/, "");
+function shareUrl(publicUrl, port, homeOnly) {
+    if (publicUrl && !homeOnly) return String(publicUrl).replace(/\/+$/, "");
     const ips = [];
     Object.values(require("os").networkInterfaces()).forEach(l => (l || []).forEach(i => { if (i.family === "IPv4" && !i.internal) ips.push(i.address); }));
     const ts = ips.find(a => /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a)), home = ips.find(a => /^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))/.test(a));
-    const ip = ts || home || "127.0.0.1";
+    const ip = (homeOnly ? home || ts : ts || home) || "127.0.0.1";
     return "http://" + ip + ":" + port;
 }
 function readJson(f, d) { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch (e) { return d; } }
@@ -45,10 +52,7 @@ function jsStr(s) { return JSON.stringify(String(s)).replace(/[\u2028\u2029]/g, 
 function createServer(opts) {
     const { store, auth, dataDir, webDir, kindleDir, log = () => {} } = opts;
     const now = opts.now || Date.now;
-    const queueFile = path.join(dataDir, "queue.json");
-    let queue = readJson(queueFile, []);
     const views = new Map();        // view cookie -> expiry
-    const saveQueue = () => atomicWrite(queueFile, JSON.stringify(queue, null, 1));
 
     function send(res, code, body, type, extra) {
         const b = Buffer.isBuffer(body) ? body : Buffer.from(typeof body === "string" ? body : JSON.stringify(body));
@@ -84,7 +88,7 @@ function createServer(opts) {
         if (p === "/api/status" && m === "GET") {
             const kin = auth.list().filter(d => d.kind === "kindle").sort((a, b) => b.seen - a.seen)[0];
             return send(res, 200, { app: "kitchen-hub", version: VERSION, time: now(), items: store.items().length,
-                                    devices: auth.list().length, share: shareUrl(opts.publicUrl, opts.port || 8770), kindleSeen: kin ? kin.seen : 0, queue: queue.filter(q => q.state !== "done").length, you: who });
+                                    devices: auth.list().length, share: shareUrl(opts.publicUrl, opts.port || 8770), kindleSeen: kin ? kin.seen : 0, queue: store.items().filter(it => it.kind === "cmd" && it.state === "open").length, you: who });
         }
         if (p === "/api/store") {
             if (m === "GET") {
@@ -99,25 +103,73 @@ function createServer(opts) {
             }
         }
         if (p === "/api/pair/code" && m === "POST") return send(res, 200, auth.newCode());
+        if (p === "/api/pair/kindle" && m === "POST") {
+            const c = auth.newCode().code, r = auth.pair(c, "Fridge", "kindle");
+            const u = shareUrl(null, opts.port || 8770, true);
+            log("fridge pairing made by " + who);
+            return send(res, 200, { id: r.id, conf: "# v11: the hub on the PC (remove these 3 lines to go back to GitHub)\nPC_URL=" + u + "\nPC_ID=" + r.id + "\nPC_KEY=" + r.secret + "\n" });
+        }
         if (p === "/api/devices" && m === "GET") return send(res, 200, auth.list());
         let dm = /^\/api\/devices\/(d[0-9a-f]{12})(\/name)?$/.exec(p);
         if (dm && m === "DELETE" && !dm[2]) return auth.revoke(dm[1]) ? (log("device revoked " + dm[1]), send(res, 200, { ok: 1 })) : err(res, 404, "no such device");
         if (dm && m === "POST" && dm[2]) { let j = {}; try { j = JSON.parse(body); } catch (e) {} return auth.rename(dm[1], j.name) ? send(res, 200, { ok: 1 }) : err(res, 404, "no such device"); }
-        if (p === "/api/queue" && m === "GET") return send(res, 200, queue);
+        if (p === "/api/queue" && m === "GET") {
+            const HubData = require("../../../cloud/hubdata.js");
+            const q = HubData.items(store.text).filter(it => it.kind === "cmd" || (it.kind === "msg" && it.id[0] === "q"))
+                .map(it => { const f = it.text.split("|"), res = it.state === "done" ? f[f.length - 1] : "";
+                             return { id: it.id, action: it.kind === "msg" ? "note: " + it.text : (it.state === "done" ? f.slice(0, -1) : f).join(" "),
+                                      state: it.kind === "msg" ? (it.state === "done" ? "read" : "on the fridge") : it.state === "open" ? "queued" : "done" + (res && res !== "ok" ? " (" + res + ")" : ""),
+                                      at: it.ts }; })
+                .sort((a, b) => a.at - b.at).slice(-60);
+            return send(res, 200, q);
+        }
         if (p === "/api/queue" && m === "POST") {
             let j = {}; try { j = JSON.parse(body); } catch (e) {}
             const a = String(j.action || "");
             if (!QUEUE_ACTIONS.test(a)) return err(res, 400, "unknown action");
-            const q = { id: "q" + crypto.randomBytes(5).toString("hex"), action: a, state: "queued", at: now(), by: who };
-            queue.push(q); queue = queue.slice(-100); saveQueue(); log("queued " + a);
-            return send(res, 200, q);
+            const HubData = require("../../../cloud/hubdata.js"), c = cmdFor(a), id = HubData.newId("q");
+            store.merge(HubData.makeLine(now(), id, c.kind, "open", c.text), now()); log("queued " + a + " by " + who);
+            return send(res, 200, { id, action: a, state: "queued" });
         }
-        let qm = /^\/api\/queue\/(q[0-9a-f]{10})$/.exec(p);
+        let qm = /^\/api\/queue\/([A-Za-z0-9._-]{1,64})$/.exec(p);
         if (qm && m === "DELETE") {
-            const q = queue.find(x => x.id === qm[1]);
-            if (!q) return err(res, 404, "no such action");
-            if (q.state !== "queued") return err(res, 409, "already delivered");
-            queue = queue.filter(x => x !== q); saveQueue(); return send(res, 200, { ok: 1 });
+            const HubData = require("../../../cloud/hubdata.js");
+            const it = HubData.items(store.text).find(x => x.id === qm[1] && (x.kind === "cmd" || x.kind === "msg"));
+            if (!it) return err(res, 404, "no such action");
+            if (it.kind === "cmd" && it.state !== "open") return err(res, 409, "the fridge already did it");
+            store.merge(HubData.edit(store.text, it.id, it.kind, "del", it.text, now()), now());
+            return send(res, 200, { ok: 1 });
+        }
+        // ---- the fridge (a paired device of kind "kindle") ----
+        if (p.startsWith("/api/kindle/")) {
+            const dev = auth.devices[who];
+            if (!dev || dev.kind !== "kindle") return err(res, 403, "fridge only");
+            // the address the fridge itself used to reach the PC (it obviously works from there)
+            const share = /^[\w.:\[\]-]{1,100}$/.test(req.headers.host || "") ? "http://" + req.headers.host : shareUrl(opts.publicUrl, opts.port || 8770, true);
+            if (p === "/api/kindle/links" && m === "GET") {
+                let at = 0; try { at = Math.floor((JSON.parse(fs.readFileSync(path.join(dataDir, "gist", "main", "brain.json"), "utf8")).lastRun || 0) / 1000); } catch (e) {}
+                const pk = opts.pkgToken ? share + "/pkg/" + opts.pkgToken : "";
+                return send(res, 200, (pk ? "BUNDLE_URL=" + pk + "/bundle.txt\nEXTRA_URL=" + pk + "/extra.js\n" : "") +
+                                      (opts.calToken ? "ICS_URL=" + share + "/cal/" + opts.calToken + "/calendar.ics\n" : "") + (at ? "BRAIN_AT=" + at + "\n" : ""), "text/plain; charset=utf-8");
+            }
+            if (p === "/api/kindle/status" && m === "POST") {
+                let j; try { j = JSON.parse(body.toString("utf8")); } catch (e) { return err(res, 400, "not JSON"); }
+                if (!j || typeof j !== "object" || Array.isArray(j)) return err(res, 400, "not a status");
+                fs.mkdirSync(path.join(dataDir, "gist", "main"), { recursive: true });
+                atomicWrite(path.join(dataDir, "gist", "main", "kindle.json"), JSON.stringify(j));
+                return send(res, 200, { ok: 1 });
+            }
+            if (p === "/api/kindle/log" && m === "POST") {
+                const d = path.join(dataDir, "logs"); fs.mkdirSync(d, { recursive: true });
+                atomicWrite(path.join(d, "kindle-log.txt"), body.toString("utf8").slice(0, 500000));
+                log("fridge log received (" + body.length + " bytes)");
+                return send(res, 200, { ok: 1 });
+            }
+            if (p === "/api/kindle/rsearch" && m === "GET") {
+                const d = path.join(dataDir, "pkgcache"); fs.mkdirSync(d, { recursive: true });
+                const t = await (opts.rsearch || require("../../../cloud/package.js").search)(d, url.searchParams.get("q") || "");
+                return send(res, 200, t, TYPES[".js"]);
+            }
         }
         if (p === "/api/jobs" && m === "GET" && opts.jobs) {
             const j = opts.jobs;
@@ -163,7 +215,7 @@ function createServer(opts) {
                     return send(res, 200, r);
                 }
                 if (p.startsWith("/api/")) {
-                    const a = auth.check(req, body);
+                    const a = auth.check(req, body, opts.ownerLocal);
                     if (a.error) return err(res, a.code || 401, a.error);
                     return await api(req, res, url, body, a.who);
                 }
@@ -172,6 +224,16 @@ function createServer(opts) {
                 if (cm) {
                     if (!opts.calToken || cm[1] !== opts.calToken) return err(res, 404, "not found");
                     return serveFile(res, path.join(dataDir, "gist", "cloud"), cm[2], { "Content-Type": "text/calendar; charset=utf-8" });
+                }
+                // the fridge's package (fetched by sync_data.sh with plain curl, so a long random link, home network only)
+                const pm = /^\/pkg\/([0-9a-f]{32})\/(bundle\.txt|extra\.js)$/.exec(p);
+                if (pm) {
+                    if (!opts.pkgToken || pm[1] !== opts.pkgToken) return err(res, 404, "not found");
+                    const f = path.join(dataDir, "gist", "cloud", pm[2]);
+                    if (!fs.existsSync(f)) return err(res, 404, "no package yet");
+                    const b = fs.readFileSync(f), r = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range || "");
+                    if (r) { const a = +r[1], e = Math.min(+r[2], b.length - 1); return send(res, 206, b.subarray(a, e + 1), "text/plain; charset=utf-8", { "Content-Range": "bytes " + a + "-" + e + "/" + b.length }); }
+                    return send(res, 200, b, "text/plain; charset=utf-8");
                 }
                 if (p.startsWith("/kindle/")) {
                     if (!viewOk(req)) return err(res, 403, "open the virtual Kindle from desktop mode");

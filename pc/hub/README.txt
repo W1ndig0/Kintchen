@@ -1,7 +1,8 @@
 KITCHEN HUB v11 - THE HUB ON YOUR PC (work in progress)
 ===================================================================
-The PC becomes the hub's brain and storage. This first part is the hub service and the control panel
-web app. The fridge and the phone still use the GitHub cloud until a later part switches them over.
+The PC becomes the hub's brain and storage: the list, the jobs (meal plan, pantry, reminders, calendar),
+the fridge's package (weather, news, recipes...), recipe search, alerts and logs. GitHub keeps only the
+fridge's updates and the code.
 
 WHAT'S HERE
   hub.js          the hub (Node.js, no extra packages)
@@ -17,7 +18,8 @@ INSTALL (Windows 10)
   3. Double-click the tray icon (or open http://127.0.0.1:8770/).
   To bring your current list over: save hub.tsv from your gist as %LOCALAPPDATA%\KitchenHub\import.tsv,
   put your passphrase in import.pass in the same folder, restart the hub (tray > Restart). The items are
-  unlocked to plain text, import.pass is deleted, and hub.log says how many came over.
+  unlocked to plain text (the passphrase moves into config.json so items still locked on the fridge are
+  unlocked as they arrive), import.pass is deleted, and hub.log says how many came over.
 
 PAIRING A PHONE OR ANOTHER COMPUTER
   Desktop mode > Devices > Pair a device. Scan the code with the phone camera (phone on home Wi-Fi or
@@ -32,8 +34,18 @@ JOBS AND ALERTS
     2. On the PC, once:  tailscale serve --bg 8770     (gives https://<pc-name>.<tailnet>.ts.net)
     3. Put that address in %LOCALAPPDATA%\KitchenHub\config.json as  "publicUrl": "https://..."  and restart.
     4. Pair the phone from that address, Share > Add to Home Screen, open it from there, Status > Turn on alerts.
-  The fridge package (weather/news/recipes) isn't built on Windows yet (next part); the fridge keeps using
-  its own fetching meanwhile.
+  The fridge's package (weather, news, markets, what's on, recipes, horoscopes) is built on the PC too.
+
+MOVING THE FRIDGE TO THE PC (one USB step)
+  Desktop mode > Devices > Pair the fridge. It shows 3 lines (PC_URL, PC_ID, PC_KEY). Connect the Kindle by
+  USB, open extensions/shiftcal/cloud.conf in Notepad, paste the 3 lines at the end, save, eject.
+  From its next sync the fridge talks only to the PC over home Wi-Fi: list, check-in, logs, package, recipe
+  search. If the PC is off the fridge keeps its list and fetches just weather and news itself.
+  Check PC_URL is the PC's home address (192.168...), not 127.0.0.1. Needs openssl on the Kindle (to sign);
+  if it's missing the fridge's status says so.
+  GO BACK TO GITHUB: delete the 3 lines. Nothing else changes, the GitHub cloud is left running until you
+  say it can be switched off.
+  Fridge actions (sync, timer, update, note...) go in Fridge queue; logs land in the data folder\logs.
 
 SECURITY
   - Answers only the home network, Tailscale and the PC itself; everything else is dropped.

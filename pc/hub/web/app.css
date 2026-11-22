@@ -46,3 +46,4 @@ body.desktop #nav button { flex: none; text-align: left; padding: .7em 1em; bord
 body.desktop #nav button.sel { background: var(--bg); }
 body.desktop #nav .desk { display: block; }
 body.desktop main { padding: 1.5em 2em; max-width: 1400px; }
+pre { background: var(--bg); padding: .8em; border-radius: 8px; overflow: auto; font-size: .85em; user-select: all; }

@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.10.5"
+VERSION="11.0"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -534,7 +534,8 @@ start_sync() {   # 10.10: "" = full SYNC (you asked) | lists = edit burst (lists
 start_search() {   # a recipe search uses the same one-at-a-time network job as the sync
     (
         trap - EXIT INT TERM
-        if wifi_on; then sh "$DIR/sync_data.sh" search "$1"; log "recipe search done"; else log "recipe search: no Wi-Fi"; fi
+        # v11: with the PC hub the PC searches (one small request); otherwise the fridge asks the recipe sites itself
+        if wifi_on; then if sh "$DIR/hub_cloud.sh" pcmode; then sh "$DIR/hub_cloud.sh" rsearch "$1"; else sh "$DIR/sync_data.sh" search "$1"; fi; log "recipe search done"; else log "recipe search: no Wi-Fi"; fi
         wifi_off
     ) &
     SYNC_PID=$!
@@ -991,13 +992,16 @@ write_cloud_js() {
         # 10.9: pass0 = the passphrase before the last key change (still opens older items); legacy=1 when
         # cloud.conf has no PASSPHRASE and the pre-10.9 built-in one is in use (the page asks you to make new
         # keys); mon = the kitchen monitor's topic; cok = this Kindle may use the cloud (authenticator code given)
-        ( GIST_ID=""; GH_TOKEN=""; PAGES_URL=""; PASSPHRASE="@unset@"; PASSPHRASE_OLD=""; MON_TOPIC=""; . "$DIR/cloud.conf"
+        ( GIST_ID=""; GH_TOKEN=""; PAGES_URL=""; PASSPHRASE="@unset@"; PASSPHRASE_OLD=""; MON_TOPIC=""; PC_URL=""; PC_KEY=""; . "$DIR/cloud.conf"
           LEG=0; [ "$PASSPHRASE" = "@unset@" ] && { PASSPHRASE=$(hc_legacy_pass); LEG=1; }      # no PASSPHRASE line at all (PASSPHRASE= empty means no lock, as before)
           [ -z "$PASSPHRASE_OLD" ] && [ -s "$DIR/.pass_old" ] && PASSPHRASE_OLD=$(cat "$DIR/.pass_old")
           Q() { echo "$1" | sed 's/[\\"]//g'; }
           LK() { sed -n "s/^$1=\\([A-Za-z0-9:/._-]*\\)\$/\\1/p" "$DIR/.cloud_links" 2>/dev/null | head -1; }
           CDA=$(cat "$DIR/.cloud_data_at" 2>/dev/null | tr -cd '0-9'); BA=$(LK BRAIN_AT | tr -cd '0-9')
           COK=0; hub_cloud_allowed && COK=1
+          # v11: with the PC hub nothing is locked (the PC unlocks old items with the passphrase you gave it once) and
+          # pairing replaces the authenticator gate; the old passphrase stays as pass0 for anything not yet unlocked
+          if [ -n "$PC_KEY" ] && [ -n "$PC_URL" ]; then COK=1; PASSPHRASE_OLD=$PASSPHRASE; PASSPHRASE=""; LEG=0; fi
           KAT=$(cat "$DIR/.keys_at" 2>/dev/null | tr -cd '0-9')
           printf 'window.HUB_CLOUD={pages:"%s",gist:"%s",token:"%s",pass:"%s",pass0:"%s",legacy:%s,mon:"%s",cok:%s,keysAt:%s,wake:%s,ntfy:"%s",alerts:%s,cdata:%s,cdataAt:%s,ics:"%s",ics2:"%s",tv:"%s",cgist:"%s",brainAt:%s};\n' "$(Q "$PAGES_URL")" "$(Q "$GIST_ID")" "$(Q "$GH_TOKEN")" "$(Q "$PASSPHRASE")" "$(Q "$PASSPHRASE_OLD")" "$LEG" "$(Q "$MON_TOPIC")" "$COK" "${KAT:-0}" "$LISTS_ON_WAKE" "$NT" "$PHONE_ALERTS" \
               "$USE_CLOUD_DATA" "${CDA:-0}" "$(LK ICS_URL)" "$(LK ICS2_URL)" "$(LK TV_REF)" "$(LK CLOUD_GIST)" "${BA:-0}" > "$MESQ/cloud.js.tmp" && mv "$MESQ/cloud.js.tmp" "$MESQ/cloud.js" )

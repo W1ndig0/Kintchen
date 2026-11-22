@@ -173,7 +173,7 @@
     function renderQueue() {
         call("GET", "/api/queue").then(function (q) {
             $("queue").innerHTML = q.slice().reverse().map(function (x) {
-                return "<li><span class='t'>" + esc(x.action) + " <span class='n'>" + esc(x.state === "queued" ? "queued - delivered at the next wake" : x.state) + " · " + ago(x.at) + "</span></span>" +
+                return "<li><span class='t'>" + esc(x.action) + " <span class='n'>" + esc(x.state === "queued" ? "waiting - the fridge does it at its next wake" : x.state) + " · " + ago(x.at) + "</span></span>" +
                        (x.state === "queued" ? "<button class='x' data-q='" + esc(x.id) + "'>Cancel</button>" : "") + "</li>";
             }).join("") || "<li class='msg'>Nothing queued.</li>";
         }).catch(function (e) { setOnline(false, e); });
@@ -207,6 +207,12 @@
         if (b.dataset.rev && confirm("Remove this device? It will have to pair again.")) call("DELETE", "/api/devices/" + b.dataset.rev).then(renderDevices, renderDevices);
         if (b.dataset.ren) { var n = prompt("New name"); if (n) call("POST", "/api/devices/" + b.dataset.ren + "/name", { name: n }).then(renderDevices, renderDevices); }
     };
+    $("pair-kindle").onclick = function () {
+        if (!confirm("Make a new key for the fridge? (An older fridge pairing keeps working until you remove it below.)")) return;
+        call("POST", "/api/pair/kindle").then(function (r) { $("kpair-box").classList.remove("hidden"); $("kpair-conf").textContent = r.conf; renderDevices(); })
+            .catch(function (e) { alert(e.message); });
+    };
+    $("kpair-copy").onclick = function () { try { navigator.clipboard.writeText($("kpair-conf").textContent); this.textContent = "Copied"; } catch (e) {} };
     $("pair-new").onclick = function () {
         call("POST", "/api/pair/code").then(function (c) {
             var link = shareBase() + "/#pair=" + c.code;

@@ -70,9 +70,9 @@ class Auth {
         this.fails.set(addr, f);
     }
     // -> { who: "owner" | device id } or { error }
-    check(req, body) {
+    check(req, body, ownerLocal) {
         const addr = req.socket.remoteAddress;
-        if (isLocal(addr)) return { who: "owner" };
+        if (ownerLocal !== false && isLocal(addr)) return { who: "owner" };
         if (this.locked(addr)) return { error: "too many bad requests - try again later", code: 429 };
         const id = req.headers["x-kh-dev"], ts = req.headers["x-kh-ts"], sig = req.headers["x-kh-sig"];
         const d = id && this.devices[id];

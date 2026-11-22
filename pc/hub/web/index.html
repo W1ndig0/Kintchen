@@ -80,12 +80,19 @@
         <button data-a="reload">Reload page</button>
         <button data-a="timer">Timer…</button>
         <button data-a="note">Pin a note…</button>
+        <button data-a="screen:front">Standby page</button>
+        <button data-a="screen:tiles">Tiles page</button>
       </div>
       <p class="msg">The fridge sleeps most of the time: actions are delivered at its next wake.</p>
       <ul id="queue" class="items"></ul>
     </section>
     <section id="tab-devices" class="hidden">
-      <div class="row"><button id="pair-new" class="primary">Pair a device</button></div>
+      <div class="row"><button id="pair-new" class="primary">Pair a device</button><button id="pair-kindle">Pair the fridge</button></div>
+      <div id="kpair-box" class="hidden card">
+        <b>Fridge pairing</b>
+        <p class="msg">Connect the Kindle by USB, open <code>extensions/shiftcal/cloud.conf</code> in Notepad, paste these 3 lines at the end, save, eject. At its next sync the fridge uses the PC. (To go back to GitHub: delete the 3 lines.) Keep them private: they are the fridge's key.</p>
+        <pre id="kpair-conf"></pre><button id="kpair-copy">Copy</button>
+      </div>
       <div id="pair-box" class="hidden card">
         <div id="pair-qr" class="qr"></div>
         <div><div class="big" id="pair-show"></div><p class="msg" id="pair-until"></p>

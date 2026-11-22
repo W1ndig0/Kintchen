@@ -32,33 +32,36 @@ function log(m) {
 }
 
 const store = new Store(DATA);
-const imp = path.join(DATA, "import.tsv"), impPass = path.join(DATA, "import.pass");
+// the old passphrase (import.pass, once): kept in config.json as legacyPass so items still locked on the fridge are
+// unlocked when they arrive; import.tsv (the gist's hub.tsv) is merged in once
+const impPass = path.join(DATA, "import.pass"), imp = path.join(DATA, "import.tsv");
+if (fs.existsSync(impPass)) {
+    cfg.legacyPass = fs.readFileSync(impPass, "utf8").replace(/[\r\n]+$/, "");
+    fs.writeFileSync(path.join(DATA, "config.json"), JSON.stringify(cfg, null, 1)); fs.unlinkSync(impPass);
+    log("old passphrase saved: locked items will be unlocked as they arrive");
+}
+store.legacyPass = cfg.legacyPass || "";
 if (fs.existsSync(imp)) {
     const t = fs.readFileSync(imp, "utf8");
     if (!/^#hub v1/m.test(t)) log("import.tsv is not a hub list (first line should be #hub v1) - left alone");
     else {
-        // v11 stores plain text: locked lines from the gist are unlocked with the passphrase in import.pass (deleted after)
-        const pass = fs.existsSync(impPass) ? fs.readFileSync(impPass, "utf8").replace(/[\r\n]+$/, "") : "";
-        const { importLines } = require("./lib/import.js");
-        const r = importLines(t, pass);
-        if (r.stillLocked && !pass) log("import.tsv has " + r.stillLocked + " locked items: put your passphrase in import.pass next to it and restart");
-        else {
-            store.merge(r.text);
-            fs.renameSync(imp, path.join(DATA, "import.done.tsv"));
-            log("imported " + r.total + " items (" + r.unlocked + " unlocked" + (r.stillLocked ? ", " + r.stillLocked + " could not be unlocked and were skipped" : "") + ")");
-        }
-        if (fs.existsSync(impPass)) fs.unlinkSync(impPass);
+        store.merge(t);
+        fs.renameSync(imp, path.join(DATA, "import.done.tsv"));
+        const left = store.items().filter(i => i.text[0] === "~").length;
+        log("imported the gist list" + (left ? " - " + left + " items are still locked (put the passphrase in import.pass and restart)" : ""));
     }
 }
+if (store.legacyPass) store.merge([]);       // unlock anything left from before
 const auth = new Auth(DATA);
 const ROOT = path.join(__dirname, "..", "..");
 const { BrainHost } = require("./lib/brainhost.js");
+if (!cfg.pkgToken) { cfg.pkgToken = require("crypto").randomBytes(16).toString("hex"); fs.writeFileSync(path.join(DATA, "config.json"), JSON.stringify(cfg, null, 1)); }
 if (!cfg.calToken) { cfg.calToken = require("crypto").randomBytes(16).toString("hex"); fs.writeFileSync(path.join(DATA, "config.json"), JSON.stringify(cfg, null, 1)); }
 const { Pusher } = require("./lib/webpush.js");
 const pusher = new Pusher(DATA, log);
 const jobs = new BrainHost({ store, dataDir: DATA, log, env: cfg.jobsEnv || {}, onAlert: a => pusher.send(a).catch(() => {}) });
 const server = createServer({ store, auth, dataDir: DATA, webDir: path.join(__dirname, "web"),
-                              kindleDir: path.join(ROOT, "kindle", "shiftcal", "mesquite"), log, jobs, pusher, calToken: cfg.calToken, port: PORT, publicUrl: cfg.publicUrl,
+                              kindleDir: path.join(ROOT, "kindle", "shiftcal", "mesquite"), log, jobs, pusher, calToken: cfg.calToken, pkgToken: cfg.pkgToken, port: PORT, publicUrl: cfg.publicUrl,
                               shared: { "hubdata.js": path.join(ROOT, "cloud", "hubdata.js"), "qr.js": path.join(ROOT, "kindle", "shiftcal", "mesquite", "qr.js") } });
 server.on("error", e => { log("cannot start: " + e.message + (e.code === "EADDRINUSE" ? " (is the hub already running?)" : "")); process.exit(1); });
 jobs.start().then(() => {

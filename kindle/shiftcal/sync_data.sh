@@ -99,6 +99,9 @@ if [ "$1" != "search" ] && [ -z "$CLOUD_BUNDLE" ] && [ "${USE_CLOUD_DATA:-1}" = 
     rm -f "$BP"
 fi
 fetch_extras "$1"      # (only reached when the package wasn't used)
+# v11: with the PC hub, the fridge's own fetching is only the fallback for when the PC is off: weather and news.
+PC_MODE=0; grep -q '^PC_KEY=[0-9a-f]' "$DIR/cloud.conf" 2>/dev/null && PC_MODE=1
+[ "$PC_MODE" = "1" ] && echo "The PC's package wasn't there - fetching weather and news only"
 
 jesc() { sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 # 10.10.3: cut -c cuts BYTES, so a story cut in the middle of an accented or curly character left half a
@@ -280,6 +283,7 @@ MKT_OPEN=0; [ "$DOW" -le 5 ] && [ "$HOUR" -ge 6 ] && [ "$HOUR" -le 14 ] && MKT_O
 SKIP_MKT=0
 if [ "$MKT_OPEN" = "0" ] && [ -s "$DIR/.stocks_cache" ] && ! due markets_closed 360; then SKIP_MKT=1; STOCKS_JSON=$(cat "$DIR/.stocks_cache"); echo "Markets: closed (kept the last prices)"; fi
 SYMBOLS="^GSPC:S&P ^IXIC:NDX ^GSPTSE:TSX BTC-USD:BTC"
+[ "$PC_MODE" = "1" ] && { SKIP_MKT=1; [ -s "$DIR/.stocks_cache" ] && STOCKS_JSON=$(cat "$DIR/.stocks_cache"); }
 if [ -f "$STOCKS_CONF" ]; then
     LINES=$(grep -v '^[[:space:]]*#' "$STOCKS_CONF" | grep -v '^[[:space:]]*$' | tr -d '\r')
     [ -n "$LINES" ] && SYMBOLS=$(printf '%s' "$LINES" | tr '\n' ' ')
@@ -311,7 +315,7 @@ set +f
 # ---------- On This Day (Wikipedia); one event, different each day ----------
 OTD_JSON="null"
 M=$(date +%m); D=$(date +%d)
-if [ -s "$DIR/.otd_$M$D" ] && grep -q '^{"year":-*[0-9]*,"text":".*"}$' "$DIR/.otd_$M$D"; then OTD_JSON=$(cat "$DIR/.otd_$M$D"); OTD_RAW="cached"; else
+if [ "$PC_MODE" = "1" ]; then OTD_RAW="skipped"; elif [ -s "$DIR/.otd_$M$D" ] && grep -q '^{"year":-*[0-9]*,"text":".*"}$' "$DIR/.otd_$M$D"; then OTD_JSON=$(cat "$DIR/.otd_$M$D"); OTD_RAW="cached"; else
 OTD_RAW=$(kcurl -s --connect-timeout 4 --max-time 10 -A "KitchenHub/9.2" "https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/events/$M/$D" | tr '\r\n' '  ')
 case "$OTD_RAW" in
     *'"events"'*)
@@ -336,7 +340,7 @@ fi
 # ---------- 9.7: "what's on" (PG events, Canada + world headlines, weather + road alerts) ----------
 MESQ_DIR="$MESQ"
 W_PG=""; W_CA=""; W_WO=""
-if [ "$NIGHT" = "0" ] && ! over && due whatson 180; then
+if [ "$PC_MODE" = "0" ] && [ "$NIGHT" = "0" ] && ! over && due whatson 180; then
     feed_into "https://ckpgtoday.ca/tag/events/feed/" "PG EVENTS" 6;     W_PG="$FEED_OUT"
     feed_into "https://www.cbc.ca/webfeed/rss/rss-canada" "CANADA" 6;     W_CA="$FEED_OUT"
     feed_into "https://www.cbc.ca/webfeed/rss/rss-world" "WORLD" 6;       W_WO="$FEED_OUT"
@@ -347,7 +351,7 @@ fi
 ALERTS=""
 # Environment Canada: the Prince George forecast feed carries any active warning as its own entry
 set -f
-EC=$(kcurl -s --connect-timeout 5 --max-time 12 -A "KitchenHub/10.3" "https://weather.gc.ca/rss/weather/53.912_-122.776_e.xml" | tr '\r\n\t' '   ')
+EC=""; [ "$PC_MODE" = "1" ] || EC=$(kcurl -s --connect-timeout 5 --max-time 12 -A "KitchenHub/10.3" "https://weather.gc.ca/rss/weather/53.912_-122.776_e.xml" | tr '\r\n\t' '   ')
 for T in $(printf '%s' "$EC" | sed 's#</entry>#\
 #g' | grep -i 'term="Warnings and Watches"' | sed -n 's#.*<title>\([^<]*\)</title>.*#\1#p' | sed 's/ /_SP_/g'); do
     T=$(printf '%s' "$T" | sed 's/_SP_/ /g' | jesc)
@@ -355,7 +359,7 @@ for T in $(printf '%s' "$EC" | sed 's#</entry>#\
     [ -n "$ALERTS" ] && ALERTS="$ALERTS,"; ALERTS="$ALERTS{\"s\":\"WEATHER\",\"t\":\"$T\"}"
 done
 # DriveBC (Open511): active major/moderate events on the roads around Prince George
-RD=$(kcurl -s --connect-timeout 5 --max-time 12 -A "KitchenHub/10.3" "https://api.open511.gov.bc.ca/events?format=json&status=ACTIVE&bbox=-124.0,53.4,-121.6,54.4&limit=40" | tr '\r\n\t' '   ')
+RD=""; [ "$PC_MODE" = "1" ] || RD=$(kcurl -s --connect-timeout 5 --max-time 12 -A "KitchenHub/10.3" "https://api.open511.gov.bc.ca/events?format=json&status=ACTIVE&bbox=-124.0,53.4,-121.6,54.4&limit=40" | tr '\r\n\t' '   ')
 NR=0
 for EV in $(printf '%s' "$RD" | sed 's/"jurisdiction_url"/\
 @EV@/g' | grep '^@EV@' | sed 's/ /_SP_/g'); do
@@ -375,7 +379,7 @@ fi
 
 # ---------- 9.7: recipes from a few cooking sites (they arrive like articles) ----------
 RF=""
-if [ "$NIGHT" = "0" ] && ! over && due recipes 360; then
+if [ "$PC_MODE" = "0" ] && [ "$NIGHT" = "0" ] && ! over && due recipes 360; then
     for SRC in $RECIPE_SITES; do
         feed_into "${SRC%%|*}feed/" "$(echo "${SRC#*|}" | tr '_' ' ')" 4
         [ -n "$FEED_OUT" ] && { [ -n "$RF" ] && RF="$RF,"; RF="$RF$FEED_OUT"; }
@@ -391,7 +395,7 @@ else echo "Recipes: not due"; fi
 # ---------- 9.6: daily horoscopes (once a day; the hub writes its own reading when this fails) ----------
 HORO_JS="$(dirname "$DATA_JS")/horo.js"
 TODAY=$(date +%Y-%m-%d)
-if ! over && ! grep -q "date:\"$TODAY\"" "$HORO_JS" 2>/dev/null; then
+if [ "$PC_MODE" = "0" ] && ! over && ! grep -q "date:\"$TODAY\"" "$HORO_JS" 2>/dev/null; then
     HS=""; HN=0
     for S in aries taurus gemini cancer leo virgo libra scorpio sagittarius capricorn aquarius pisces; do
         R=$(kcurl -s --connect-timeout 4 --max-time 8 -A "KitchenHub/9.6" "https://ohmanda.com/api/horoscope/$S/" | tr '\r\n' '  ')

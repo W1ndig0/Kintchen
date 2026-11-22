@@ -1,5 +1,5 @@
 #!/bin/sh
-# Kitchen Hub cloud lists: exchanges hub.tsv with your private GitHub gist.
+# Kitchen Hub cloud lists: exchanges hub.tsv with your private GitHub gist - or, v11, with the hub on your PC.
 #   hub_cloud.sh sync          pull, merge, push if needed (needs Wi-Fi on). Prints nothing; see sync.log
 #   hub_cloud.sh add LINE      store one edit made on the fridge (LINE url-encoded) and refresh the page
 #   hub_cloud.sh js            rewrite mesquite/hub_items.js from hub.tsv
@@ -17,7 +17,7 @@ T=$DIR/.cloud_tmp
 JS=$DIR/mesquite/hub_items.js
 LOG=$DIR/sync.log
 TAB=$(printf '\t')
-GIST_ID=""; GH_TOKEN=""; API="https://api.github.com"
+GIST_ID=""; GH_TOKEN=""; API="https://api.github.com"; PC_URL=""; PC_ID=""; PC_KEY=""
 [ -f "$CONF" ] && . "$CONF"
 CURL=/usr/bin/curl; [ -x "$CURL" ] || CURL=curl
 KC_STRICT=1      # 10.5: your token and your books never go over an unchecked connection
@@ -169,10 +169,73 @@ take_inbox() {
     if [ -s "$T/inbox_new.$$" ]; then merge_local "$T/inbox_new.$$"; say "inbox: $(grep -c . "$T/inbox_new.$$") items from Siri/PC"; fi
     rm -f "$T/inbox_new.$$" "$T/in.$$"
 }
+
+# ---------- v11: the hub on the PC ----------
+# cloud.conf with PC_URL=http://<pc address>:8770  PC_ID=d...  PC_KEY=<64 hex>  (desktop mode > Devices > Pair the
+# fridge) = the list, check-in, logs and the package come from the PC over home Wi-Fi instead of GitHub.
+# Every request is signed (HMAC-SHA256 with this fridge's own key, a timestamp and a random part, so it can't be
+# replayed or forged on the home network). Removing the PC_ lines goes straight back to the GitHub cloud.
+pc_mode() { [ -n "$PC_URL" ] && [ -n "$PC_ID" ] && [ -n "$PC_KEY" ]; }
+OSSL=$(command -v openssl 2>/dev/null)
+pc_sig() {      # $1 method $2 path $3 body file (may be empty) -> sets PC_TS PC_SIG
+    PC_TS="$(date +%s)000.$(head -c 6 /dev/urandom | od -An -tx1 | tr -cd '0-9a-f' | cut -c1-10)"
+    if [ -n "$3" ] && [ -s "$3" ]; then BH=$("$OSSL" dgst -sha256 < "$3" | awk '{ print $NF }')
+    else BH=$(printf '' | "$OSSL" dgst -sha256 | awk '{ print $NF }'); fi
+    PC_SIG=$(printf '%s\n%s\n%s\n%s' "$PC_TS" "$1" "$2" "$BH" | "$OSSL" dgst -sha256 -mac HMAC -macopt "hexkey:$PC_KEY" | awk '{ print $NF }')
+}
+# pc_api METHOD PATH [body file] [extra curl args] -> http code; body in $T/b.$$, headers in $T/h.$$
+pc_api() {
+    M=$1; P=$2; F=$3; shift 3 2>/dev/null || shift $#
+    pc_sig "$M" "$P" "$F"
+    if [ -n "$F" ]; then
+        "$CURL" -s --connect-timeout 6 --max-time 30 -X "$M" -H "X-KH-Dev: $PC_ID" -H "X-KH-Ts: $PC_TS" -H "X-KH-Sig: $PC_SIG" \
+            -H "Content-Type: text/plain" --data-binary "@$F" -D "$T/h.$$" -o "$T/b.$$" -w '%{http_code}' "$@" "$PC_URL$P" 2>/dev/null
+    else
+        "$CURL" -s --connect-timeout 6 --max-time 30 -X "$M" -H "X-KH-Dev: $PC_ID" -H "X-KH-Ts: $PC_TS" -H "X-KH-Sig: $PC_SIG" \
+            -D "$T/h.$$" -o "$T/b.$$" -w '%{http_code}' "$@" "$PC_URL$P" 2>/dev/null
+    fi
+}
+pc_fail() {
+    case "$1" in
+        000) fail "the PC didn't answer (is it on? same Wi-Fi?)" ;;
+        401) fail "the PC refused this fridge - pair it again (desktop mode > Devices)" ;;
+        429) fail "the PC is refusing for a while (too many bad requests)" ;;
+        *) fail "the PC answered $1" ;;
+    esac
+}
+pc_sync() {
+    [ -n "$OSSL" ] || fail "the PC needs openssl on the Kindle (not found)"
+    llock; cp "$LOCAL" "$T/up.$$"; lunlock
+    CODE=$(pc_api POST /api/store "$T/up.$$")          # the PC merges and answers with the whole merged list
+    [ "$CODE" = "200" ] || pc_fail "$CODE"
+    merge "$T/r.$$" "$T/b.$$" && mv "$T/r.$$" "$REMOTE"
+    merge_local "$REMOTE"
+    CODE=$(pc_api GET /api/kindle/links "")
+    if [ "$CODE" = "200" ] && grep -q '^BUNDLE_URL=http' "$T/b.$$"; then
+        tr -d '\r' < "$T/b.$$" | grep '^[A-Z0-9_]*=[^ ]*$' | sort -u > "$T/links.$$"
+        cmp -s "$T/links.$$" "$DIR/.cloud_links" || { mv "$T/links.$$" "$DIR/.cloud_links"; say "PC links saved"; }
+        rm -f "$T/links.$$"
+    fi
+    N=$(grep -c -v '^#' "$LOCAL")
+    echo "ok $(date +%s)" > "$STF"
+    NOWS=$(date +%s)
+    [ $((NOWS - $(num0 "$DIR/.status_at"))) -ge 1200 ] && do_status
+    [ "${DAILY_LOG:-1}" = "1" ] && [ $((NOWS - $(num0 "$DIR/.log_up_at"))) -ge 86400 ] && do_log
+    cmp -s "$LOCAL" "$T/up.$$" || say "lists synced with the PC, $N items"
+    write_js
+}
+pc_rsearch() {     # $1 = what to search -> mesquite/rsearch.js (the PC does the search)
+    Q=$(printf '%s' "$1" | tr -cd 'A-Za-z0-9 -' | cut -c1-40 | sed 's/ /+/g')
+    CODE=$(pc_api GET "/api/kindle/rsearch?q=$Q" "")
+    if [ "$CODE" = "200" ] && head -c 20 "$T/b.$$" | grep -q '^window.HUB_RSEARCH'; then
+        mv "$T/b.$$" "$DIR/mesquite/rsearch.js"; say "recipe search on the PC: done"
+    else say "recipe search: the PC couldn't do it ($CODE) - kept the last results"; fi
+    rm -f "$T/h.$$" "$T/b.$$"
+}
 # JSON string from a file (stdin): backslash, quote, tab, CR, other control chars; newline -> \n
 jstr() { tr -d '\000-\010\013\014\016-\037' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e "s/$TAB/\\\\t/g" | awk '{ printf "%s\\n", $0 }'; }
 do_status() {
-    [ -n "$GIST_ID" ] && [ -n "$GH_TOKEN" ] || return 0
+    pc_mode || { [ -n "$GIST_ID" ] && [ -n "$GH_TOKEN" ]; } || return 0
     B="$DIR/mesquite/battery.js"; S="$DIR/mesquite/state.js"
     num() { sed -n "s/.*[ {,]$1: *\(-*[0-9.][0-9.]*\).*/\1/p" "$2" 2>/dev/null | head -1; }
     PCT=$(num pct "$B"); CH=$(num charging "$B"); R7=$(num rate7 "$B"); L7=$(num left7 "$B"); INT=$(num interval "$B")
@@ -196,15 +259,18 @@ do_status() {
     [ "${DS:-1}" = "1" ] && DH=${DH:-3} || DH=-1
     printf '{"ts":%s,"v":"%s","pct":%s,"charging":%s,"rate7":%s,"left7":%s,"interval":%s,"lastSync":%s,"cloudData":%s,"reminded":%s,"wake":"%s","items":%s,"news":"%s","stocks":"%s","upd":"%s","auto":%s,"avail":"%s","books":[%s],"energy":"%s","daily":%s}' \
         "$(date +%s)" "$V" "${PCT:-0}" "${CH:-0}" "${R7:-0}" "${L7:-0}" "${INT:-60}" "${LS:-0}" "${CD:-0}" "$REM" "$WR" "$(grep -c -v '^#' "$LOCAL")" "$NEWS" "$STK" "$UEV" "${AUP:-2}" "$UAV" "$BKS" "$EN" "$DH" > "$T/st.$$"
-    { printf '{"files":{"kindle.json":{"content":"'; jstr < "$T/st.$$" | sed 's/\\n$//'; printf '"}}}'; } > "$T/p.$$"
-    CODE=$(api PATCH "$API/gists/$GIST_ID" -H "Content-Type: application/json" --data-binary "@$T/p.$$")
+    if pc_mode; then CODE=$(pc_api POST /api/kindle/status "$T/st.$$")
+    else
+        { printf '{"files":{"kindle.json":{"content":"'; jstr < "$T/st.$$" | sed 's/\\n$//'; printf '"}}}'; } > "$T/p.$$"
+        CODE=$(api PATCH "$API/gists/$GIST_ID" -H "Content-Type: application/json" --data-binary "@$T/p.$$")
+    fi
     [ "$CODE" = "200" ] && { date +%s > "$DIR/.status_at"; rm -f "$ETAGF"; } || say "status upload refused ($CODE)"
     rm -f "$T/st.$$" "$T/p.$$" "$T/h.$$" "$T/b.$$"
 }
 do_log() {
-    [ -n "$GH_TOKEN" ] || return 0
+    pc_mode || [ -n "$GH_TOKEN" ] || return 0
     CG=$(sed -n 's/^CLOUD_GIST=\([A-Za-z0-9]*\)$/\1/p' "$DIR/.cloud_links" 2>/dev/null | head -1)
-    [ -n "$CG" ] || { say "log upload: no cloud gist yet (the GitHub Action makes it)"; return 0; }
+    pc_mode || [ -n "$CG" ] || { say "log upload: no cloud gist yet (the GitHub Action makes it)"; return 0; }
     {
         echo "Kitchen Hub log - $(date)"
         [ -s "$DIR/.log_want" ] && { echo "== why this was sent (10.7)"; tail -n 10 "$DIR/.log_want"; }
@@ -213,20 +279,24 @@ do_log() {
         echo "== sync.log"; tail -n 120 "$LOG" 2>/dev/null; echo "== hub.log"; tail -n 40 "$DIR/hub.log" 2>/dev/null
         [ -s "$DIR/.sysprobe.txt" ] && { echo "== system (10.9 task manager / hub mode probe)"; cat "$DIR/.sysprobe.txt"; }
     } | sed 's/github_pat_[A-Za-z0-9_]*/<token>/g; s/ghp_[A-Za-z0-9]*/<token>/g' > "$T/lg.$$"
-    { printf '{"files":{"kindle-log.txt":{"content":"'; jstr < "$T/lg.$$"; printf '"}}}'; } > "$T/p.$$"
-    CODE=$(api PATCH "$API/gists/$CG" -H "Content-Type: application/json" --data-binary "@$T/p.$$")
-    [ "$CODE" = "200" ] && { date +%s > "$DIR/.log_up_at"; say "log uploaded to the cloud gist"; } || say "log upload refused ($CODE)"
+    if pc_mode; then CODE=$(pc_api POST /api/kindle/log "$T/lg.$$")
+    else
+        { printf '{"files":{"kindle-log.txt":{"content":"'; jstr < "$T/lg.$$"; printf '"}}}'; } > "$T/p.$$"
+        CODE=$(api PATCH "$API/gists/$CG" -H "Content-Type: application/json" --data-binary "@$T/p.$$")
+    fi
+    [ "$CODE" = "200" ] && { date +%s > "$DIR/.log_up_at"; say "log uploaded"; } || say "log upload refused ($CODE)"
     rm -f "$T/lg.$$" "$T/p.$$" "$T/h.$$" "$T/b.$$"
 }
 
 do_sync() {
-    [ -n "$GIST_ID" ] && [ -n "$GH_TOKEN" ] || { echo "not set up" > "$STF"; write_js; exit 0; }
+    pc_mode || { [ -n "$GIST_ID" ] && [ -n "$GH_TOKEN" ]; } || { echo "not set up" > "$STF"; write_js; exit 0; }
     if ! mkdir "$T/slock" 2>/dev/null; then          # one sync at a time
         OP=$(cat "$T/slock/pid" 2>/dev/null); [ -n "$OP" ] && kill -0 "$OP" 2>/dev/null && exit 0
         rm -rf "$T/slock"; mkdir "$T/slock" || exit 0
     fi
     echo $$ > "$T/slock/pid"
     trap 'rm -rf "$T/slock"; rm -f "$T"/*.$$ "/tmp/khh.$$"' EXIT
+    if pc_mode; then pc_sync; return; fi
     ROUND=0; PUSHED=0; SAME=0
     while [ $ROUND -lt 4 ]; do
         ROUND=$((ROUND + 1))
@@ -260,7 +330,7 @@ cloud_gate() {
     return 1
 }
 case "$1" in
-    sync|status|log) [ -n "$GIST_ID" ] && [ -n "$GH_TOKEN" ] && { cloud_gate || exit 0; } ;;
+    sync|status|log) pc_mode || { [ -n "$GIST_ID" ] && [ -n "$GH_TOKEN" ] && { cloud_gate || exit 0; }; } ;;     # v11: pairing with the PC replaces the gate
 esac
 case "$1" in
     sync) do_sync ;;
@@ -271,4 +341,6 @@ case "$1" in
     js) write_js ;;
     status) do_status ;;
     log) do_log ;;
+    rsearch) pc_mode && pc_rsearch "$2" ;;
+    pcmode) pc_mode ;;
 esac

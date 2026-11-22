@@ -7,7 +7,20 @@
 // Run via t28.sh, or: OPENSSL_CONF=/dev/null phantomjs --local-to-remote-url-access=yes --web-security=no page/standby_layout.phantom.js <mesquite copy with state.js, data.js and art/> <rot> <plain|crowded>
 var sys = require('system'), dir = sys.args[1], rot = sys.args[2], variant = sys.args[3], errs = [], bad = 0;
 var page = require('webpage').create(); page.viewportSize = { width: 1236, height: 1648 };
-page.onInitialized = function() { page.evaluate(function(r) { try { localStorage.clear(); localStorage.setItem("pg_rot6", r); localStorage.setItem("pg_tour99", "1"); } catch (e) {} }, rot); };
+// the page's clock is pinned to 12:00 today (the day layout): run at night, the standby page shows its night view and
+// every check here would look at the wrong page
+page.onInitialized = function() { page.evaluate(function(r) {
+    try { localStorage.clear(); localStorage.setItem("pg_rot6", r); localStorage.setItem("pg_tour99", "1"); } catch (e) {}
+    var RD = Date, n = new RD(), noon = new RD(n.getFullYear(), n.getMonth(), n.getDate(), 12, 0, 0).getTime(), t0 = RD.now ? RD.now() : new RD().getTime();
+    var shift = function() { return (RD.now ? RD.now() : new RD().getTime()) - t0; };
+    window.Date = function(a, b, c, d, e, f, g) {
+        if (arguments.length === 0) return new RD(noon + shift());
+        if (arguments.length === 1) return new RD(a);
+        return new RD(a, b, c || 1, d || 0, e || 0, f || 0, g || 0);
+    };
+    window.Date.prototype = RD.prototype; window.Date.now = function() { return noon + shift(); };
+    window.Date.UTC = RD.UTC; window.Date.parse = RD.parse;
+}, rot); };
 page.onError = function(m, t) { errs.push(m + " @ " + (t[0] && (t[0].file || "").split("/").pop() + ":" + t[0].line)); };
 page.onResourceError = function() {};
 function say(ok, msg) { console.log((ok ? "PASS " : "FAIL ") + "[rot " + rot + " " + variant + "] " + msg); if (!ok) bad++; }
