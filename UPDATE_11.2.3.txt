@@ -1,0 +1,7 @@
+KITCHEN HUB 11.2.3 - A SAFER PC, A SMALLER BOOK CHECK
+Installs by itself from your PC: Settings > Updates > CHECK FOR UPDATE (the PC part needs "Install a kit file" first).
+The GitHub brain (the 30-minute schedule) was switched off at your request; the PC does that job now.
+
+FIXES
+ 1  If the hub on the PC ever crashes, the reason is now written to hub.log (it used to vanish with the hidden window), and it starts again by itself.
+ 2  A book download checks the Kindle has room for the book three times over (it holds the download, the unlocked copy and the finished file at once), not just the book plus 50 MB.

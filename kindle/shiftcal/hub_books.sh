@@ -76,7 +76,7 @@ if [ -n "$BASEU" ]; then
         set -- $M
         SIZE=$2; SHA=$3; NP=$4; ENC=$5; IV=$6      # $1 = the format (the file name already ends in it)
         case "$NP" in ''|*[!0-9]*) FAILS="$FAILS$ID:not in the cloud yet,"; continue ;; esac
-        [ -n "$FREE" ] && [ "$FREE" -lt $((SIZE / 1024 + 51200)) ] && { FAILS="$FAILS$ID:Kindle storage is full,"; say "no room for $FN"; continue; }
+        [ -n "$FREE" ] && [ "$FREE" -lt $((SIZE / 1024 * 3 + 51200)) ] && { FAILS="$FAILS$ID:Kindle storage is full,"; say "no room for $FN"; continue; }
         if [ "$ENC" = "a1" ] && [ -z "$OSSL" ]; then FAILS="$FAILS$ID:this Kindle has no openssl to unlock books,"; say "can't unlock $FN"; continue; fi
         : > "$T/b64"; OK=1; I=0; UNL=""
         while [ "$I" -lt "$NP" ]; do

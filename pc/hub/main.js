@@ -31,6 +31,10 @@ function log(m) {
     if (process.stdout.isTTY) process.stdout.write(line);
 }
 
+// 11.2.3: the hub runs hidden, so an error nobody caught used to vanish with the window. It is written to hub.log now
+// (then the hub stops and run-hub.cmd starts it again; a late promise error is only logged).
+process.on("uncaughtException", (e) => { log("CRASH: " + ((e && e.stack) || e)); process.exit(1); });
+process.on("unhandledRejection", (e) => { log("unhandled error: " + ((e && e.stack) || e)); });
 const store = new Store(DATA);
 // the old passphrase (import.pass, once): kept in config.json as legacyPass so items still locked on the fridge are
 // unlocked when they arrive; import.tsv (the gist's hub.tsv) is merged in once
