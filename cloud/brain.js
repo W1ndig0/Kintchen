@@ -290,7 +290,7 @@ function unpack(text, dir) {
 let KINDLE = null;    // kindle.json: the fridge's own news + markets choices
 async function makeBundle(prev) {
     const sync = path.join(REPO_DIR, "kindle", "shiftcal", "sync_data.sh");
-    if (!fs.existsSync(sync)) { log("bundle: kindle/shiftcal/sync_data.sh not in the repo - skipped"); return null; }
+    if (!fs.existsSync(sync) && !fs.existsSync(path.join(__dirname, "package.js"))) { log("bundle: no package builder in the repo - skipped"); return null; }
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "khb-"));
     fs.mkdirSync(path.join(dir, "mesquite/rcp"), { recursive: true });
     if (prev) unpack(prev, dir);                                       // caches, due-stamps and recipe cards carry over
@@ -301,8 +301,16 @@ async function makeBundle(prev) {
     }
     if (KINDLE && typeof KINDLE.stocks === "string" && /^[A-Za-z0-9^=.:&+ -]{1,400}$/.test(KINDLE.stocks.trim())) fs.writeFileSync(path.join(dir, "stocks.conf"), KINDLE.stocks.trim().split(/\s+/).join("\n") + "\n");
     try { fs.unlinkSync(path.join(dir, ".img_urls")); } catch (e) {}
-    try { cp.execFileSync("sh", [sync], { env: { ...process.env, HUB_DIR: dir, CLOUD_BUNDLE: "1" }, timeout: 240000, stdio: "ignore" }); }
-    catch (e) { log("bundle: sync_data.sh ended early (" + (e.status || e.signal) + ")"); }
+    // v11: on the PC (Windows has no sh) the same package is built in Node (cloud/package.js); PACKAGE_NODE=1 forces it
+    let useSh = process.env.PACKAGE_NODE !== "1";
+    if (useSh) { try { cp.execFileSync("sh", ["-c", "true"], { stdio: "ignore", timeout: 5000 }); } catch (e) { useSh = false; } }
+    if (!useSh) {
+        try { await require("./package.js").build(dir, OFFLINE ? { get: async () => null, log } : { log }); }
+        catch (e) { log("bundle: the Node package builder failed (" + String(e.message).slice(0, 80) + ")"); }
+    } else {
+        try { cp.execFileSync("sh", [sync], { env: { ...process.env, HUB_DIR: dir, CLOUD_BUNDLE: "1" }, timeout: 240000, stdio: "ignore" }); }
+        catch (e) { log("bundle: sync_data.sh ended early (" + (e.status || e.signal) + ")"); }
+    }
     const rcp = fs.readdirSync(path.join(dir, "mesquite/rcp")).filter(f => /\.js$/.test(f)).map(f => "mesquite/rcp/" + f);
     const state = fs.readdirSync(dir).filter(f => /^\.(due_|stocks_cache|whatson_cache|otd_)/.test(f));
     // 10.9.3: a file that isn't valid JavaScript is left out of the bundle (the Kindle keeps its last good copy).
@@ -398,8 +406,9 @@ async function main() {
         else edit(r.id, "req", "done", r.text + "|fail|unknown request");
     }
 
-    // 3b. 10.3: the book cloud (Gutenberg requests, EPUB conversion, tidying)
-    try {
+    // 3b. 10.3: the book cloud (Gutenberg requests, EPUB conversion, tidying). v11: on the PC the book folder does
+    // this instead (pc/hub/lib/books.js), so NO_BOOK_CLOUD=1 skips it
+    if (process.env.NO_BOOK_CLOUD !== "1") try {
         const bb = process.env.BOOKS_BASE, bget = bb ? (u, ms, o) => get(bb + "/ext/" + encodeURIComponent(u), ms, o) : get, bbin = bb ? (u, ms) => fetchBin(bb + "/ext/" + encodeURIComponent(u), ms) : fetchBin;   // tests
         await require("./books.js")({ gh, items, allItems, edit, newId, log, brain, NOW, TODAY, HubCal, fileText, get: bget, fetchBin: bbin, txt, decodeEnts });
     } catch (e) { log("books failed: " + String(e.message || e).slice(0, 80)); }

@@ -1,0 +1,346 @@
+/* Kitchen Hub v11 web app: phone layout + desktop mode (the PC control panel). Served by the hub on the PC. */
+"use strict";
+(function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var LS = (function () { try { localStorage.setItem("kh_t", "1"); return localStorage; } catch (e) { var m = {}; return { getItem: function (k) { return k in m ? m[k] : null; }, setItem: function (k, v) { m[k] = String(v); }, removeItem: function (k) { delete m[k]; } }; } })();
+    var KEY = null; try { KEY = JSON.parse(LS.getItem("kh_key") || "null"); } catch (e) {}
+    var STORE = LS.getItem("kh_store") || HubData.HEADER + "\n";
+    var PENDING = []; try { PENDING = JSON.parse(LS.getItem("kh_pending") || "[]"); } catch (e) {}
+    var ONLINE = false, TAB = "list", SHARE = "";
+    function shareBase() { return SHARE && /^(127\.|localhost)/.test(location.hostname) ? SHARE : location.origin; }
+
+    // ---------- signing (pure JS: crypto.subtle only exists on HTTPS, and the home address is plain HTTP) ----------
+    var sha = HubCrypt.sha256, utf8 = HubCrypt.utf8;
+    function hex(b) { var s = ""; for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? "0" : "") + b[i].toString(16); return s; }
+    function unhex(h) { var o = []; for (var i = 0; i < h.length; i += 2) o.push(parseInt(h.substr(i, 2), 16)); return o; }
+    function hmac(keyBytes, msgBytes) {
+        var k = keyBytes.length > 64 ? sha(keyBytes) : keyBytes.slice(0), ip = [], op = [];
+        while (k.length < 64) k.push(0);
+        for (var i = 0; i < 64; i++) { ip.push(k[i] ^ 0x36); op.push(k[i] ^ 0x5c); }
+        return sha(op.concat(sha(ip.concat(msgBytes))));
+    }
+    function call(method, path, body) {
+        var h = {};
+        body = body == null ? "" : (typeof body === "string" ? body : JSON.stringify(body));
+        if (KEY) {
+            var ts = Date.now() + "." + Math.random().toString(36).slice(2, 10);
+            h["X-KH-Dev"] = KEY.id; h["X-KH-Ts"] = ts;
+            h["X-KH-Sig"] = hex(hmac(unhex(KEY.secret), utf8(ts + "\n" + method + "\n" + path + "\n" + hex(sha(utf8(body))))));
+        }
+        return fetch(path, { method: method, headers: h, body: method === "GET" ? undefined : body, credentials: "same-origin" }).then(function (r) {
+            return r.text().then(function (t) {
+                var j = null; try { j = JSON.parse(t); } catch (e) {}
+                if (!r.ok) { var e = new Error((j && j.error) || ("HTTP " + r.status)); e.status = r.status; throw e; }
+                return j !== null ? j : t;
+            });
+        });
+    }
+
+    // ---------- pairing ----------
+    function showPairing(msg) {
+        $("app").classList.add("hidden"); $("pairing").classList.remove("hidden");
+        var m = /#pair=([A-Za-z0-9]+)/.exec(location.hash); if (m) $("pair-code").value = m[1];
+        if (msg) $("pair-msg").textContent = msg;
+    }
+    $("pair-go").onclick = function () {
+        var kind = window.innerWidth >= 900 ? "computer" : "phone";
+        call("POST", "/api/pair", { code: $("pair-code").value, name: $("pair-name").value || (kind === "phone" ? "Phone" : "Computer"), kind: kind })
+            .then(function (r) { KEY = r; LS.setItem("kh_key", JSON.stringify(r)); history.replaceState(null, "", location.pathname); start(); })
+            .catch(function (e) { $("pair-msg").textContent = e.message; });
+    };
+
+    // ---------- list ----------
+    function saveLocal() { LS.setItem("kh_store", STORE); LS.setItem("kh_pending", JSON.stringify(PENDING)); }
+    function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return "&#" + c.charCodeAt(0) + ";"; }); }
+    function change(id, state, text) {
+        var cur = STORE.split("\n"), ts = Date.now();
+        for (var i = 0; i < cur.length; i++) { var it = HubData.parseLine(cur[i]); if (it && it.id === id && it.ts >= ts) ts = it.ts + 1; }
+        var line = HubData.makeLine(ts, id, "shop", state, text);
+        PENDING.push(line); STORE = HubData.merge([STORE, line], Date.now()); saveLocal(); renderList(); push();
+    }
+    function push() {
+        if (!PENDING.length) return pull();
+        var send = PENDING.slice();
+        return call("POST", "/api/store", send.join("\n") + "\n").then(function (t) {
+            PENDING = PENDING.slice(send.length); STORE = HubData.merge([t, PENDING], Date.now()); saveLocal(); setOnline(true); renderList();
+        }).catch(function (e) { setOnline(false, e); renderList(); });
+    }
+    function pull() {
+        return call("GET", "/api/store").then(function (t) { STORE = HubData.merge([t, PENDING], Date.now()); saveLocal(); setOnline(true); renderList(); })
+            .catch(function (e) { setOnline(false, e); });
+    }
+    function renderList() {
+        var open = "", done = "", its = HubData.items(STORE, "shop");
+        its.forEach(function (it) {
+            var s = HubCal.parseShop(it.text);
+            var li = "<li data-id='" + esc(it.id) + "' data-text='" + esc(it.text) + "'><button class='tick' data-act='tick' aria-label='tick'></button><span class='t'>" + esc(s.name) +
+                     (s.qty > 1 ? " <span class='n'>×" + s.qty + "</span>" : "") + (s.note ? " <span class='n'>" + esc(s.note) + "</span>" : "") +
+                     "</span><button class='x' data-act='del' aria-label='delete'>✕</button></li>";
+            if (it.state === "done") done = li + done; else open += li;
+        });
+        $("shop").innerHTML = open || "<li class='msg'>The list is empty.</li>";
+        $("shop-done").innerHTML = done;
+        $("pending").textContent = PENDING.length ? PENDING.length + " change(s) waiting to send - they go as soon as the PC is reachable (home Wi-Fi or Tailscale)." : "";
+    }
+    function listClick(e) {
+        var b = e.target.closest("button[data-act]"); if (!b) return;
+        var li = b.closest("li"), id = li.getAttribute("data-id"), text = li.getAttribute("data-text"), done = li.parentNode.id === "shop-done";
+        if (b.getAttribute("data-act") === "del") change(id, "del", text); else change(id, done ? "open" : "done", text);
+    }
+    $("shop").onclick = listClick; $("shop-done").onclick = listClick;
+    $("add").onsubmit = function (e) {
+        e.preventDefault();
+        var n = $("add-name").value.trim(); if (!n) return;
+        var q = parseInt($("add-qty").value, 10) || 1;
+        change(HubData.newId("w"), "open", HubCal.shopText(n, "", q, ""));
+        $("add-name").value = ""; $("add-qty").value = 1; $("add-name").focus();
+    };
+
+    // ---------- status ----------
+    function setOnline(on, e) {
+        ONLINE = on;
+        $("conn").textContent = on ? "Connected to the PC" : "Can't reach the PC" + (e && e.status ? " (" + e.message + ")" : " - showing the last copy");
+        if (e && e.status === 401 && KEY) { KEY = null; LS.removeItem("kh_key"); showPairing("This device was unpaired. Pair it again."); }
+    }
+    function ago(t) { if (!t) return "never"; var m = Math.round((Date.now() - t) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " days ago"; }
+    function renderStatus() {
+        call("GET", "/api/status").then(function (s) {
+            setOnline(true); SHARE = s.share || "";
+            var c = function (k, v) { return "<div class='card'><span class='msg'>" + k + "</span><b>" + esc(v) + "</b></div>"; };
+            $("status").innerHTML = c("Hub version", s.version) + c("Items in the store", s.items) + c("Fridge last seen", ago(s.kindleSeen)) +
+                                    c("Waiting for the fridge", s.queue) + c("Paired devices", s.devices) + c("PC clock", new Date(s.time).toLocaleString());
+        }).catch(function (e) { setOnline(false, e); $("status").innerHTML = "<p class='msg'>Can't reach the PC.</p>"; });
+        renderPush();
+        call("GET", "/api/kit").then(function (k) {
+            var f = k.fridge;
+            $("kit-msg").textContent = "This PC offers " + (k.offered || "?") + ". The fridge runs " + (f && f.v ? f.v + " (checked in " + ago(f.ts * 1000) + ")" : "an unknown version (it hasn't checked in with the PC yet)") + ".";
+            $("kit-pull").classList.toggle("hidden", !k.git || !/^(127\.|localhost)/.test(location.hostname));
+            $("kit-zip-row").classList.toggle("hidden", !/^(127\.|localhost)/.test(location.hostname));
+            if (k.kit) $("kit-msg").textContent += " Running the kit installed from a file (" + k.kit + ").";
+        }).catch(function () {});
+        call("GET", "/api/jobs").then(function (j) {
+            var l = j.last;
+            $("jobs-last").textContent = j.running ? "Running now…" : !l ? "Not run yet." :
+                "Last run " + ago(l.at) + " (" + l.why + "): " + (l.code === 0 ? "ok" : "FAILED") + ", " + l.secs + " s" + (l.bundle ? "" : " - fridge package not built on this PC yet");
+            $("alerts").innerHTML = j.alerts.map(function (a) { return "<li><span class='t'><b>" + esc(a.title) + "</b><br>" + esc(a.body) + "</span><span class='n'>" + ago(a.at) + "</span></li>"; }).join("") || "<li class='msg'>No alerts yet.</li>";
+            if (j.calendar) {
+                var link = shareBase() + j.calendar;
+                $("cal-box").classList.remove("hidden"); $("cal-link").textContent = link;
+                try { $("cal-qr").innerHTML = qrSvg(link.replace(/^http/, "webcal")); } catch (e) {}
+            }
+        }).catch(function () {});
+    }
+    // ---------- alerts (web push) ----------
+    function renderPush() {
+        var can = "serviceWorker" in navigator && "PushManager" in window && window.isSecureContext;
+        if (!can) {
+            $("push-on").classList.add("hidden");
+            $("push-msg").textContent = "Alerts need the app opened from its Tailscale address and added to the Home Screen (iPhone: Share > Add to Home Screen), then opened from there.";
+            return;
+        }
+        call("GET", "/api/push/key").then(function (k) {
+            $("push-on").classList.toggle("hidden", k.subscribed); $("push-set").classList.toggle("hidden", !k.subscribed);
+            $("push-msg").textContent = k.subscribed ? "" : "Get reminders, the morning briefing and fridge warnings on this device.";
+            if (k.settings) { $("push-enabled").checked = k.settings.on; $("push-qf").value = k.settings.quietFrom; $("push-qt").value = k.settings.quietTo; }
+        }).catch(function () {});
+    }
+    function keyBytes(s) { var b = atob(s.replace(/-/g, "+").replace(/_/g, "/")), o = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) o[i] = b.charCodeAt(i); return o; }
+    $("push-on").onclick = function () {
+        Notification.requestPermission().then(function (perm) {
+            if (perm !== "granted") throw new Error("Notifications are blocked for this app (iPhone Settings > Notifications).");
+            return Promise.all([navigator.serviceWorker.ready, call("GET", "/api/push/key")]);
+        }).then(function (a) {
+            return a[0].pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(a[1].key) });
+        }).then(function (sub) { return call("POST", "/api/push/subscribe", sub.toJSON()); })
+          .then(renderPush).catch(function (e) { $("push-msg").textContent = e.message; });
+    };
+    $("push-save").onclick = function () { call("POST", "/api/push/settings", { on: $("push-enabled").checked, quietFrom: $("push-qf").value, quietTo: $("push-qt").value }).then(renderPush); };
+    $("push-test").onclick = function () { call("POST", "/api/push/test").then(function (r) { $("push-msg").textContent = r.sent ? "Sent." : "Nothing was sent (alerts off or quiet hours)."; }); };
+    $("push-off").onclick = function () {
+        navigator.serviceWorker.ready.then(function (r) { return r.pushManager.getSubscription(); }).then(function (s) { if (s) s.unsubscribe(); })
+            .finally(function () { call("POST", "/api/push/unsubscribe").then(renderPush); });
+    };
+    if ("serviceWorker" in navigator) { try { navigator.serviceWorker.register("sw.js"); } catch (e) {} }
+
+    $("kit-pull").onclick = function () { $("kit-msg").textContent = "Getting the newest kit…"; call("POST", "/api/kit/pull").then(function (r) { alert(r.out || "Done"); renderStatus(); }).catch(function (e) { alert(e.message); }); };
+    $("kit-zip").onchange = function () {
+        var f = this.files[0]; if (!f) return;
+        $("kit-msg").textContent = "Checking and installing " + f.name + "…";
+        f.arrayBuffer().then(function (b) { return fetch("/api/kit/install", { method: "POST", body: b }).then(function (r) { return r.json(); }); })
+            .then(function (r) { $("kit-msg").textContent = r.error ? "Refused: " + r.error : "Kit " + r.version + " installed. The hub restarts in a few seconds (if it doesn't come back within a minute, use the tray icon > Restart)."; });
+    };
+    $("kit-install").onclick = function () { call("POST", "/api/queue", { action: "update-install" }).then(function () { $("kit-msg").textContent = "Queued: the fridge installs it at its next wake."; }); };
+    $("jobs-run").onclick = function () { call("POST", "/api/jobs/run").then(function () { $("jobs-last").textContent = "Running now…"; setTimeout(renderStatus, 8000); }); };
+
+    // ---------- desktop: virtual Kindle ----------
+    var ROT = 0;
+    function fitKindle() {
+        var f = $("vk"), w = ROT % 180 ? 1648 : 1236, h = ROT % 180 ? 1236 : 1648;
+        var avail = $("vk-wrap").clientWidth - 32, sc = Math.min(1, avail / w);
+        f.style.width = w + "px"; f.style.height = h + "px"; f.style.transform = "scale(" + sc + ")";
+        $("vk-wrap").style.height = (h * sc + 32) + "px"; $("vk-wrap").style.width = (w * sc + 32) + "px";
+    }
+    function openKindle() { call("POST", "/api/view").then(function () { $("vk").src = "/kindle/index.html?v=" + Date.now(); fitKindle(); }).catch(function (e) { setOnline(false, e); }); }
+    $("vk-rot").onclick = function () { ROT = (ROT + 90) % 360; fitKindle(); };
+    $("vk-reload").onclick = openKindle;
+
+    // ---------- desktop: queue ----------
+    function renderQueue() {
+        call("GET", "/api/queue").then(function (q) {
+            $("queue").innerHTML = q.slice().reverse().map(function (x) {
+                return "<li><span class='t'>" + esc(x.action) + " <span class='n'>" + esc(x.state === "queued" ? "waiting - the fridge does it at its next wake" : x.state) + " · " + ago(x.at) + "</span></span>" +
+                       (x.state === "queued" ? "<button class='x' data-q='" + esc(x.id) + "'>Cancel</button>" : "") + "</li>";
+            }).join("") || "<li class='msg'>Nothing queued.</li>";
+        }).catch(function (e) { setOnline(false, e); });
+    }
+    $("q-buttons").onclick = function (e) {
+        var b = e.target.closest("button[data-a]"); if (!b) return;
+        var a = b.getAttribute("data-a");
+        if (a === "timer") { var m = prompt("Timer minutes (1-240)"); if (!m || !/^\d{1,3}$/.test(m)) return; a = "timer:" + m; }
+        if (a === "note") { var n = prompt("Note for the fridge"); if (!n) return; a = "note:" + n.slice(0, 280); }
+        call("POST", "/api/queue", { action: a }).then(renderQueue).catch(function (e2) { alert(e2.message); });
+    };
+    $("queue").onclick = function (e) { var b = e.target.closest("button[data-q]"); if (b) call("DELETE", "/api/queue/" + b.getAttribute("data-q")).then(renderQueue, renderQueue); };
+
+    // ---------- desktop: devices ----------
+    function qrSvg(text) {
+        var q = qrcode(0, "M"); q.addData(unescape(encodeURIComponent(text))); q.make();
+        var n = q.getModuleCount(), p = "";
+        for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (q.isDark(r, c)) p += "M" + c + " " + r + "h1v1h-1z";
+        return "<svg viewBox='-2 -2 " + (n + 4) + " " + (n + 4) + "' width='100%' height='100%' shape-rendering='crispEdges'><rect x='-2' y='-2' width='" + (n + 4) + "' height='" + (n + 4) + "' fill='#fff'/><path d='" + p + "' fill='#000'/></svg>";
+    }
+    function renderDevices() {
+        call("GET", "/api/devices").then(function (ds) {
+            $("devices").innerHTML = ds.map(function (d) {
+                return "<li><span class='t'>" + esc(d.name) + " <span class='n'>" + esc(d.kind) + " · last seen " + ago(d.seen) + (d.addr ? " · " + esc(d.addr) : "") + (KEY && KEY.id === d.id ? " · this device" : "") +
+                       "</span></span><button class='x' data-ren='" + d.id + "'>Rename</button><button class='x' data-rev='" + d.id + "'>Remove</button></li>";
+            }).join("") || "<li class='msg'>No devices paired yet.</li>";
+        }).catch(function (e) { setOnline(false, e); });
+    }
+    $("devices").onclick = function (e) {
+        var b = e.target.closest("button"); if (!b) return;
+        if (b.dataset.rev && confirm("Remove this device? It will have to pair again.")) call("DELETE", "/api/devices/" + b.dataset.rev).then(renderDevices, renderDevices);
+        if (b.dataset.ren) { var n = prompt("New name"); if (n) call("POST", "/api/devices/" + b.dataset.ren + "/name", { name: n }).then(renderDevices, renderDevices); }
+    };
+    $("pair-kindle").onclick = function () {
+        if (!confirm("Make a new key for the fridge? (An older fridge pairing keeps working until you remove it below.)")) return;
+        call("POST", "/api/pair/kindle").then(function (r) { $("kpair-box").classList.remove("hidden"); $("kpair-conf").textContent = r.conf; renderDevices(); })
+            .catch(function (e) { alert(e.message); });
+    };
+    $("kpair-copy").onclick = function () { try { navigator.clipboard.writeText($("kpair-conf").textContent); this.textContent = "Copied"; } catch (e) {} };
+    $("pair-new").onclick = function () {
+        call("POST", "/api/pair/code").then(function (c) {
+            var link = shareBase() + "/#pair=" + c.code;
+            $("pair-box").classList.remove("hidden"); $("pair-show").textContent = c.code;
+            $("pair-until").textContent = "Works until " + new Date(c.until).toLocaleTimeString() + ".";
+            try { $("pair-qr").innerHTML = qrSvg(link); } catch (e) { $("pair-qr").innerHTML = ""; }
+        }).catch(function (e) { alert(e.message); });
+    };
+
+    // ---------- price check + price book (phone and desktop) ----------
+    var STORES = [["costco", "Costco"], ["superstore", "Superstore"], ["walmart", "Walmart"], ["saveon", "Save-On-Foods"]];
+    function money(v) { return "$" + Number(v).toFixed(2); }
+    function renderCheck(r) {
+        if (!r || !r.totals) { $("pc-totals").innerHTML = ""; $("pc-items").innerHTML = ""; return; }
+        $("pc-msg").textContent = "Checked " + ago(r.at) + ".";
+        $("pc-totals").innerHTML = "<div class='tot'>" + r.totals.map(function (t, i) {
+            return "<div class='card" + (i === 0 ? " best" : "") + "'><span class='msg'>" + (i === 0 ? "Cheapest" : !t.common ? "nothing to compare" : (t.more >= 0 ? money(t.more) + " more" : money(-t.more) + " less") + " for the same " + t.common + " item" + (t.common === 1 ? "" : "s")) + "</span><b>" + esc(t.name) + " " + money(t.total) + "</b>" +
+                   (t.missing.length ? "<span class='msg'>Missing: " + esc(t.missing.join(", ")) + "</span>" : "<span class='msg'>Has everything</span>") + "</div>";
+        }).join("") + "</div>";
+        var h = "<div class='wrap'><table class='pc'><tr><th>Item</th>" + STORES.map(function (s) { return "<th>" + s[1] + "</th>"; }).join("") + "</tr>";
+        r.items.forEach(function (it, ii) {
+            h += "<tr><td><b>" + esc(it.name) + "</b>" + (it.qty > 1 ? " ×" + it.qty : "") + "</td>";
+            STORES.forEach(function (s) {
+                var c = it.stores[s[0]], pk = c.pick;
+                var opts = "<option value=''>" + (pk ? "change…" : "choose…") + "</option>" + c.options.map(function (o, oi) {
+                    return "<option value='o" + oi + "'>" + esc(money(o.price) + " " + o.name.slice(0, 60) + (o.kind === "flyer" ? " (flyer)" : o.kind === "price book" ? " (your price)" : "")) + "</option>"; }).join("") +
+                    "<option value='none'>not sold here</option><option value='manual'>type a price…</option>" + (c.picked ? "<option value='reset'>forget my pick</option>" : "");
+                h += "<td>" + (pk ? "<b>" + money(pk.price) + "</b> <span class='n'>" + esc(pk.name.slice(0, 50)) + (pk.unit ? " · " + money(pk.unit.value) + "/" + pk.unit.per : "") + "</span>" : "<span class='n'>missing</span>") +
+                     "<br><select data-i='" + ii + "' data-s='" + s[0] + "'>" + opts + "</select></td>";
+            });
+            h += "</tr>";
+        });
+        $("pc-items").innerHTML = h + "</table></div><p class='msg'>Your picks are remembered for next time. Flyer prices are this week's sales.</p>";
+        LASTCHECK = r;
+    }
+    var LASTCHECK = null;
+    $("pc-items").onchange = function (e) {
+        var sel = e.target; if (sel.tagName !== "SELECT" || !sel.value) return;
+        var it = LASTCHECK.items[+sel.dataset.i], st = sel.dataset.s, v = sel.value, body = { item: it.name, store: st };
+        if (v === "none") body.none = 1; else if (v === "reset") body.reset = 1;
+        else if (v === "manual") { var pr = prompt("Price at this store for " + it.name + " ($)"); if (!pr || !(+pr > 0)) return; body.name = it.name; body.price = +pr;
+            call("POST", "/api/prices/book", { store: st, item: it.name, product: it.name, price: +pr }); }
+        else { var o = it.stores[st].options[+v.slice(1)]; body.name = o.name; body.price = o.price; }
+        call("POST", "/api/prices/pick", body).then(function () { $("pc-msg").textContent = "Saved. Checking again…"; return call("POST", "/api/prices/check", { alert: false }); }).then(renderCheck)
+            .catch(function (e2) { $("pc-msg").textContent = e2.message; });
+    };
+    $("pc-go").onclick = function () {
+        $("pc-msg").textContent = "Checking the four stores… (about a second per item)";
+        call("POST", "/api/prices/check").then(renderCheck).catch(function (e) { $("pc-msg").textContent = e.message; });
+    };
+    function renderBook() {
+        call("GET", "/api/prices/book").then(function (b) {
+            $("pb-store").innerHTML = b.stores.map(function (s) { return "<option value='" + s.id + "'>" + esc(s.name) + "</option>"; }).join("");
+            $("pb-list").innerHTML = b.book.slice().reverse().map(function (x) {
+                var old = (Date.now() - Date.parse(x.added)) / 864e5 > 60;
+                return "<li><span class='t'>" + esc(x.item) + " <span class='n'>" + esc(x.product) + " · " + esc(x.store) + " · " + esc(x.added) + (old ? " · over 2 months old" : "") + "</span></span><b>" + money(x.price) + "</b><button class='x' data-del='" + x.id + "'>✕</button></li>";
+            }).join("") || "<li class='msg'>No prices yet.</li>";
+        }).catch(function (e) { setOnline(false, e); });
+        call("GET", "/api/prices/last").then(renderCheck).catch(function () {});
+    }
+    $("pb-add").onsubmit = function (e) {
+        e.preventDefault();
+        call("POST", "/api/prices/book", { store: $("pb-store").value, item: $("pb-item").value, product: $("pb-product").value, price: $("pb-price").value })
+            .then(function () { $("pb-item").value = $("pb-product").value = $("pb-price").value = ""; renderBook(); }).catch(function (e2) { alert(e2.message); });
+    };
+    $("pb-list").onclick = function (e) { var b = e.target.closest("button[data-del]"); if (b) call("DELETE", "/api/prices/book/" + b.dataset.del).then(renderBook); };
+    $("pb-csv").onclick = function (e) {
+        e.preventDefault();
+        call("GET", "/api/prices/book.csv").then(function (t) { var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([t], { type: "text/csv" })); a.download = "price-book.csv"; a.click(); });
+    };
+    $("pb-import").onchange = function () {
+        var f = this.files[0]; if (!f) return;
+        f.text().then(function (t) { return call("POST", "/api/prices/book.csv", t); }).then(function (r) { alert(r.added + " prices added"); renderBook(); });
+    };
+
+    // ---------- desktop: books ----------
+    function renderBooks() {
+        call("GET", "/api/books").then(function (b) {
+            $("bk-folder").textContent = b.folder;
+            $("bk-cal").textContent = b.calibre === false ? "Calibre isn't installed: EPUB books are sent as they are (the Kindle's own reader can't open them). Install Calibre (free) to have them converted." : "";
+            $("bk-list").innerHTML = b.books.map(function (x) {
+                return "<li><span class='t'>" + esc(x.name) + " <span class='n'>" + esc(x.ext.toUpperCase()) + " · " + Math.round(x.size / 1024) + " KB" + (x.conv === "epub" ? " · converted from EPUB" : x.conv === "fail" ? " · EPUB not converted" : "") + "</span></span></li>";
+            }).join("") || "<li class='msg'>The folder is empty.</li>";
+        }).catch(function (e) { setOnline(false, e); });
+    }
+    $("bk-scan").onclick = function () { call("POST", "/api/books/scan").then(renderBooks); };
+
+    // ---------- layout + tabs ----------
+    function applyLayout() {
+        var forced = LS.getItem("kh_desktop");
+        var desk = forced === "1" ? true : forced === "0" ? false : window.innerWidth >= 900;
+        document.body.classList.toggle("desktop", desk); $("dm-switch").checked = desk;
+        if (!desk && /kindle|queue|devices|books/.test(TAB)) show("list");
+    }
+    $("dm-switch").onchange = function () { LS.setItem("kh_desktop", this.checked ? "1" : "0"); applyLayout(); };
+    function show(t) {
+        TAB = t;
+        Array.prototype.forEach.call(document.querySelectorAll("#nav button"), function (b) { b.classList.toggle("sel", b.getAttribute("data-tab") === t); });
+        Array.prototype.forEach.call(document.querySelectorAll("main section"), function (s) { s.classList.toggle("hidden", s.id !== "tab-" + t); });
+        if (t === "list") push(); if (t === "status") renderStatus(); if (t === "kindle") openKindle(); if (t === "queue") renderQueue(); if (t === "devices") renderDevices(); if (t === "books") renderBooks(); if (t === "prices") renderBook();
+    }
+    $("nav").onclick = function (e) { var b = e.target.closest("button[data-tab]"); if (b) show(b.getAttribute("data-tab")); };
+    window.addEventListener("resize", function () { applyLayout(); if (TAB === "kindle") fitKindle(); });
+
+    function start() {
+        $("pairing").classList.add("hidden"); $("app").classList.remove("hidden");
+        applyLayout(); renderList(); show(TAB);
+    }
+    // the PC itself needs no key; anyone else needs one
+    call("GET", "/api/status").then(function (s) { SHARE = s.share || ""; start(); }).catch(function (e) {
+        if (e.status === 401 && !/#pair=/.test(location.hash) && KEY) { KEY = null; LS.removeItem("kh_key"); }
+        if (e.status === 401 || /#pair=/.test(location.hash)) showPairing(); else start();     // offline: show the last copy
+    });
+    setInterval(function () { if (!document.hidden && TAB === "list") push(); if (!document.hidden && TAB === "queue") renderQueue(); }, 20000);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden && TAB === "list") push(); });
+})();

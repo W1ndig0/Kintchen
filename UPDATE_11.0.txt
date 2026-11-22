@@ -1,0 +1,21 @@
+KITCHEN HUB 11.0 - THE HUB MOVES TO YOUR PC
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE. Nothing changes on the fridge until you pair it with the PC.
+Your Windows PC can now be the hub's brain instead of GitHub. The fridge keeps working exactly as before until you move it over.
+
+WHAT'S NEW
+ 1  THE HUB ON THE PC. A small program on your always-on PC keeps the list, runs the jobs (meal plan,
+    pantry, reminders, morning briefing, calendar) and builds the fridge's package (weather, news,
+    markets, what's on, recipes, horoscopes). GitHub is only used for updates like this one.
+ 2  THE CONTROL PANEL. Open it on the PC (tray icon) or any paired computer: the list, status, a
+    virtual Kindle showing the real fridge page, a queue of actions for the fridge (sync, timer,
+    update, note, log...), and your devices. On a phone it becomes the phone app.
+ 3  MOVING THE FRIDGE OVER. Control panel > Devices > Pair the fridge gives 3 lines for cloud.conf (one
+    USB visit). From its next sync the fridge talks only to the PC over home Wi-Fi: the list, its
+    check-in, its log, its package and recipe searches. Every request is signed with the fridge's own
+    key. Delete the 3 lines to go straight back to GitHub.
+ 4  NO MORE PASSPHRASE ON THE PC. The list is plain on your PC. Items locked with the old passphrase
+    open as before and are unlocked by the PC once you give it the passphrase (import.pass).
+ 5  PC OFF? The fridge keeps its list and its last package, and fetches just weather and news itself
+    until the PC is back.
+ 6  RECIPE SEARCH ON THE PC. With the PC paired, a search is one short request instead of the fridge
+    asking three recipe sites itself.
