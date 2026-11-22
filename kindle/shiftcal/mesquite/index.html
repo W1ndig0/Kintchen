@@ -85,7 +85,9 @@ svg { overflow: visible; }
 /* ---------- masthead ---------- */
 #masthead { position: absolute; left: 0; top: 0; width: 100%; border-bottom: 5px double #000; display: table; table-layout: fixed; padding: 0 .6em; background: #fff; z-index: 6; }
 #mast-l, #mast-c, #mast-r { display: table-cell; vertical-align: middle; white-space: nowrap; overflow: hidden; }
-#mast-l { width: 26%; } #mast-r { width: 26%; text-align: right; } #mast-c { text-align: center; }
+/* 10.10.5: the side cells are always empty, but each took 26%, leaving the middle only ~23% of the screen: "GOOD EVENING" and
+   "EDITING LAYOUT" (with their letter-spacing) were wider than that and lost their last letter to the clip. */
+#mast-l { width: 4%; } #mast-r { width: 4%; text-align: right; } #mast-c { width: 92%; text-align: center; }      /* (a fixed table gave an auto middle cell only half of what was left, so it is stated) */
 .mast-ttl { font-weight: 900; font-size: 1.25em; letter-spacing: .14em; }
 .mast-sm { font-family: Helvetica, Arial, sans-serif; font-size: .62em; font-weight: bold; letter-spacing: .22em; text-transform: uppercase; }
 .mast-ed { display: inline-block; background: #000; color: #fff; padding: .05em .7em; font-size: 1em; -webkit-transform: rotate(-2deg); transform: rotate(-2deg); }
@@ -1662,7 +1664,7 @@ function exitHub() {
 khMark("main: v9.2 CHROME tiles, sysbar, settings");
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "10.10.4";
+var VERSION = "10.10.5";
 var DIAG_SENT = {};      // 10.9.3: set up here, before anything at start-up can call diagOnce (see diagOnce)
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
@@ -2876,7 +2878,10 @@ function exitEdit() {
 function removeEditOverlays() {
     for (var i = 0; i < TILE_IDS.length; i++) {
         var el = $("t-" + TILE_IDS[i]), kids = el.childNodes;
-        for (var j = kids.length - 1; j >= 0; j--) if (kids[j].className === "ed") el.removeChild(kids[j]);
+        // 10.10.5: any overlay with the "ed" class, not only one whose class is exactly "ed": the selected tile's overlay is
+        // "ed ed10-sel", which was never removed - it stayed on the tile after DONE (hiding the calendar), and every tap on
+        // another tile left one more behind it.
+        for (var j = kids.length - 1; j >= 0; j--) if (kids[j].nodeType === 1 && hasCls(kids[j], "ed")) el.removeChild(kids[j]);
     }
 }
 function edAction(id, act, val) {
@@ -6915,8 +6920,10 @@ openApps = function() { APPS_PAGE = 0; __openApps(); };
     for (var k in N) if (N.hasOwnProperty(k)) ICONS[k] = N[k];
 })();
 // labels under the bottom-bar buttons, so nobody has to guess
+// (10.10.5: the icons are called chevL / chevR - capital L and R - so the lowercase names never matched and every PREV / NEXT
+//  button said CHEVL / CHEVR)
 var IC_LABEL = { today: "TODAY", cal2: "CALENDAR", sync: "SYNC", refresh: "REFRESH", rotate: "ROTATE", cog: "SETTINGS", back: "BACK", up: "UP", down: "DOWN", grid: "EDIT",
-                 check: "OK", save: "SAVE", chevl: "PREV", chevr: "NEXT", apps: "APPS", cart: "LIST", pen: "BOARD", book: "RECIPES", star: "STARS", timer: "TIMER", news: "NEWS", phone: "PHONE", chart: "MARKETS", pay: "PAY", people: "PEOPLE", help: "HELP" };
+                 check: "OK", save: "SAVE", chevl: "PREV", chevr: "NEXT", chevL: "PREV", chevR: "NEXT", apps: "APPS", cart: "LIST", pen: "BOARD", book: "RECIPES", star: "STARS", timer: "TIMER", news: "NEWS", phone: "PHONE", chart: "MARKETS", pay: "PAY", people: "PEOPLE", help: "HELP" };
 addIconBtn = function(parent, name, fn, filled) {
     var b = document.createElement("span");
     b.className = "ic-btn lab" + (filled ? " filled" : "");

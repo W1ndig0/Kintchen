@@ -18,18 +18,25 @@ khNow("v1010.js: started");
         "#countdown-rule { top: 0 !important; height: 100% !important; z-index: 0; }" +  // the whole bar is the sleep timer
         "#sb-row { position: relative; z-index: 1; }" +
         "#sysbar .tray-lbl.inv10w { color: #fff; }" +
-        "#sysbar .tray-chip { padding: .5em .75em; margin: .1em .18em; border-width: 3px; }" +
+        // 10.10.5: the whole bar is the sleep timer, so part of it is black: a chip with a black border and black text was
+        // invisible there (only the inverted one showed). Every chip has its own white face; the chosen one is black with a white edge.
+        "#sysbar .tray-chip { padding: .5em .75em; margin: .1em .18em; border-width: 3px; background: #fff; color: #000; }" +
+        "#sysbar .tray-chip.warn { background: #000; color: #fff; border: 3px solid #fff; }" +
         "#sysbar .txt-btn { padding: .5em .85em; }" +
         "#sb-right { width: 15%; }" +                                                  // the bigger SETTINGS button fits
         "#rail .rl-foot { padding: .55em 0 .5em; font-size: .7em; letter-spacing: .08em; }" +
         "#rail .rl-foot .rl-ic { width: 2.6em; height: 2.6em; margin-bottom: .2em; }" +
         "#rail .sb10-stale { background: #000; color: #fff; }" +
+        "body.editing #countdown-rule { display: none !important; }" +                // 10.10.5: a plain white bar while editing (the countdown is in the rail)
         ".ed.ed10-sel { border: .45em solid #000; }" +
+        ".ed.ed10-sel .ed-b { padding: .4em .8em; margin: .18em .14em; font-size: .9em; }" +      // 10.10.5: the controls are on the tile: finger-sized
+        ".ed.ed10-sel .ed-row { margin-top: .5em; }" +
         ".ed10-hint { font: 900 .62em Helvetica, Arial, sans-serif; letter-spacing: .14em; margin-top: .7em; }" +
-        ".ed.ed10-sel .ed10-hint { background: #000; color: #fff; display: inline-block; padding: .25em .6em; }" +
+        ".ed.ed10-sel .ed10-hint { background: #000; color: #fff; display: table; margin: .7em auto 0; padding: .25em .6em; }" +      // 10.10.5: on its own line (the name is inline-block, so an inline-block hint sat beside it)
         "#fp-cw img { display: inline-block; vertical-align: top; }" +
         ".fp-zz { font-size: .4em; letter-spacing: .1em; }" +
         ".fp-wx10 { overflow: hidden; }" +
+        ".fp-wx10 .fp-k2 { overflow: hidden; }" +                                       // 10.10.5: the caption stays beside the picture (it wrapped under it on the narrow, upright page)
         ".fp-wx10 img.fp-wxa { float: left; width: 200px; height: 200px; margin: 0 .3em .2em 0; }" +
         ".fp-bird10 img { display: block; max-width: 100%; max-height: 9em; margin: .15em 0; -webkit-filter: grayscale(1); filter: grayscale(1); }" +
         ".fp-bird10 .fp-bn { font-weight: 900; }";
@@ -89,9 +96,11 @@ sbFit = function() {
 // 20 s re-check that used to): from the first new minute on, every bar refresh failed on the missing status
 // elements, so the countdown froze, taps threw errors and state updates stopped halfway (the freezing Settings).
 function sb10InDoc() { var b = SBR.box; while (b && b !== document.body) b = b.parentNode; return !!b; }
+ICONS.pg2 = ICONS.chevR; ICONS.pg1 = ICONS.chevL; IC_LABEL.pg2 = "PAGE 2"; IC_LABEL.pg1 = "PAGE 1";      // 10.10.5: the home bar's page flip says where it goes
 var __ctxList1010 = ctxList;
 ctxList = function() {          // APPS is in the rail now
     var l = __ctxList1010();
+    if (currentView === "main") for (var q = 0; q < l.length; q++) { if (l[q][0] === "chevR") l[q][0] = "pg2"; else if (l[q][0] === "chevL") l[q][0] = "pg1"; }
     if (RAIL_W > 0) { var o = []; for (var i = 0; i < l.length; i++) if (l[i][0] !== "apps") o.push(l[i]); return o; }
     return l;
 };
@@ -100,7 +109,7 @@ ctxList = function() {          // APPS is in the rail now
 var SB10 = { sig: "", stale: "" };
 function sb10Invert() {
     var bar = $("sysbar"); if (!bar) return;
-    var fill = HUB.sleeping ? 0 : (SB.rule || 0) * bar.clientWidth;
+    var fill = (HUB.sleeping || EDIT) ? 0 : (SB.rule || 0) * bar.clientWidth;      // 10.10.5: no fill while editing
     var els = [], k, i;
     var boxes = [$("sb-mid"), $("sb-right")];
     for (k = 0; k < boxes.length; k++) if (boxes[k]) { var c = boxes[k].childNodes; for (i = 0; i < c.length; i++) if (c[i].nodeType === 1) els.push(c[i]); }
@@ -201,10 +210,25 @@ frontClock = function() {
     cw.innerHTML = h; cw.__drawn = 1;
     cw.parentNode.style.fontSize = M[3] + "px"; cw.parentNode.style.lineHeight = "1";
     if (g.length !== 6) { clk10Send("none", "c"); return; }      // hour mode: no ticks to draw
-    var ims = cw.getElementsByTagName("img"), q = sz + "_" + getRot();
+    cw.__sz = sz;
+    if (!FRONT10_BUSY) clk10Positions();      // while the page is being drawn the places are told at the very end (10.10.5)
+};
+// where the loop must draw the minutes: the digits' own places in the FINISHED layout. 10.10.5: this used to be read in the middle of
+// drawing the standby page, before the weather picture and the bird went in and before the column was fitted a last time, so a
+// crowded page put the digits (and the weather animation) a few pixels off their picture and over the text beside it.
+function clk10Positions() {
+    var cw = clk10El(); if (!cw || !cw.__drawn || !cw.__sz) return;
+    var ims = cw.getElementsByTagName("img"); if (ims.length !== 6) return;
+    var q = cw.__sz + "_" + getRot();
     for (var j = 0; j < ims.length; j++) { var r = ims[j].getBoundingClientRect(); q += "_" + Math.round(r.left) + "_" + Math.round(r.top); }
     clk10Send(q, "c");
-};
+}
+function wx10Position() {
+    var im = document.querySelector("#front .fp-wxa"); if (!im || !im.__kind) return;
+    var r = im.getBoundingClientRect();
+    clk10Send(im.__kind + "_" + getRot() + "_" + Math.round(r.left) + "_" + Math.round(r.top), "w");
+}
+var FRONT10_BUSY = 0;
 function clk10Bad() { if (CLK10_BAD) return; CLK10_BAD = 1; var cw = clk10El(); if (cw) { cw.__k = ""; frontClock(); } }
 // the weather picture on the standby page (the loop animates it on the hourly redraw)
 function wx10Kind(code, night) {
@@ -217,13 +241,28 @@ function wx10Kind(code, night) {
     return "cloud";
 }
 var __renderFront1010 = renderFront, FRONT10_H = "";
+// 10.10.5: the bird's picture has no size until it has loaded, so the side column was fitted without it and then ran
+// over its bottom (the horoscope cut off) when it arrived. Fit again as soon as it is there (or has failed).
+function fp10Refit() { var s = $("fp-side"); if (s && $("front") && $("front").style.display === "block") { fitText(s, 9, FS * 1.3); clk10Positions(); wx10Position(); } }
 function front10Hour() { var n = getBCNow(); return n.getUTCDate() + "-" + n.getUTCHours(); }
 // 10.10.2: on the hourly redraw (and a minute tick that crosses the hour) the standby page is drawn again, so the
 // story, the bird, the "wakes ..." line and the night screen switch actually change. 10.10 only redrew the clock.
 function front10Hourly() { if (HUB.sleeping && FRONT10_H !== front10Hour()) { renderFront(); return 1; } return 0; }
 renderFront = function() {
     FRONT10_H = front10Hour();
+    FRONT10_BUSY = 1;
+    try { front10Draw(); } finally { FRONT10_BUSY = 0; }
+    clk10Positions(); wx10Position();      // 10.10.5: only now, with the layout finished
+};
+function front10Draw() {
     __renderFront1010();
+    // 10.10.5: on the upright page the title is wider than its cell (a third of the width) and the cell cuts it: "THE KITCHEN H".
+    // Shrink the title until it fits; the cell's own width stays what the page made it.
+    var ttl = document.querySelector("#front .fp-mast .fp-c");
+    if (ttl && ttl.scrollWidth > ttl.clientWidth + 1) {
+        var tfs = parseFloat(window.getComputedStyle(ttl, null).fontSize) || 0;
+        if (tfs > 0) ttl.style.fontSize = Math.max(10, Math.floor(tfs * ttl.clientWidth / ttl.scrollWidth) - 1) + "px";
+    }
     var cw0 = clk10El(); if (cw0) { cw0.__k = ""; frontClock(); }      // the night screen too
     var el = $("front"); if (!el || el.style.display !== "block") return;
     var side = $("fp-side"), ic = el.getElementsByClassName("fp-wxic")[0];
@@ -232,14 +271,13 @@ renderFront = function() {
         var sec = ic.parentNode; addCls(sec, "fp-wx10");
         ic.innerHTML = "<img class='fp-wxa' src='art/wx/" + kind + "/0/s.png' width='200' height='200' alt=''>";
         ic.style.display = "block";
-        var r = ic.getElementsByTagName("img")[0].getBoundingClientRect();
-        clk10Send(kind + "_" + getRot() + "_" + Math.round(r.left) + "_" + Math.round(r.top), "w");
+        ic.getElementsByTagName("img")[0].__kind = kind;      // its place is told to the loop once the layout is finished (renderFront below)
     } else clk10Send("none", "w");
     // the bird of the hour, under the weather
     var b = typeof birdNow === "function" ? birdNow() : null;
     if (b && side && !side.getElementsByClassName("fp-bird10")[0]) {
         var d = document.createElement("div"); d.className = "fp-sec fp-bird10";
-        d.innerHTML = "<div class='fp-h'>Bird of the hour</div><img src='" + esc(b.img) + "' alt='' onerror=\"this.style.display='none'\"><span class='fp-bn'>" + esc(b.n) + "</span>";
+        d.innerHTML = "<div class='fp-h'>Bird of the hour</div><img src='" + esc(b.img) + "' alt='' onload='fp10Refit()' onerror=\"this.style.display='none';fp10Refit()\"><span class='fp-bn'>" + esc(b.n) + "</span>";
         var secs = side.getElementsByClassName("fp-sec");
         if (secs.length > 1) side.insertBefore(d, secs[1]); else side.appendChild(d);
     }
@@ -294,6 +332,7 @@ function ed10Visible() {
     for (var i = 0; i < list.length; i++) { var pp = PLACED[list[i].id]; if (onPage(list[i]) && pp && !pp.nofit && !pp.hidden) vis.push(list[i]); }
     return vis;
 }
+var ED10_BTN = 0;      // when a button on a tile was just tapped: the tile's own "select / deselect" must not also fire
 renderEditOverlays = function() {
     removeEditOverlays();
     if (!EDIT) { ED_SEL = ""; return; }
@@ -304,18 +343,43 @@ renderEditOverlays = function() {
         var it = vis[i], p = PLACED[it.id], el = $("t-" + it.id), sel = it.id === ED_SEL;
         var ov = document.createElement("div");
         ov.className = "ed" + (sel ? " ed10-sel" : "");
-        ov.style.fontSize = clamp(Math.min(el.clientWidth / 12, el.clientHeight / 6), 11, FS * 1.4) + "px";
+        ov.style.fontSize = (sel ? clamp(Math.min(el.clientWidth / 16, el.clientHeight / 9), 10, FS * 1.2) : clamp(Math.min(el.clientWidth / 12, el.clientHeight / 6), 11, FS * 1.4)) + "px";
         var tag = p.got + (p.got !== it.sz ? " (WANTED " + it.sz + ")" : "") + (it.rot ? " &middot; SHUFFLES" : "");
-        ov.innerHTML = "<span class='ed-num'>" + (i + 1) + "</span><span class='ed-tag'>" + tag + "</span><div class='ed-name'>" + TILE_NAMES[it.id] + "</div>" +
-            "<div class='ed10-hint'>" + (sel ? "CHANGE IT IN THE BAR BELOW" : "TAP TO CHANGE") + "</div>";
+        var h = "<span class='ed-num'>" + (i + 1) + "</span><span class='ed-tag'>" + tag + "</span><div class='ed-name'>" + TILE_NAMES[it.id] + "</div>";
+        if (sel) {
+            // 10.10.5: its size, its place in the order and the shuffle switch are on the tile; page and hide are in the bar
+            h += "<div class='ed-row'>";
+            for (var s2 = 0; s2 < SIZE_KEYS.length; s2++) h += "<span class='ed-b" + (SIZE_KEYS[s2] === it.sz ? " sel" : "") + "' data-a='sz' data-v='" + SIZE_KEYS[s2] + "'>" + SIZE_KEYS[s2] + "</span>";
+            h += "</div><div class='ed-row'><span class='ed-b' data-a='mv' data-v='-1'>&#9664;</span><span class='ed-b' data-a='mv' data-v='1'>&#9654;</span>" +
+                 "<span class='ed-b" + (it.rot ? " sel" : "") + "' data-a='rot' data-v=''>SHUFFLE</span></div>" +
+                 "<div class='ed10-hint'>PAGE AND HIDE: BAR BELOW</div>";
+        } else h += "<div class='ed10-hint'>TAP TO CHANGE</div>";
+        ov.innerHTML = h;
         el.appendChild(ov);
-        (function(id) { bindTap(ov, function() { ED_SEL = ED_SEL === id ? "" : id; renderEditOverlays(); SB.ctx = null; renderSysbarContext(); }); })(it.id);
+        if (sel) {
+            var btns = ov.getElementsByTagName("span");
+            for (var b = 0; b < btns.length; b++) {
+                var a = btns[b].getAttribute("data-a");
+                if (!a) continue;
+                (function(id, act, raw) {
+                    bindTap(btns[b], function() { ED10_BTN = new Date().getTime(); edAction(id, act, act === "mv" ? parseInt(raw, 10) : raw); });
+                })(it.id, a, btns[b].getAttribute("data-v"));
+            }
+            // a small tile has no room for the note: the controls matter more; then the type shrinks until they all fit
+            if (ov.scrollHeight > ov.clientHeight + 2 && ov.lastChild && hasCls(ov.lastChild, "ed10-hint")) ov.removeChild(ov.lastChild);
+            var fs2 = parseFloat(ov.style.fontSize);
+            for (var tries = 0; tries < 6 && ov.scrollHeight > ov.clientHeight + 2 && fs2 > 8; tries++) { fs2 = fs2 * 0.88; ov.style.fontSize = fs2 + "px"; }
+        }
+        (function(id) { bindTap(ov, function() {
+            if (new Date().getTime() - ED10_BTN < 250) return;      // that tap was on one of the tile's buttons
+            ED_SEL = ED_SEL === id ? "" : id; renderEditOverlays(); SB.ctx = null; renderSysbarContext();
+        }); })(it.id);
     }
 };
 var __traySig1010 = traySig;
 traySig = function() {
     var it = ED_SEL ? findItem(ED_SEL) : null;
-    return __traySig1010() + "|" + ED_SEL + (it ? "|" + it.sz + it.rot + it.pg + (it.hid ? 1 : 0) : "");
+    return __traySig1010() + "|" + ED_SEL + (it ? "|" + it.pg + (it.hid ? 1 : 0) : "");      // size and shuffle are on the tile now, not in the bar
 };
 var __renderTray1010 = renderTray;
 renderTray = function(mid) {
@@ -323,11 +387,9 @@ renderTray = function(mid) {
     if (!it || it.hid) { ED_SEL = ""; return __renderTray1010(mid); }      // nothing selected: add tiles / options
     mid.style.whiteSpace = "normal";
     var lbl = document.createElement("span"); lbl.className = "tray-lbl"; lbl.innerHTML = TILE_NAMES[it.id].toUpperCase() + ":"; mid.appendChild(lbl);
-    var acts = [];
-    for (var s = 0; s < SIZE_KEYS.length; s++) acts.push([SIZE_KEYS[s], "sz", SIZE_KEYS[s], SIZE_KEYS[s] === it.sz]);
-    acts.push(["&#9664; MOVE", "mv", -1], ["MOVE &#9654;", "mv", 1], [PAGE === 1 ? "&#9664; TO PAGE 1" : "TO PAGE 2 &#9654;", "pg", ""], ["SHUFFLE", "rot", "", !!it.rot], ["HIDE", "hide", ""]);
+    var acts = [[PAGE === 1 ? "&#9664; TO PAGE 1" : "TO PAGE 2 &#9654;", "pg", ""], ["HIDE", "hide", ""]];
     for (var a = 0; a < acts.length; a++) (function(x) {
-        var c = document.createElement("span"); c.className = "tray-chip" + (x[3] ? " warn" : ""); c.innerHTML = x[0];
+        var c = document.createElement("span"); c.className = "tray-chip"; c.innerHTML = x[0];
         bindTap(c, function() { if (x[1] === "hide") ED_SEL = ""; edAction(it.id, x[1], x[2]); SB.ctx = null; renderSysbarContext(); });
         mid.appendChild(c);
     })(acts[a]);

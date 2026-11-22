@@ -1,0 +1,55 @@
+KITCHEN HUB 10.10.5 - THE EDITING SCREEN, THE STANDBY CLOCK, AND OTHER THINGS THAT LOOKED WRONG
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE.
+Things that were visibly wrong, found from photos of the fridge, and the editing screen laid out the way you asked.
+
+WHAT WAS WRONG
+ 1  THE EDIT BUTTONS WERE INVISIBLE. In 10.10 the whole bottom bar became the sleep timer, so most of
+    it is black. The buttons that appear when you tap a tile (S, M, L, XL, MOVE, SHUFFLE...) had black
+    edges and black writing, so on the black part of the bar they simply could not be seen; only the
+    one chosen size showed. Every button now has its own white face, and the chosen one is black with
+    a white edge, so they read on any part of the bar.
+ 2  A TILE STAYED "BEING EDITED" AFTER YOU PRESSED DONE. The tile you had last tapped kept its
+    editing cover for good: on the home page the Calendar was blank with "CHANGE IT IN THE BAR
+    BELOW" printed across it. Every tile you tapped after that left another cover stacked behind
+    it. They are all removed now, every time.
+ 3  The "change it in the bar below" note sat on the same line as the tile's name on a wide tile,
+    jammed against it. It is on its own line under the name.
+ 4  The PREV / NEXT buttons said CHEVL and CHEVR (the page flip on the home bar, and the arrows when
+    reading a story, a recipe, the day view, the calendar and the horoscope). They say PREV and NEXT.
+ 5  The title across the top ("GOOD EVENING", "EDITING LAYOUT") lost its last letter. The two empty
+    side cells took half the screen, leaving the title only about a quarter of it. The title now has
+    the room.
+
+THE EDITING SCREEN, AS YOU ASKED
+ 6  Tap a tile and its own controls are ON the tile: its size (S M L XL), the two arrows that move it
+    along, and the SHUFFLE switch. They are big enough for a finger, and the type shrinks on a small
+    tile until they all fit. The bottom bar keeps only what doesn't belong on a tile: TO PAGE 2 / 1,
+    HIDE, and ADD / OPTIONS. Tapping a button on the tile no longer also deselects the tile.
+ 7  The bottom bar is plain white while you edit (the black sleep-timer fill is off; the countdown to
+    standby is still in the left rail).
+ 8  On the home bar the page flip says PAGE 2 or PAGE 1.
+
+THE STANDBY CLOCK WAS SOMETIMES WRONG
+ 9  The Kindle can wake a second or two before the time it was asked to wake at, and "Hour only" asks
+    for the wake 3 seconds early on purpose. The hourly redraw then drew the standby page with the OLD
+    hour, so an hour-only clock stayed an hour behind until the next redraw, and a minute clock a
+    minute behind until its next tick. A wake now waits out those last seconds first, and so does a
+    minute tick that comes early.
+
+THE STANDBY PAGE (ASLEEP) LAYOUT
+10  On the upright screen the title was cut to "THE KITCHEN H" (it is shrunk to fit now).
+11  The weather line ("Overcast - H 0 L -6") wrapped under the weather picture on the upright screen;
+    it stays beside the picture now.
+12  The spot where the Kindle draws the clock digits and the weather animation was read in the middle
+    of drawing the page, before the weather picture, the bird of the hour and the last fitting of the
+    column. On a crowded page the digits and the animation landed a few pixels off the picture
+    (over the text beside it). They are read after the page is finished, and again if the bird's
+    picture arrives late and the column is fitted again. The bird's picture arriving late also pushed
+    the horoscope off the bottom of the column; that is fixed too.
+
+UNDER THE BONNET
+13  t26 draws the editing screen in the same old browser the Kindle uses and checks the above (it
+    fails on 10.10.4 on fourteen counts). t27 simulates the early wake: the old loop starts every
+    redraw 3 seconds before its time, this one starts it on time. t28 draws the standby page at all four
+    rotations, plain and crowded, and checks the title, the weather line, overlaps, the column, and
+    that the loop is told the true places (it fails on 10.10.4 on twenty-two counts).

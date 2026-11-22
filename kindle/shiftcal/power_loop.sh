@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.10.4"
+VERSION="10.10.5"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -1307,6 +1307,9 @@ sleep_clock() {      # sleep until epoch $1, ticking the standby clock; returns 
         fi
         SC_FAIL=0
         [ "$SC_R" = "2" ] && break
+        # 10.10.5: woke up to 2 s before the minute (tick_suspend allows that): the digits drawn now would be last minute's, and
+        # the next tick is a whole minute away. Wait for the minute.
+        SC_W=$(( NB - $(date +%s) )); [ "$SC_W" -gt 0 ] && [ "$SC_W" -le 3 ] && sleep "$SC_W"
         [ "$NB" = "$SC_END" ] && { SC_R=0; break; }
         SC_TA=$(uptime_cs); SC_N=$((SC_N + 1))
         if [ "$SC_BY" = "loop" ]; then draw_clock_tick; else sleep 2; fi      # the page redraws the minute itself
@@ -1391,6 +1394,13 @@ boot_failed() {
 FIRST=1
 while true; do
     still_owner || { log "another loop owns $PIDF - exiting"; exit 0; }
+    # 10.10.5: a timer wake can land a second or two BEFORE its target: "hour only" asks for the wake 3 s early on purpose (and the
+    # alarm is allowed 2 s of slack). The hourly redraw then drew the page with the OLD hour or minute: an hour-only clock stayed
+    # an hour behind until the next redraw, and a minute clock a minute behind until its next tick. Wait out the last seconds.
+    if [ "$WAKE_REASON" = "timer" ] && [ "${NEXT_WAKE_EPOCH:-0}" -gt 0 ]; then
+        EW=$(( NEXT_WAKE_EPOCH - $(date +%s) ))
+        [ "$EW" -gt 0 ] && [ "$EW" -le 6 ] && sleep "$EW"
+    fi
     load_conf
     read_caps
     read_last_sync
