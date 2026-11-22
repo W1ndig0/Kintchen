@@ -1,0 +1,25 @@
+KITCHEN HUB 10.10.5 - THE EDITING SCREEN, AND OTHER THINGS THAT LOOKED WRONG
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE.
+No new features: five things that were visibly wrong, found from photos of the fridge.
+
+WHAT WAS WRONG
+ 1  THE EDIT BUTTONS WERE INVISIBLE. In 10.10 the whole bottom bar became the sleep timer, so most of
+    it is black. The buttons that appear when you tap a tile (S, M, L, XL, MOVE, SHUFFLE...) had black
+    edges and black writing, so on the black part of the bar they simply could not be seen; only the
+    one chosen size showed. Every button now has its own white face, and the chosen one is black with
+    a white edge, so they read on any part of the bar.
+ 2  A TILE STAYED "BEING EDITED" AFTER YOU PRESSED DONE. The tile you had last tapped kept its
+    editing cover for good: on the home page the Calendar was blank with "CHANGE IT IN THE BAR
+    BELOW" printed across it. Every tile you tapped after that left another cover stacked behind
+    it. They are all removed now, every time.
+ 3  The "change it in the bar below" note sat on the same line as the tile's name on a wide tile,
+    jammed against it. It is on its own line under the name.
+ 4  The PREV / NEXT buttons said CHEVL and CHEVR (the page flip on the home bar, and the arrows when
+    reading a story, a recipe, the day view, the calendar and the horoscope). They say PREV and NEXT.
+ 5  The title across the top ("GOOD EVENING", "EDITING LAYOUT") lost its last letter. The two empty
+    side cells took half the screen, leaving the title only about a quarter of it. The title now has
+    the room.
+
+UNDER THE BONNET
+ 6  A new test (t26) draws the editing screen in the same old browser the Kindle uses and checks all
+    five. It fails on 10.10.4 on six counts and passes on this one.

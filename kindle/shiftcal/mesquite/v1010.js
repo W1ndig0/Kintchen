@@ -18,7 +18,10 @@ khNow("v1010.js: started");
         "#countdown-rule { top: 0 !important; height: 100% !important; z-index: 0; }" +  // the whole bar is the sleep timer
         "#sb-row { position: relative; z-index: 1; }" +
         "#sysbar .tray-lbl.inv10w { color: #fff; }" +
-        "#sysbar .tray-chip { padding: .5em .75em; margin: .1em .18em; border-width: 3px; }" +
+        // 10.10.5: the whole bar is the sleep timer, so part of it is black: a chip with a black border and black text was
+        // invisible there (only the inverted one showed). Every chip has its own white face; the chosen one is black with a white edge.
+        "#sysbar .tray-chip { padding: .5em .75em; margin: .1em .18em; border-width: 3px; background: #fff; color: #000; }" +
+        "#sysbar .tray-chip.warn { background: #000; color: #fff; border: 3px solid #fff; }" +
         "#sysbar .txt-btn { padding: .5em .85em; }" +
         "#sb-right { width: 15%; }" +                                                  // the bigger SETTINGS button fits
         "#rail .rl-foot { padding: .55em 0 .5em; font-size: .7em; letter-spacing: .08em; }" +
@@ -26,7 +29,7 @@ khNow("v1010.js: started");
         "#rail .sb10-stale { background: #000; color: #fff; }" +
         ".ed.ed10-sel { border: .45em solid #000; }" +
         ".ed10-hint { font: 900 .62em Helvetica, Arial, sans-serif; letter-spacing: .14em; margin-top: .7em; }" +
-        ".ed.ed10-sel .ed10-hint { background: #000; color: #fff; display: inline-block; padding: .25em .6em; }" +
+        ".ed.ed10-sel .ed10-hint { background: #000; color: #fff; display: table; margin: .7em auto 0; padding: .25em .6em; }" +      // 10.10.5: on its own line (the name is inline-block, so an inline-block hint sat beside it)
         "#fp-cw img { display: inline-block; vertical-align: top; }" +
         ".fp-zz { font-size: .4em; letter-spacing: .1em; }" +
         ".fp-wx10 { overflow: hidden; }" +

@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="10.10.4"
+VERSION="10.10.5"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
