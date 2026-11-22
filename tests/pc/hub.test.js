@@ -39,7 +39,7 @@ function startServer(dir, now) {
     return new Promise(r => srv.listen(0, "127.0.0.1", () => r({ srv, store, auth, port: srv.address().port })));
 }
 function signed(key, method, p, body, ts) {
-    ts = String(ts || Date.now());
+    ts = String(ts || Date.now()) + "." + Math.random().toString(36).slice(2, 10);
     return { "X-KH-Dev": key.id, "X-KH-Ts": ts, "X-KH-Sig": sigFor(key.secret, ts, method, p, body || "") };
 }
 

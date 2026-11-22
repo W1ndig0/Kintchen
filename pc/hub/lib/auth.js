@@ -5,7 +5,8 @@
  *   1. desktop mode on the PC makes a pairing code (8 characters, single use, 10 minutes, 5 wrong tries kill it)
  *   2. the device sends the code to POST /api/pair and gets back its own id + secret (32 random bytes)
  *   3. every later request is signed:
- *        X-KH-Dev: <id>   X-KH-Ts: <ms since 1970>   X-KH-Sig: hex HMAC-SHA256(secret, ts \n METHOD \n path \n sha256hex(body))
+ *        X-KH-Dev: <id>   X-KH-Ts: <ms since 1970>.<random>  (the random part lets two identical requests in one ms both count)
+ *          X-KH-Sig: hex HMAC-SHA256(secret, ts \n METHOD \n path \n sha256hex(body))
  *      A request more than 5 minutes off the PC's clock, or a signature seen before, is refused (no replay).
  * Devices are listed in desktop mode and can be revoked. Secrets are stored in devices.json in the data folder
  * (readable only by the Windows user the hub runs as). */
@@ -76,8 +77,8 @@ class Auth {
         const id = req.headers["x-kh-dev"], ts = req.headers["x-kh-ts"], sig = req.headers["x-kh-sig"];
         const d = id && this.devices[id];
         const bad = (m) => { this.failed(addr); return { error: m, code: 401 }; };
-        if (!d || !/^\d{12,15}$/.test(ts || "") || !/^[0-9a-f]{64}$/.test(sig || "")) return bad("not paired");
-        if (Math.abs(this.now() - Number(ts)) > SKEW_MS) return bad("clock is more than 5 minutes off");
+        if (!d || !/^\d{12,15}(\.[0-9a-z]{1,16})?$/.test(ts || "") || !/^[0-9a-f]{64}$/.test(sig || "")) return bad("not paired");
+        if (Math.abs(this.now() - Number(ts.split(".")[0])) > SKEW_MS) return bad("clock is more than 5 minutes off");
         const want = sigFor(d.secret, ts, req.method, req.url, body);
         if (!crypto.timingSafeEqual(Buffer.from(want), Buffer.from(sig))) return bad("bad signature");
         const t = this.now();

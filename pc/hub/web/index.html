@@ -47,7 +47,22 @@
       <h3 class="sub">Ticked off</h3>
       <ul id="shop-done" class="items done"></ul>
     </section>
-    <section id="tab-status" class="hidden"><div id="status" class="grid"></div></section>
+    <section id="tab-status" class="hidden">
+      <div id="status" class="grid"></div>
+      <h3 class="sub">Jobs (meal plan, pantry, reminders, calendar, the fridge's package) - every 30 minutes</h3>
+      <div class="row"><button id="jobs-run">Run jobs now</button><span id="jobs-last" class="msg"></span></div>
+      <div id="cal-box" class="hidden card row"><div id="cal-qr" class="qr"></div><div><b>Calendar</b><p class="msg">Scan with the iPhone camera to subscribe (shifts, events, chores, holidays). It refreshes when the phone can reach the PC (home Wi-Fi or Tailscale).</p><p class="msg" id="cal-link"></p></div></div>
+      <h3 class="sub">Alerts on this device</h3>
+      <div class="row" id="push-row"><button id="push-on" class="primary">Turn on alerts</button><span id="push-msg" class="msg"></span></div>
+      <div class="row hidden" id="push-set">
+        <label class="dm"><input type="checkbox" id="push-enabled"> Alerts on</label>
+        <span class="msg">Quiet from</span><input id="push-qf" type="number" min="0" max="23" style="width:4.5em">
+        <span class="msg">to</span><input id="push-qt" type="number" min="0" max="23" style="width:4.5em">
+        <button id="push-save">Save</button><button id="push-test">Send a test</button><button id="push-off">Turn off on this device</button>
+      </div>
+      <h3 class="sub">Recent alerts</h3>
+      <ul id="alerts" class="items"></ul>
+    </section>
     <section id="tab-kindle" class="hidden">
       <div class="row">
         <button id="vk-rot">Rotate</button>

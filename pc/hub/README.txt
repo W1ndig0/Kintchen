@@ -1,4 +1,4 @@
-KITCHEN HUB v11 - THE HUB ON YOUR PC (work in progress: first part)
+KITCHEN HUB v11 - THE HUB ON YOUR PC (work in progress)
 ===================================================================
 The PC becomes the hub's brain and storage. This first part is the hub service and the control panel
 web app. The fridge and the phone still use the GitHub cloud until a later part switches them over.
@@ -22,6 +22,18 @@ INSTALL (Windows 10)
 PAIRING A PHONE OR ANOTHER COMPUTER
   Desktop mode > Devices > Pair a device. Scan the code with the phone camera (phone on home Wi-Fi or
   Tailscale) or type it. The code works once, for 10 minutes. Remove a device there any time.
+
+JOBS AND ALERTS
+  The jobs the GitHub cloud ran (meal plan, pantry, list tidy, reminders, morning briefing, calendar...) run
+  on the PC every 30 minutes (cloud/brain.js, unchanged, against the PC's list - nothing goes to GitHub).
+  Status shows the last run, "Run jobs now", recent alerts and the calendar QR.
+  Alerts go to the phone as web push. iPhone needs the app on its Home Screen from an HTTPS address:
+    1. Tailscale on the PC and phone (phone: On Demand or always on).
+    2. On the PC, once:  tailscale serve --bg 8770     (gives https://<pc-name>.<tailnet>.ts.net)
+    3. Put that address in %LOCALAPPDATA%\KitchenHub\config.json as  "publicUrl": "https://..."  and restart.
+    4. Pair the phone from that address, Share > Add to Home Screen, open it from there, Status > Turn on alerts.
+  The fridge package (weather/news/recipes) isn't built on Windows yet (next part); the fridge keeps using
+  its own fetching meanwhile.
 
 SECURITY
   - Answers only the home network, Tailscale and the PC itself; everything else is dropped.

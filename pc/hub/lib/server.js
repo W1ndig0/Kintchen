@@ -30,6 +30,15 @@ function homeAddr(a) {
     }
     return /^f[cd][0-9a-f]{2}:/i.test(a) || /^fe80:/i.test(a);       // IPv6 private / link-local (Tailscale uses fd7a:)
 }
+// the address other devices should use: config publicUrl (e.g. the Tailscale https name), else Tailscale IP, else home IP
+function shareUrl(publicUrl, port) {
+    if (publicUrl) return String(publicUrl).replace(/\/+$/, "");
+    const ips = [];
+    Object.values(require("os").networkInterfaces()).forEach(l => (l || []).forEach(i => { if (i.family === "IPv4" && !i.internal) ips.push(i.address); }));
+    const ts = ips.find(a => /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a)), home = ips.find(a => /^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))/.test(a));
+    const ip = ts || home || "127.0.0.1";
+    return "http://" + ip + ":" + port;
+}
 function readJson(f, d) { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch (e) { return d; } }
 function jsStr(s) { return JSON.stringify(String(s)).replace(/[\u2028\u2029]/g, c => c === "\u2028" ? "\\u2028" : "\\u2029"); }
 
@@ -75,7 +84,7 @@ function createServer(opts) {
         if (p === "/api/status" && m === "GET") {
             const kin = auth.list().filter(d => d.kind === "kindle").sort((a, b) => b.seen - a.seen)[0];
             return send(res, 200, { app: "kitchen-hub", version: VERSION, time: now(), items: store.items().length,
-                                    devices: auth.list().length, kindleSeen: kin ? kin.seen : 0, queue: queue.filter(q => q.state !== "done").length, you: who });
+                                    devices: auth.list().length, share: shareUrl(opts.publicUrl, opts.port || 8770), kindleSeen: kin ? kin.seen : 0, queue: queue.filter(q => q.state !== "done").length, you: who });
         }
         if (p === "/api/store") {
             if (m === "GET") {
@@ -110,6 +119,21 @@ function createServer(opts) {
             if (q.state !== "queued") return err(res, 409, "already delivered");
             queue = queue.filter(x => x !== q); saveQueue(); return send(res, 200, { ok: 1 });
         }
+        if (p === "/api/jobs" && m === "GET" && opts.jobs) {
+            const j = opts.jobs;
+            return send(res, 200, { running: !!j.running, last: j.last ? Object.assign({}, j.last, { out: undefined }) : null, alerts: j.alerts().slice(-30).reverse(),
+                                    calendar: opts.calToken ? "/cal/" + opts.calToken + "/calendar.ics" : "" });
+        }
+        if (p === "/api/jobs/run" && m === "POST" && opts.jobs) { opts.jobs.run("asked by " + who); return send(res, 200, { ok: 1 }); }
+        if (p === "/api/jobs/log" && m === "GET" && opts.jobs) return send(res, 200, (opts.jobs.last && opts.jobs.last.out) || "", "text/plain; charset=utf-8");
+        if (p.startsWith("/api/push") && opts.pusher) {
+            const P = opts.pusher; let j = {}; try { j = JSON.parse(body || "{}"); } catch (e) {}
+            if (p === "/api/push/key" && m === "GET") return send(res, 200, { key: P.keys.pub, subscribed: !!P.subs[who], settings: P.subs[who] ? P.subs[who].settings : null });
+            if (p === "/api/push/subscribe" && m === "POST") return P.subscribe(who, j) ? send(res, 200, { ok: 1 }) : err(res, 400, "bad subscription");
+            if (p === "/api/push/unsubscribe" && m === "POST") { P.unsubscribe(who); return send(res, 200, { ok: 1 }); }
+            if (p === "/api/push/settings" && m === "POST") { const st = P.settings(who, j); return st ? send(res, 200, st) : err(res, 404, "alerts aren't on for this device"); }
+            if (p === "/api/push/test" && m === "POST") { const n = await P.send({ title: "Kitchen Hub", body: "Test alert from your PC", prio: 5 }); return send(res, 200, { sent: n }); }
+        }
         if (p === "/api/view" && m === "POST") {       // a cookie so the virtual Kindle frame can load its data files
             const v = crypto.randomBytes(24).toString("hex"), until = now() + 12 * 3600000;
             for (const [k, t] of views) if (t < now()) views.delete(k);
@@ -142,6 +166,12 @@ function createServer(opts) {
                     const a = auth.check(req, body);
                     if (a.error) return err(res, a.code || 401, a.error);
                     return await api(req, res, url, body, a.who);
+                }
+                // calendar subscription (iPhone/Outlook can't sign requests): a long random link, made once
+                const cm = /^\/cal\/([0-9a-f]{32})\/(calendar(-p2)?\.ics)$/.exec(p);
+                if (cm) {
+                    if (!opts.calToken || cm[1] !== opts.calToken) return err(res, 404, "not found");
+                    return serveFile(res, path.join(dataDir, "gist", "cloud"), cm[2], { "Content-Type": "text/calendar; charset=utf-8" });
                 }
                 if (p.startsWith("/kindle/")) {
                     if (!viewOk(req)) return err(res, 403, "open the virtual Kindle from desktop mode");

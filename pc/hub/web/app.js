@@ -6,7 +6,8 @@
     var KEY = null; try { KEY = JSON.parse(LS.getItem("kh_key") || "null"); } catch (e) {}
     var STORE = LS.getItem("kh_store") || HubData.HEADER + "\n";
     var PENDING = []; try { PENDING = JSON.parse(LS.getItem("kh_pending") || "[]"); } catch (e) {}
-    var ONLINE = false, TAB = "list";
+    var ONLINE = false, TAB = "list", SHARE = "";
+    function shareBase() { return SHARE && /^(127\.|localhost)/.test(location.hostname) ? SHARE : location.origin; }
 
     // ---------- signing (pure JS: crypto.subtle only exists on HTTPS, and the home address is plain HTTP) ----------
     var sha = HubCrypt.sha256, utf8 = HubCrypt.utf8;
@@ -22,7 +23,7 @@
         var h = {};
         body = body == null ? "" : (typeof body === "string" ? body : JSON.stringify(body));
         if (KEY) {
-            var ts = String(Date.now());
+            var ts = Date.now() + "." + Math.random().toString(36).slice(2, 10);
             h["X-KH-Dev"] = KEY.id; h["X-KH-Ts"] = ts;
             h["X-KH-Sig"] = hex(hmac(unhex(KEY.secret), utf8(ts + "\n" + method + "\n" + path + "\n" + hex(sha(utf8(body))))));
         }
@@ -104,12 +105,57 @@
     function ago(t) { if (!t) return "never"; var m = Math.round((Date.now() - t) / 60000); return m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.round(m / 60) + " h ago" : Math.round(m / 1440) + " days ago"; }
     function renderStatus() {
         call("GET", "/api/status").then(function (s) {
-            setOnline(true);
+            setOnline(true); SHARE = s.share || "";
             var c = function (k, v) { return "<div class='card'><span class='msg'>" + k + "</span><b>" + esc(v) + "</b></div>"; };
             $("status").innerHTML = c("Hub version", s.version) + c("Items in the store", s.items) + c("Fridge last seen", ago(s.kindleSeen)) +
                                     c("Waiting for the fridge", s.queue) + c("Paired devices", s.devices) + c("PC clock", new Date(s.time).toLocaleString());
         }).catch(function (e) { setOnline(false, e); $("status").innerHTML = "<p class='msg'>Can't reach the PC.</p>"; });
+        renderPush();
+        call("GET", "/api/jobs").then(function (j) {
+            var l = j.last;
+            $("jobs-last").textContent = j.running ? "Running now…" : !l ? "Not run yet." :
+                "Last run " + ago(l.at) + " (" + l.why + "): " + (l.code === 0 ? "ok" : "FAILED") + ", " + l.secs + " s" + (l.bundle ? "" : " - fridge package not built on this PC yet");
+            $("alerts").innerHTML = j.alerts.map(function (a) { return "<li><span class='t'><b>" + esc(a.title) + "</b><br>" + esc(a.body) + "</span><span class='n'>" + ago(a.at) + "</span></li>"; }).join("") || "<li class='msg'>No alerts yet.</li>";
+            if (j.calendar) {
+                var link = shareBase() + j.calendar;
+                $("cal-box").classList.remove("hidden"); $("cal-link").textContent = link;
+                try { $("cal-qr").innerHTML = qrSvg(link.replace(/^http/, "webcal")); } catch (e) {}
+            }
+        }).catch(function () {});
     }
+    // ---------- alerts (web push) ----------
+    function renderPush() {
+        var can = "serviceWorker" in navigator && "PushManager" in window && window.isSecureContext;
+        if (!can) {
+            $("push-on").classList.add("hidden");
+            $("push-msg").textContent = "Alerts need the app opened from its Tailscale address and added to the Home Screen (iPhone: Share > Add to Home Screen), then opened from there.";
+            return;
+        }
+        call("GET", "/api/push/key").then(function (k) {
+            $("push-on").classList.toggle("hidden", k.subscribed); $("push-set").classList.toggle("hidden", !k.subscribed);
+            $("push-msg").textContent = k.subscribed ? "" : "Get reminders, the morning briefing and fridge warnings on this device.";
+            if (k.settings) { $("push-enabled").checked = k.settings.on; $("push-qf").value = k.settings.quietFrom; $("push-qt").value = k.settings.quietTo; }
+        }).catch(function () {});
+    }
+    function keyBytes(s) { var b = atob(s.replace(/-/g, "+").replace(/_/g, "/")), o = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) o[i] = b.charCodeAt(i); return o; }
+    $("push-on").onclick = function () {
+        Notification.requestPermission().then(function (perm) {
+            if (perm !== "granted") throw new Error("Notifications are blocked for this app (iPhone Settings > Notifications).");
+            return Promise.all([navigator.serviceWorker.ready, call("GET", "/api/push/key")]);
+        }).then(function (a) {
+            return a[0].pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(a[1].key) });
+        }).then(function (sub) { return call("POST", "/api/push/subscribe", sub.toJSON()); })
+          .then(renderPush).catch(function (e) { $("push-msg").textContent = e.message; });
+    };
+    $("push-save").onclick = function () { call("POST", "/api/push/settings", { on: $("push-enabled").checked, quietFrom: $("push-qf").value, quietTo: $("push-qt").value }).then(renderPush); };
+    $("push-test").onclick = function () { call("POST", "/api/push/test").then(function (r) { $("push-msg").textContent = r.sent ? "Sent." : "Nothing was sent (alerts off or quiet hours)."; }); };
+    $("push-off").onclick = function () {
+        navigator.serviceWorker.ready.then(function (r) { return r.pushManager.getSubscription(); }).then(function (s) { if (s) s.unsubscribe(); })
+            .finally(function () { call("POST", "/api/push/unsubscribe").then(renderPush); });
+    };
+    if ("serviceWorker" in navigator) { try { navigator.serviceWorker.register("sw.js"); } catch (e) {} }
+
+    $("jobs-run").onclick = function () { call("POST", "/api/jobs/run").then(function () { $("jobs-last").textContent = "Running now…"; setTimeout(renderStatus, 8000); }); };
 
     // ---------- desktop: virtual Kindle ----------
     var ROT = 0;
@@ -163,7 +209,7 @@
     };
     $("pair-new").onclick = function () {
         call("POST", "/api/pair/code").then(function (c) {
-            var link = location.origin + "/#pair=" + c.code;
+            var link = shareBase() + "/#pair=" + c.code;
             $("pair-box").classList.remove("hidden"); $("pair-show").textContent = c.code;
             $("pair-until").textContent = "Works until " + new Date(c.until).toLocaleTimeString() + ".";
             try { $("pair-qr").innerHTML = qrSvg(link); } catch (e) { $("pair-qr").innerHTML = ""; }
@@ -192,7 +238,7 @@
         applyLayout(); renderList(); show(TAB);
     }
     // the PC itself needs no key; anyone else needs one
-    call("GET", "/api/status").then(start).catch(function (e) {
+    call("GET", "/api/status").then(function (s) { SHARE = s.share || ""; start(); }).catch(function (e) {
         if (e.status === 401 && !/#pair=/.test(location.hash) && KEY) { KEY = null; LS.removeItem("kh_key"); }
         if (e.status === 401 || /#pair=/.test(location.hash)) showPairing(); else start();     // offline: show the last copy
     });
