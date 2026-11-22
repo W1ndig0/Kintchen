@@ -63,6 +63,12 @@ function phone() {      // the receiving side: its keys, and RFC 8291 decryption
         P.settings("d1", { on: true, quietFrom: hr, quietTo: (hr + 1) % 24 });
         assert.strictEqual(await P.send({ title: "T", body: "quiet" }), 0, "quiet hours");
         assert.strictEqual(await P.send({ title: "T", body: "urgent", prio: 5 }), 1, "urgent goes through");
+        P.settings("d1", { on: true, quietFrom: 0, quietTo: 0, off: ["deals", "bogus"] });
+        assert.deepStrictEqual(Object.keys(P.subs.d1.settings.off), ["deals"]);
+        assert.strictEqual(await P.send({ title: "Price drop: Lego", body: "x" }), 0, "deals switched off");
+        assert.strictEqual(await P.send({ title: "Good morning - Monday", body: "x" }), 1, "briefing still on");
+        P.settings("d1", { on: true, quietFrom: 0, quietTo: 0 });
+        assert.ok(P.subs.d1.settings.off.deals, "a save without the list keeps it");
         gone = true; await P.send({ title: "T", body: "x", prio: 5 });
         assert.ok(!P.subs.d1, "410 removes the subscription");
         srv.close();

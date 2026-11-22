@@ -12,7 +12,7 @@ const http = require("http"), fs = require("fs"), path = require("path"), crypto
 const { atomicWrite } = require("./store.js");
 const { isLocal } = require("./auth.js");
 
-const VERSION = "11.0-dev";
+const VERSION = "11.2";
 const MAX_BODY = 2 * 1024 * 1024;
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
                 ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml",
@@ -192,7 +192,8 @@ function createServer(opts) {
         if (p === "/api/jobs/log" && m === "GET" && opts.jobs) return send(res, 200, (opts.jobs.last && opts.jobs.last.out) || "", "text/plain; charset=utf-8");
         if (p.startsWith("/api/push") && opts.pusher) {
             const P = opts.pusher; let j = {}; try { j = JSON.parse(body || "{}"); } catch (e) {}
-            if (p === "/api/push/key" && m === "GET") return send(res, 200, { key: P.keys.pub, subscribed: !!P.subs[who], settings: P.subs[who] ? P.subs[who].settings : null });
+            if (p === "/api/push/key" && m === "GET") return send(res, 200, { key: P.keys.pub, subscribed: !!P.subs[who], settings: P.subs[who] ? P.subs[who].settings : null,
+                                                                                cats: require("./webpush.js").CATS });
             if (p === "/api/push/subscribe" && m === "POST") return P.subscribe(who, j) ? send(res, 200, { ok: 1 }) : err(res, 400, "bad subscription");
             if (p === "/api/push/unsubscribe" && m === "POST") { P.unsubscribe(who); return send(res, 200, { ok: 1 }); }
             if (p === "/api/push/settings" && m === "POST") { const st = P.settings(who, j); return st ? send(res, 200, st) : err(res, 404, "alerts aren't on for this device"); }
@@ -235,7 +236,8 @@ function createServer(opts) {
                     .map(i => { const s = HubData.HubCal.parseShop(i.text); return { name: s.name, qty: s.qty }; }).filter(i => i.name);
                 if (!list.length) return err(res, 400, "the shopping list is empty");
                 const r = await P.check(list, now());
-                if (opts.pusher && j.alert !== false) opts.pusher.send({ title: "Price check", body: r.summary, prio: 3 }).catch(() => {});
+                if (opts.pusher && j.alert !== false) opts.pusher.send({ title: "Price check", body: r.summary, prio: 3, cat: "price" }).catch(() => {});
+                if (opts.onPriceCheck) opts.onPriceCheck(r);
                 return send(res, 200, r);
             }
             if (p === "/api/prices/last" && m === "GET") return send(res, 200, P.last() || {});
@@ -250,6 +252,24 @@ function createServer(opts) {
                 P.pick(j.item, j.store, j.reset ? null : j.none ? { none: 1 } : { name: String(j.name || "").slice(0, 160), price: Number(j.price) || 0 });
                 return send(res, 200, { ok: 1 });
             }
+        }
+        if (p === "/api/logs/bundle" && m === "GET") {      // everything to attach in chat when something is wrong (no keys in it)
+            const rd = (f, n) => { try { const t = fs.readFileSync(f, "utf8"); return n ? t.split("\n").slice(-n).join("\n") : t; } catch (e) { return "(none)"; } };
+            let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(path.join(dataDir, "config.json"), "utf8")); } catch (e) {}
+            ["legacyPass", "calToken", "pkgToken"].forEach(k => { if (cfg[k]) cfg[k] = "(set)"; });
+            const sec = (t, b) => "\n==== " + t + " ====\n" + b + "\n";
+            const jobs = opts.jobs && opts.jobs.last ? opts.jobs.last : null;
+            const t = "Kitchen Hub logs bundle - " + new Date(now()).toString() + "\n" +
+                sec("hub", "version " + VERSION + (process.env.KH_KIT ? " (kit " + process.env.KH_KIT + ")" : "") + " · node " + process.version + " · " + process.platform + " " + require("os").release() +
+                    " · up " + Math.round(process.uptime() / 60) + " min · items " + store.items().length) +
+                sec("config", JSON.stringify(cfg, null, 1)) +
+                sec("devices", auth.list().map(d => d.kind + " " + d.name + " " + d.id + " last seen " + (d.seen ? new Date(d.seen).toISOString() : "never") + " " + d.addr).join("\n") || "(none)") +
+                sec("fridge check-in (kindle.json)", rd(path.join(dataDir, "gist", "main", "kindle.json"))) +
+                sec("last jobs run", jobs ? JSON.stringify(Object.assign({}, jobs, { out: undefined })) + "\n" + (jobs.out || "") : "(not run yet)") +
+                sec("recent alerts", opts.jobs ? opts.jobs.alerts().slice(-20).map(a => new Date(a.at).toISOString() + " " + a.title + ": " + a.body.replace(/\n/g, " / ")).join("\n") : "") +
+                sec("hub.log (last 1500 lines)", rd(path.join(dataDir, "hub.log"), 1500)) +
+                sec("fridge log (sent by the fridge)", rd(path.join(dataDir, "logs", "kindle-log.txt")));
+            return send(res, 200, t, "text/plain; charset=utf-8", { "Content-Disposition": "attachment; filename=kitchen-hub-logs-" + new Date(now()).toISOString().slice(0, 10) + ".txt" });
         }
         if (p === "/api/view" && m === "POST") {       // a cookie so the virtual Kindle frame can load its data files
             const v = crypto.randomBytes(24).toString("hex"), until = now() + 12 * 3600000;

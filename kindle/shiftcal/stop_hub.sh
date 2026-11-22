@@ -12,7 +12,7 @@ HC_WHO=stop
 . "$DIR/hub_common.sh"
 
 JOBS=""
-for S in sync_data.sh hub_cloud.sh hub_update.sh hub_books.sh web_fetch.sh hub_merge.sh; do
+for S in sync_data.sh hub_cloud.sh hub_update.sh hub_books.sh hub_merge.sh; do
     JOBS="$JOBS $(hc_pids_matching "$S")"
 done
 NJ=$(hc_stop_pids 4 $JOBS)

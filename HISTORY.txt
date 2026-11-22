@@ -1,0 +1,1481 @@
+KITCHEN HUB - HISTORY
+=====================
+The update notes of every version before 11, newest first, in one file. (The notes for 11.x are the
+UPDATE_11.*.txt files.)
+
+
+####################################################################################################
+KITCHEN HUB 10.10.5 - THE EDITING SCREEN, THE STANDBY CLOCK, AND OTHER THINGS THAT LOOKED WRONG
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE.
+Things that were visibly wrong, found from photos of the fridge, and the editing screen laid out the way you asked.
+
+WHAT WAS WRONG
+ 1  THE EDIT BUTTONS WERE INVISIBLE. In 10.10 the whole bottom bar became the sleep timer, so most of
+    it is black. The buttons that appear when you tap a tile (S, M, L, XL, MOVE, SHUFFLE...) had black
+    edges and black writing, so on the black part of the bar they simply could not be seen; only the
+    one chosen size showed. Every button now has its own white face, and the chosen one is black with
+    a white edge, so they read on any part of the bar.
+ 2  A TILE STAYED "BEING EDITED" AFTER YOU PRESSED DONE. The tile you had last tapped kept its
+    editing cover for good: on the home page the Calendar was blank with "CHANGE IT IN THE BAR
+    BELOW" printed across it. Every tile you tapped after that left another cover stacked behind
+    it. They are all removed now, every time.
+ 3  The "change it in the bar below" note sat on the same line as the tile's name on a wide tile,
+    jammed against it. It is on its own line under the name.
+ 4  The PREV / NEXT buttons said CHEVL and CHEVR (the page flip on the home bar, and the arrows when
+    reading a story, a recipe, the day view, the calendar and the horoscope). They say PREV and NEXT.
+ 5  The title across the top ("GOOD EVENING", "EDITING LAYOUT") lost its last letter. The two empty
+    side cells took half the screen, leaving the title only about a quarter of it. The title now has
+    the room.
+
+THE EDITING SCREEN, AS YOU ASKED
+ 6  Tap a tile and its own controls are ON the tile: its size (S M L XL), the two arrows that move it
+    along, and the SHUFFLE switch. They are big enough for a finger, and the type shrinks on a small
+    tile until they all fit. The bottom bar keeps only what doesn't belong on a tile: TO PAGE 2 / 1,
+    HIDE, and ADD / OPTIONS. Tapping a button on the tile no longer also deselects the tile.
+ 7  The bottom bar is plain white while you edit (the black sleep-timer fill is off; the countdown to
+    standby is still in the left rail).
+ 8  On the home bar the page flip says PAGE 2 or PAGE 1.
+
+THE STANDBY CLOCK WAS SOMETIMES WRONG
+ 9  The Kindle can wake a second or two before the time it was asked to wake at, and "Hour only" asks
+    for the wake 3 seconds early on purpose. The hourly redraw then drew the standby page with the OLD
+    hour, so an hour-only clock stayed an hour behind until the next redraw, and a minute clock a
+    minute behind until its next tick. A wake now waits out those last seconds first, and so does a
+    minute tick that comes early.
+
+THE STANDBY PAGE (ASLEEP) LAYOUT
+10  On the upright screen the title was cut to "THE KITCHEN H" (it is shrunk to fit now).
+11  The weather line ("Overcast - H 0 L -6") wrapped under the weather picture on the upright screen;
+    it stays beside the picture now.
+12  The spot where the Kindle draws the clock digits and the weather animation was read in the middle
+    of drawing the page, before the weather picture, the bird of the hour and the last fitting of the
+    column. On a crowded page the digits and the animation landed a few pixels off the picture
+    (over the text beside it). They are read after the page is finished, and again if the bird's
+    picture arrives late and the column is fitted again. The bird's picture arriving late also pushed
+    the horoscope off the bottom of the column; that is fixed too.
+
+UNDER THE BONNET
+13  t26 draws the editing screen in the same old browser the Kindle uses and checks the above (it
+    fails on 10.10.4 on fourteen counts). t27 simulates the early wake: the old loop starts every
+    redraw 3 seconds before its time, this one starts it on time. t28 draws the standby page at all four
+    rotations, plain and crowded, and checks the title, the weather line, overlaps, the column, and
+    that the loop is told the true places (it fails on 10.10.4 on twenty-two counts).
+
+####################################################################################################
+KITCHEN HUB 10.10.4 - FASTER TAPS, AND THREE MORE FAULTS
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE.
+No new features. 10.10.3 was a hunt for faults; this one measures the hub instead of guessing, and
+makes the part you actually wait for - a tap in Settings - about three times quicker.
+
+WHY SETTINGS FELT SLOW
+ 1  While the background loop is dealing with one tap it cannot hear the next one. So however long the
+    loop takes to handle a tap is exactly how long the screen feels stuck. Measured here, almost all
+    of that time was the loop looking through the whole settings message about forty times over,
+    starting a separate little program for each look, even for the thirty-odd settings your tap had
+    nothing to do with. It now checks once whether your tap mentions a group of settings at all and
+    skips the whole group if it does not. A tap went from 43 to 15 milliseconds on this machine; the
+    Kindle is some ten to twenty times slower than that, so it is the same saving in the part you feel.
+ 2  The clock, the "wakes at" times and the file the loop hands the page are now worked out without
+    starting a program each time either - the same answers, fewer moving parts.
+ 3  When the loop does turn a tap away because it is still busy, the page now tries again after a sixth
+    of a second instead of waiting the better part of a second, and staggers repeat tries slightly so
+    two taps sent together stop colliding.
+
+FAULTS FOUND AND FIXED
+ 4  THE ALMANAC NEVER HAD ANY RELEASES IN IT. The cloud looks up the week's big games, films and TV
+    every six hours, and then the Sunday summary ("last 7 days: spent ...") was written over the top of
+    it before it was sent out. So the fridge's Almanac has always said "No big game, film or TV
+    releases this week". Both now have their own place and both arrive.
+ 5  Once all your books were locked with your passphrase, the cloud still downloaded every book in full
+    every quarter of an hour to check - every part of every book, for nothing. It now remembers which
+    books it has already locked.
+ 6  A bird whose photo could not be looked up (Wikipedia down, or no licence it was allowed to use) was
+    given up on for a whole month. It tries again after three days.
+
+UNDER THE BONNET
+ 7  A new test times the loop with every group of settings mentioned against a plain tap and fails if
+    the difference has crept back. It fails on 10.10.3 and passes on this one, so the saving cannot be
+    lost again without something going red.
+ 8  The build check now refuses to start if a setting is ever handled inside a group that does not name
+    it - the mistake that would otherwise make a setting silently stop working.
+ 9  Proof that none of the above changed any behaviour: thirty-nine settings were each sent to the old
+    loop and the new one, and everything both of them wrote was compared byte for byte.
+
+####################################################################################################
+KITCHEN HUB 10.10.3 - A NIGHT SPENT GOING THROUGH EVERYTHING
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE.
+No new features: this is a pass over the whole hub looking for faults, and what it found.
+
+THE BIG ONE
+ 1  A WEEK WITH NO SHIFTS FROZE THE HUB. The page tells the background loop when you are at work, and
+    when there is nothing in the next seven days it says "no work times at all". The loop wrote that
+    down in a way that left the file it hands the page (state.js) broken. From then on the page could
+    not read anything from the loop: the countdown stopped, it never learned it was asleep or awake,
+    and taps looked dead. Worst of all it was silent - a file that will not load still counts as
+    loaded, so nothing appeared in the log. Fixed, and the page now says so in the log if a file from
+    the loop ever stops making sense again.
+
+OTHER FAULTS FOUND AND FIXED
+ 2  After the Kindle refused to go to sleep once (it happens when the screen or Wi-Fi is still busy),
+    the hub thought the battery was at 3%, quietly switched to the 15-minute clock and stopped the
+    weather animation for the rest of the night.
+ 3  MAKE NEW KEYS also turned the Kindle on its side: making keys and rotating the screen were asking
+    for the same thing by mistake.
+ 4  If a small timing file was cut off in the middle of being written (a flat battery, a reset), the
+    next sync stopped dead at that point: no weather, no news, or a half-finished list sync.
+ 5  Tapping SYNC in the last seconds before the Kindle nodded off started a sync that the Kindle then
+    cut off by sleeping, and could leave Wi-Fi on. Now anything you ask for in those seconds keeps it
+    awake, not just a tap on the screen.
+ 6  The QR button on the shopping list always showed the old picture-of-the-list code instead of the
+    live list link for a paired phone.
+ 7  The battery report's "days left" was worked out from how much history it had, not from the battery.
+    The first day's report also had no starting percentage.
+ 8  Everything the page does on a timer came due at the same moment the Kindle woke up and ran in one
+    lump - part of why it felt slow for a second after waking. They are spread out again now.
+ 9  The battery report now shows in Settings > Sleep the first time you open it, not the second.
+10  Smaller things: a story cut off in the middle of an accented character no longer leaves a black
+    diamond in the news; a price that isn't a number can't stop the weather and news loading; the file
+    with your passphrase keeps its private permissions if it ever needs repairing; the hub clears its
+    own leftover listener instead of refusing to start; the weather animation keeps to its ten seconds
+    on a slow screen.
+
+UNDER THE BONNET
+11  The list code exists in four places (the Kindle page, the phone, the cloud and the fridge's own
+    shell). They are now checked against each other automatically, including a four-hundred-line test
+    that the shell's merge gives exactly the same answer as the phone's.
+12  If anything in the page's state handling ever throws, it is logged once and the page carries on,
+    instead of the screen quietly stopping.
+
+####################################################################################################
+KITCHEN HUB 10.10.2 - THE NIGHT CLOCK
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE.
+
+FIX
+ 1  At night the standby page switches to the big night screen. 10.10 only knew where the clock was on the
+    day page, so at night the page left its "10:--" placeholder up, and the loop drew the minutes where the
+    day page's digits had been (the small "31" above the hour). The night screen now draws its clock from
+    the same pictures as the loop, in a new extra-large size, and tells the loop exactly where the digits
+    are. If a standby page has no clock, the loop draws none.
+ 2  The first minute tick after the Kindle goes to sleep now redraws every digit, not just the ones that
+    changed, so a clock that was out of date on screen is corrected within a minute.
+ 3  The standby page is drawn again on each hourly redraw (and when a minute tick crosses the hour). Before,
+    only the clock was updated, so the "wakes ..." line, the story, the bird of the hour and the switch
+    between the day page and the night screen could stay out of date.
+ 4  The bottom bar no longer says "press the button" twice while asleep.
+
+####################################################################################################
+KITCHEN HUB 10.10.1 - FIXES THE FREEZING
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE.
+
+FIX
+ 1  THE CAUSE of the freezing in 10.10: when the minute changed, the left rail redrew its clock and lost the
+    status (awake, battery, updated) with it. 10.10 had dropped the check that used to put it back, so from
+    then on every refresh of the bottom bar failed: the sleep timer stopped moving, every tap caused an
+    error, and Settings stopped updating. The rail now keeps the status, and if it is ever lost the next
+    refresh puts it back. A refresh that fails can no longer stop anything else. Reproduced in an old
+    browser like the Kindle's and confirmed fixed.
+ 2  A tap on the sleeping screen opened whatever it landed on (Settings, the calendar...) while the hub went
+    on sleeping, so the Kindle seemed frozen with that screen up. Now a tap while asleep only wakes the hub.
+    The power button works as before.
+ 3  The bottom bar was rebuilt about a second after every tap (the loop answers a tap with a new state),
+    so the next tap on its buttons often did nothing. It is now only rebuilt when something on it changes.
+ 4  Any message from the page during the hourly redraw, or in the seconds before standby, switched the page
+    back to "awake". It now stays on the standby view.
+ 5  Where the clock digits and the weather picture are on the standby page was sent while the loop wasn't
+    listening, so it could get lost. The loop now listens in those seconds, and a tap then keeps the hub
+    awake. The page also tries again later if a send didn't arrive.
+ 6  Two messages sent together kept retrying at the same moment and colliding. Retries are now spread out.
+
+####################################################################################################
+KITCHEN HUB 10.10 - QUICK, QUIET AND EASY ON THE BATTERY
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE.
+
+SYNC
+ 1  The fridge only goes online when you tap SYNC. Waking it with the button or a tap no longer syncs, and
+    nothing on the page fetches anything by itself. Everything from the cloud (weather, news, markets,
+    birds, deals) arrives together in one package.
+ 2  An edit on the fridge (a list item ticked, added or removed) goes up right away in a short burst: Wi-Fi
+    on for 20 s at most, lists only. Settings > Sleep > "Send fridge edits" can hold them for the next
+    SYNC instead.
+ 3  Daily session (3 am by default): one quiet trip online that checks the clock, brings in phone, Siri
+    and PC changes and commands, fetches the cloud package only if it changed, checks for updates, and
+    sends the log and battery report. Phone list changes reach the fridge here, or when you tap SYNC.
+ 4  The cloud brain does its heavy work every 2 hours and repackages only when something really changed.
+    It stays far inside GitHub's free limits.
+
+STANDBY
+ 5  The clock keeps ticking every minute all night while the Kindle sleeps. Only the changed digits are
+    drawn, from ready-made pictures, with no page or Wi-Fi involved, so each tick costs a second or so.
+    Settings > Sleep: every minute, every 15 min, hour only or off; a different choice at night.
+    This replaces the old home / work / night wake intervals (the night hours are still used).
+ 6  Every hour the standby page is redrawn cleanly: the weather picture plays a ~10 s animation of the
+    current weather, then stays still, and the bird of the hour and the news change.
+ 7  The battery report: each morning the log, the phone (Fridge tab) and Settings > Sleep show what
+    yesterday cost: battery used, wakes, time awake, Wi-Fi trips and seconds, clock ticks.
+ 8  Battery saver (on by default): below 15% the clock changes every 15 minutes and the animation is skipped.
+
+SCREEN
+ 9  The left rail always shows awake, battery and last updated. APPS moved to the bottom of the rail; the
+    HIDE button is gone (the rail tucks away by itself while asleep).
+10  The whole bottom bar is the sleep timer: it fills up as the Kindle gets ready to sleep, with the text
+    inverted over the filled part. The bottom bar is now only for app buttons and editing, and its
+    buttons are 50% bigger.
+11  Editing: tap a tile to select it; its own buttons appear at the bottom (size, move, to page, shuffle,
+    hide, options). No more hunting for small handles.
+12  The page is quicker: one shared timer instead of a dozen, data re-read only after a sync, and the
+    data shown only redrawn when it changed.
+
+####################################################################################################
+KITCHEN HUB 10.9.4 - CLEANUP AFTER THE FIRST REAL START
+Installs by itself like any update: Settings > Updates > CHECK FOR UPDATE.
+
+FIX
+ 1  The start-up error box stayed on the screen after the hub had started. It now clears itself as soon as
+    the hub is running, and only shows up at all if the hub can't start.
+ 2  The box (and the log) listed "a file failed to load: horo.js". That file is optional (the hub makes its
+    own horoscopes when it's missing); such files are now noted once in the log, never on the screen.
+ 3  "JavaScript execution exceeded timeout": the 10.9.2 start-up black box reported every step on the spot
+    and made the page wait for each one, so start-up took about 19 s instead of ~10 and the Kindle's
+    browser cut a script short. Steps are now only remembered; errors are still reported.
+ 4  data.js (weather and news) wouldn't load on the Kindle: "Parse error" on its news line. Invisible
+    line-separator and control characters from news text (fine for the cloud's newer JavaScript, not for
+    the Kindle's older engine) are now cleaned out in the cloud and on the Kindle. If data.js ever fails
+    again, the log describes the failing line, so the cause can be pinned down.
+
+FROM 10.9.3
+ 5  THE CAUSE of every 10.9 rollback (blank screen): while the page started, a 10.9 step that re-sends
+    list items the Kindle file was missing wrote a note through a helper whose memory was only set up
+    ~1900 lines further down the page. On a Kindle with saved list items that crashed the page's
+    start-up, so it never said "I'm up". The 10.9.2 black box caught the exact error. The helper is set
+    up first now, and a list hiccup can no longer stop start-up. Reproduced and confirmed fixed in an old
+    browser like the Kindle's, with list items of every kind.
+ 6  GitHub's upload check now also scans the page for start-up code that reads something before it is
+    set. It flags 10.9.2 and passes 10.9.3, so this kind of bug can't reach the fridge again.
+ 7  The weather in data.js could be a cut-off download (it only had to contain the words "hourly" and
+    "daily"), which made data.js fail to load: no weather or news. The cloud now leaves out any file that
+    isn't valid, and the Kindle only uses a whole weather reply.
+ 8  10.9 turned the frontlight OFF every time it started or woke (the new light setting defaulted to
+    Off). Now the hub leaves the light alone unless you pick a level in Settings > Sleep > Light while
+    you use it ("Kindle's own" is the default).
+
+SECURITY
+ 9  Authenticator codes: Settings > Security > SET UP shows a code for Google or Microsoft Authenticator.
+    After that, pairing codes, the first cloud connection and new keys need a fresh 6-digit code.
+10  Pairing codes are sealed: the QR holds everything locked with a one-time code shown next to it, never
+    inside it. A copied or photographed link alone opens nothing. The shopping-list QR only opens the app.
+11  MAKE NEW KEYS: the Kindle makes a new passphrase, alert channel and monitor channel itself. Old
+    lists and books still open until you tap FINISH; the screen walks you through the GitHub secrets.
+    Fridges that used the old built-in passphrase are told to do this.
+12  A new GitHub token goes in on the phone (Fridge > New GitHub token); the fridge picks it up itself.
+13  The fridge's settings port needs a key now, so other devices on your Wi-Fi can't stop the hub, undo an
+    update or send phone alerts. Fixed: a phone alert could be made to send a file off the Kindle.
+14  The phone app and TV page are hidden from search engines and do nothing until paired. The PC helper
+    asks for the pairing link (it no longer stays in PowerShell's history) and locks its saved token.
+
+BATTERY
+15  Timer wakes are quick: the fridge refreshes the asleep screen in a few seconds and sleeps again,
+    instead of staying awake for 2 minutes with nobody there (and flashing the screen twice). The power
+    button, or a tap while it refreshes, opens the hub as before. Settings > Sleep > Timer wakes.
+16  The asleep clock is honest: the exact time and "until 6:00 PM" (at night, "back at"). Or choose
+    "every minute": a 3-second wake each minute changes just the time (no Wi-Fi, no touch).
+17  Settings > Sleep shows how much battery an hour it uses lately, to compare settings. New: a light
+    setting for while you use the hub (off asleep), or leave it to the Kindle (the default).
+
+HOME SCREEN
+18  Spare room goes to tiles whose content didn't fit; an empty shopping list or idle timer shrinks.
+19  Small cards fill leftover space: bird of the hour, tomorrow's shift, sunrise or sunset, the next
+    holiday or event. No more blank holes.
+20  Live boosts: a running timer, rain or a storm in the next 3 hours, or a shift within 2 hours makes
+    that tile bigger (up to two, kept at least 30 minutes so the screen doesn't jump).
+21  Bird of the hour: birds of Prince George for the season, with real photos (free-licence Wikimedia
+    Commons pictures, photographer credited).
+
+KITCHEN MONITOR
+22  APPS > Kitchen screen controls the TV page on a mini PC: dashboard, big clock, your timer, a tavern
+    menu board, the week, news, screen off, cook a recipe step by step. Pair the monitor once:
+    Settings > Security > TV / MONITOR. Commands are locked and can't be replayed.
+23  See-through look for transparent screens: black is clear glass, the type is warm and bright.
+
+SYSTEM
+24  Settings > System (was Log): a task manager - CPU, memory, storage, battery, the busiest programs and
+    the Kindle's own services. It only looks; the list goes to your cloud log so a later "hub mode" can
+    pause only services that are safe to pause on your Kindle.
+
+FIXES
+25  Changes made on the fridge could get lost when its background loop was busy; they're sent one batch
+    at a time now, retried, and sent again if the fridge's file doesn't have them.
+26  The cloud brain can't hang any more when GitHub or ntfy doesn't answer (it stops after 45 s).
+27  The asleep front page no longer cuts a story in the middle of a symbol.
+
+####################################################################################################
+KITCHEN HUB 10.9.3 - THE START-UP CRASH, FOUND AND FIXED
+Installs by itself like any update: merge it on GitHub, then tap Settings > Updates > CHECK FOR UPDATE.
+If it starts: Settings > SECURITY > SET UP (one time, 2 minutes).
+
+FIX
+ 1  THE CAUSE of every 10.9 rollback (blank screen): while the page started, a 10.9 step that re-sends
+    list items the Kindle file was missing wrote a note through a helper whose memory was only set up
+    ~1900 lines further down the page. On a Kindle with saved list items that crashed the page's
+    start-up, so it never said "I'm up". The 10.9.2 black box caught the exact error. The helper is set
+    up first now, and a list hiccup can no longer stop start-up. Reproduced and confirmed fixed in an old
+    browser like the Kindle's, with list items of every kind.
+ 2  GitHub's upload check now also scans the page for start-up code that reads something before it is
+    set. It flags 10.9.2 and passes 10.9.3, so this kind of bug can't reach the fridge again.
+ 3  The weather in data.js could be a cut-off download (it only had to contain the words "hourly" and
+    "daily"), which made data.js fail to load: no weather or news. The cloud now leaves out any file that
+    isn't valid, and the Kindle only uses a whole weather reply.
+ 4  10.9 turned the frontlight OFF every time it started or woke (the new light setting defaulted to
+    Off). Now the hub leaves the light alone unless you pick a level in Settings > Sleep > Light while
+    you use it ("Kindle's own" is the default).
+
+SECURITY
+ 5  Authenticator codes: Settings > Security > SET UP shows a code for Google or Microsoft Authenticator.
+    After that, pairing codes, the first cloud connection and new keys need a fresh 6-digit code.
+ 6  Pairing codes are sealed: the QR holds everything locked with a one-time code shown next to it, never
+    inside it. A copied or photographed link alone opens nothing. The shopping-list QR only opens the app.
+ 7  MAKE NEW KEYS: the Kindle makes a new passphrase, alert channel and monitor channel itself. Old
+    lists and books still open until you tap FINISH; the screen walks you through the GitHub secrets.
+    Fridges that used the old built-in passphrase are told to do this.
+ 8  A new GitHub token goes in on the phone (Fridge > New GitHub token); the fridge picks it up itself.
+ 9  The fridge's settings port needs a key now, so other devices on your Wi-Fi can't stop the hub, undo an
+    update or send phone alerts. Fixed: a phone alert could be made to send a file off the Kindle.
+10  The phone app and TV page are hidden from search engines and do nothing until paired. The PC helper
+    asks for the pairing link (it no longer stays in PowerShell's history) and locks its saved token.
+
+BATTERY
+11  Timer wakes are quick: the fridge refreshes the asleep screen in a few seconds and sleeps again,
+    instead of staying awake for 2 minutes with nobody there (and flashing the screen twice). The power
+    button, or a tap while it refreshes, opens the hub as before. Settings > Sleep > Timer wakes.
+12  The asleep clock is honest: the exact time and "until 6:00 PM" (at night, "back at"). Or choose
+    "every minute": a 3-second wake each minute changes just the time (no Wi-Fi, no touch).
+13  Settings > Sleep shows how much battery an hour it uses lately, to compare settings. New: a light
+    setting for while you use the hub (off asleep), or leave it to the Kindle (the default).
+
+HOME SCREEN
+14  Spare room goes to tiles whose content didn't fit; an empty shopping list or idle timer shrinks.
+15  Small cards fill leftover space: bird of the hour, tomorrow's shift, sunrise or sunset, the next
+    holiday or event. No more blank holes.
+16  Live boosts: a running timer, rain or a storm in the next 3 hours, or a shift within 2 hours makes
+    that tile bigger (up to two, kept at least 30 minutes so the screen doesn't jump).
+17  Bird of the hour: birds of Prince George for the season, with real photos (free-licence Wikimedia
+    Commons pictures, photographer credited).
+
+KITCHEN MONITOR
+18  APPS > Kitchen screen controls the TV page on a mini PC: dashboard, big clock, your timer, a tavern
+    menu board, the week, news, screen off, cook a recipe step by step. Pair the monitor once:
+    Settings > Security > TV / MONITOR. Commands are locked and can't be replayed.
+19  See-through look for transparent screens: black is clear glass, the type is warm and bright.
+
+SYSTEM
+20  Settings > System (was Log): a task manager - CPU, memory, storage, battery, the busiest programs and
+    the Kindle's own services. It only looks; the list goes to your cloud log so a later "hub mode" can
+    pause only services that are safe to pause on your Kindle.
+
+FIXES
+21  Changes made on the fridge could get lost when its background loop was busy; they're sent one batch
+    at a time now, retried, and sent again if the fridge's file doesn't have them.
+22  The cloud brain can't hang any more when GitHub or ntfy doesn't answer (it stops after 45 s).
+23  The asleep front page no longer cuts a story in the middle of a symbol.
+
+####################################################################################################
+KITCHEN HUB 10.9.2 - 10.9 WITH A START-UP BLACK BOX
+Installs by itself like any update: merge it on GitHub, then tap Settings > Updates > CHECK FOR UPDATE.
+If it starts: Settings > SECURITY > SET UP (one time, 2 minutes). If it rolls back again, send the log.
+
+FIX
+ 1  10.9 and 10.9.1 rolled back on the fridge: the new page never got a single message to the loop and
+    the screen stayed blank. It works in every browser and test here, so 10.9.2 adds a start-up black box:
+    the log (Phone app > Fridge > Show the last log) gets each start-up step as it happens, which files
+    loaded and any script error with its file and line, and a script error also shows on the screen
+    instead of a blank page. If it rolls back again, that names the cause. The 10.9.1 fixes are still in.
+ 2  10.9 turned the frontlight OFF every time it started or woke (the new light setting defaulted to
+    Off). Now the hub leaves the light alone unless you pick a level in Settings > Sleep > Light while
+    you use it ("Kindle's own" is the default).
+
+
+SECURITY
+ 3  Authenticator codes: Settings > Security > SET UP shows a code for Google or Microsoft Authenticator.
+    After that, pairing codes, the first cloud connection and new keys need a fresh 6-digit code.
+ 4  Pairing codes are sealed: the QR holds everything locked with a one-time code shown next to it, never
+    inside it. A copied or photographed link alone opens nothing. The shopping-list QR only opens the app.
+ 5  MAKE NEW KEYS: the Kindle makes a new passphrase, alert channel and monitor channel itself. Old
+    lists and books still open until you tap FINISH; the screen walks you through the GitHub secrets.
+    Fridges that used the old built-in passphrase are told to do this.
+ 6  A new GitHub token goes in on the phone (Fridge > New GitHub token); the fridge picks it up itself.
+ 7  The fridge's settings port needs a key now, so other devices on your Wi-Fi can't stop the hub, undo an
+    update or send phone alerts. Fixed: a phone alert could be made to send a file off the Kindle.
+ 8  The phone app and TV page are hidden from search engines and do nothing until paired. The PC helper
+    asks for the pairing link (it no longer stays in PowerShell's history) and locks its saved token.
+
+BATTERY
+ 9  Timer wakes are quick: the fridge refreshes the asleep screen in a few seconds and sleeps again,
+    instead of staying awake for 2 minutes with nobody there (and flashing the screen twice). The power
+    button, or a tap while it refreshes, opens the hub as before. Settings > Sleep > Timer wakes.
+10  The asleep clock is honest: the exact time and "until 6:00 PM" (at night, "back at"). Or choose
+    "every minute": a 3-second wake each minute changes just the time (no Wi-Fi, no touch).
+11  Settings > Sleep shows how much battery an hour it uses lately, to compare settings. New: a light
+    setting for while you use the hub (off asleep), or leave it to the Kindle (the default).
+
+HOME SCREEN
+12  Spare room goes to tiles whose content didn't fit; an empty shopping list or idle timer shrinks.
+13  Small cards fill leftover space: bird of the hour, tomorrow's shift, sunrise or sunset, the next
+    holiday or event. No more blank holes.
+14  Live boosts: a running timer, rain or a storm in the next 3 hours, or a shift within 2 hours makes
+    that tile bigger (up to two, kept at least 30 minutes so the screen doesn't jump).
+15  Bird of the hour: birds of Prince George for the season, with real photos (free-licence Wikimedia
+    Commons pictures, photographer credited).
+
+KITCHEN MONITOR
+16  APPS > Kitchen screen controls the TV page on a mini PC: dashboard, big clock, your timer, a tavern
+    menu board, the week, news, screen off, cook a recipe step by step. Pair the monitor once:
+    Settings > Security > TV / MONITOR. Commands are locked and can't be replayed.
+17  See-through look for transparent screens: black is clear glass, the type is warm and bright.
+
+SYSTEM
+18  Settings > System (was Log): a task manager - CPU, memory, storage, battery, the busiest programs and
+    the Kindle's own services. It only looks; the list goes to your cloud log so a later "hub mode" can
+    pause only services that are safe to pause on your Kindle.
+
+FIXES
+19  Changes made on the fridge could get lost when its background loop was busy; they're sent one batch
+    at a time now, retried, and sent again if the fridge's file doesn't have them.
+20  The cloud brain can't hang any more when GitHub or ntfy doesn't answer (it stops after 45 s).
+21  The asleep front page no longer cuts a story in the middle of a symbol.
+
+####################################################################################################
+KITCHEN HUB 10.9.1 - 10.9, NOW STARTING RELIABLY
+Installs by itself like any update: merge it on GitHub, then the fridge offers it ("Tell me") or you tap
+Settings > Updates > CHECK FOR UPDATE. After it: Settings > SECURITY > SET UP (one time, 2 minutes).
+
+FIX
+ 1  10.9 could stop at "All checks passed" and roll itself back after 90 seconds. Start-up no longer depends
+    on the new settings-port key (the log says whether the page's key arrived), the task-manager probe waits
+    until the hub is up, random numbers are read in a way older Kindles can't get stuck on, and the new
+    layout features start once the page is up.
+
+
+SECURITY
+ 2  Authenticator codes: Settings > Security > SET UP shows a code for Google or Microsoft Authenticator.
+    After that, pairing codes, the first cloud connection and new keys need a fresh 6-digit code.
+ 3  Pairing codes are sealed: the QR holds everything locked with a one-time code shown next to it, never
+    inside it. A copied or photographed link alone opens nothing. The shopping-list QR only opens the app.
+ 4  MAKE NEW KEYS: the Kindle makes a new passphrase, alert channel and monitor channel itself. Old
+    lists and books still open until you tap FINISH; the screen walks you through the GitHub secrets.
+    Fridges that used the old built-in passphrase are told to do this.
+ 5  A new GitHub token goes in on the phone (Fridge > New GitHub token); the fridge picks it up itself.
+ 6  The fridge's settings port needs a key now, so other devices on your Wi-Fi can't stop the hub, undo an
+    update or send phone alerts. Fixed: a phone alert could be made to send a file off the Kindle.
+ 7  The phone app and TV page are hidden from search engines and do nothing until paired. The PC helper
+    asks for the pairing link (it no longer stays in PowerShell's history) and locks its saved token.
+
+BATTERY
+ 8  Timer wakes are quick: the fridge refreshes the asleep screen in a few seconds and sleeps again,
+    instead of staying awake for 2 minutes with nobody there (and flashing the screen twice). The power
+    button, or a tap while it refreshes, opens the hub as before. Settings > Sleep > Timer wakes.
+ 9  The asleep clock is honest: the exact time and "until 6:00 PM" (at night, "back at"). Or choose
+    "every minute": a 3-second wake each minute changes just the time (no Wi-Fi, no touch).
+10  Settings > Sleep shows how much battery an hour it uses lately, to compare settings. New: a light
+    setting for while you use the hub (always off asleep).
+
+HOME SCREEN
+11  Spare room goes to tiles whose content didn't fit; an empty shopping list or idle timer shrinks.
+12  Small cards fill leftover space: bird of the hour, tomorrow's shift, sunrise or sunset, the next
+    holiday or event. No more blank holes.
+13  Live boosts: a running timer, rain or a storm in the next 3 hours, or a shift within 2 hours makes
+    that tile bigger (up to two, kept at least 30 minutes so the screen doesn't jump).
+14  Bird of the hour: birds of Prince George for the season, with real photos (free-licence Wikimedia
+    Commons pictures, photographer credited).
+
+KITCHEN MONITOR
+15  APPS > Kitchen screen controls the TV page on a mini PC: dashboard, big clock, your timer, a tavern
+    menu board, the week, news, screen off, cook a recipe step by step. Pair the monitor once:
+    Settings > Security > TV / MONITOR. Commands are locked and can't be replayed.
+16  See-through look for transparent screens: black is clear glass, the type is warm and bright.
+
+SYSTEM
+17  Settings > System (was Log): a task manager - CPU, memory, storage, battery, the busiest programs and
+    the Kindle's own services. It only looks; the list goes to your cloud log so a later "hub mode" can
+    pause only services that are safe to pause on your Kindle.
+
+FIXES
+18  Changes made on the fridge could get lost when its background loop was busy; they're sent one batch
+    at a time now, retried, and sent again if the fridge's file doesn't have them.
+19  The cloud brain can't hang any more when GitHub or ntfy doesn't answer (it stops after 45 s).
+20  The asleep front page no longer cuts a story in the middle of a symbol.
+
+####################################################################################################
+KITCHEN HUB 10.9 - SAFER, LONGER BATTERY, SMARTER SCREEN, A KITCHEN MONITOR
+Installs by itself like any update: merge it on GitHub, then the fridge offers it ("Tell me") or you tap
+Settings > Updates > CHECK FOR UPDATE. After it: Settings > SECURITY > SET UP (one time, 2 minutes).
+
+SECURITY
+ 1  Authenticator codes: Settings > Security > SET UP shows a code for Google or Microsoft Authenticator.
+    After that, pairing codes, the first cloud connection and new keys need a fresh 6-digit code.
+ 2  Pairing codes are sealed: the QR holds everything locked with a one-time code shown next to it, never
+    inside it. A copied or photographed link alone opens nothing. The shopping-list QR only opens the app.
+ 3  MAKE NEW KEYS: the Kindle makes a new passphrase, alert channel and monitor channel itself. Old
+    lists and books still open until you tap FINISH; the screen walks you through the GitHub secrets.
+    Fridges that used the old built-in passphrase are told to do this.
+ 4  A new GitHub token goes in on the phone (Fridge > New GitHub token); the fridge picks it up itself.
+ 5  The fridge's settings port needs a key now, so other devices on your Wi-Fi can't stop the hub, undo an
+    update or send phone alerts. Fixed: a phone alert could be made to send a file off the Kindle.
+ 6  The phone app and TV page are hidden from search engines and do nothing until paired. The PC helper
+    asks for the pairing link (it no longer stays in PowerShell's history) and locks its saved token.
+
+BATTERY
+ 7  Timer wakes are quick: the fridge refreshes the asleep screen in a few seconds and sleeps again,
+    instead of staying awake for 2 minutes with nobody there (and flashing the screen twice). The power
+    button, or a tap while it refreshes, opens the hub as before. Settings > Sleep > Timer wakes.
+ 8  The asleep clock is honest: the exact time and "until 6:00 PM" (at night, "back at"). Or choose
+    "every minute": a 3-second wake each minute changes just the time (no Wi-Fi, no touch).
+ 9  Settings > Sleep shows how much battery an hour it uses lately, to compare settings. New: a light
+    setting for while you use the hub (always off asleep).
+
+HOME SCREEN
+10  Spare room goes to tiles whose content didn't fit; an empty shopping list or idle timer shrinks.
+11  Small cards fill leftover space: bird of the hour, tomorrow's shift, sunrise or sunset, the next
+    holiday or event. No more blank holes.
+12  Live boosts: a running timer, rain or a storm in the next 3 hours, or a shift within 2 hours makes
+    that tile bigger (up to two, kept at least 30 minutes so the screen doesn't jump).
+13  Bird of the hour: birds of Prince George for the season, with real photos (free-licence Wikimedia
+    Commons pictures, photographer credited).
+
+KITCHEN MONITOR
+14  APPS > Kitchen screen controls the TV page on a mini PC: dashboard, big clock, your timer, a tavern
+    menu board, the week, news, screen off, cook a recipe step by step. Pair the monitor once:
+    Settings > Security > TV / MONITOR. Commands are locked and can't be replayed.
+15  See-through look for transparent screens: black is clear glass, the type is warm and bright.
+
+SYSTEM
+16  Settings > System (was Log): a task manager - CPU, memory, storage, battery, the busiest programs and
+    the Kindle's own services. It only looks; the list goes to your cloud log so a later "hub mode" can
+    pause only services that are safe to pause on your Kindle.
+
+FIXES
+17  Changes made on the fridge could get lost when its background loop was busy; they're sent one batch
+    at a time now, retried, and sent again if the fridge's file doesn't have them.
+18  The cloud brain can't hang any more when GitHub or ntfy doesn't answer (it stops after 45 s).
+19  The asleep front page no longer cuts a story in the middle of a symbol.
+
+####################################################################################################
+KITCHEN HUB 10.8 - FASTER, TIDIER, A BETTER PHONE APP
+Installs by itself like any update: merge it on GitHub, then the fridge offers it ("Tell me") or you tap
+Settings > Updates > CHECK FOR UPDATE.
+
+SPEED
+ 1  The hub no longer slows down the more you open things and edit. Every screen used to add new touch
+    handlers to every button each time it was drawn (about 2,400 per round of opening and editing), and
+    they piled up. Now one set handles every button.
+ 2  Fixed: SHOW THE 1-MINUTE TOUR in Settings started once for every time Settings had been opened.
+ 3  The shuffle timer checks every 2.5 seconds instead of every second (fewer wake-ups).
+
+HOME SCREEN
+ 4  When the dock is crowded (a page 2, or the edit tray), AWAKE, the battery and UPDATED move to the side
+    rail under the time, and the dock gets the whole width. They go back when there is room.
+ 5  The Almanac tile fills its space: it tries stacked lines when the tile is narrow, so the text can be
+    bigger instead of leaving the bottom half empty. It lists the week's big releases by day.
+ 6  A small Stars tile shows the day's reading when it fits at a readable size.
+ 7  Everything on the hub (APPS): 12 a page instead of 6 big, mostly empty cards - 2 pages instead of 4.
+
+ASLEEP SCREEN
+ 8  The moon tag (pointing at the power button) is smaller and sits in the top corner. The strip that was
+    kept free for it down the side goes back to the news, so headlines are no longer cut short.
+
+PHONE APP
+ 9  Tabs are at the bottom, in thumb reach: LIST, CALENDAR, DEALS, FRIDGE and MORE (recipes, board,
+    pantry, home, books). The header is one short line.
+10  DEALS starts with the deals the cloud found for you - photo, sale price, regular price crossed out,
+    % off and why - the same list the fridge shows. Tap one to open it at Best Buy.
+11  Adding a shift: tap a start, the minutes and a length (or OFF, or "same as last week"). No typing.
+12  Forms wrap on narrow phones instead of squeezing their boxes until the hints are cut off.
+
+####################################################################################################
+KITCHEN HUB 10.7 - DEALS WITH PHOTOS, A REAL PAGE 2, BIG THIS WEEK, SHIFT PICKER
+Installs by itself like any update: merge it on GitHub, then the fridge offers it ("Tell me") or you tap
+Settings > Updates > CHECK FOR UPDATE.
+
+DEALS
+ 1  The Deals page opens on a new DEALS tab: a card per deal with its photo, the sale price, the regular
+    price crossed out, the % off, and why it's there (on your wishlist, at your price, or like something
+    you watch). Photos arrive with the sync after the update.
+ 2  At least five deals whenever Best Buy has them: your wishlist first, then similar things on sale, then
+    the same kind of thing more broadly. Marketplace sellers' made-up "regular" prices don't count.
+ 3  The Deals tile shows the best deal with its photo, then a line per deal while there is room.
+
+HOME SCREEN
+ 4  Page 2 is a real page now. EDIT works on either page (EDIT PAGE 1 / EDIT PAGE 2 in the tray), and
+    PAGE 1 / PAGE 2 on a tile moves it across. Your layout carries over: what was hidden is on page 2.
+ 5  SHUFFLE (while editing): mark two or more tiles and they take turns in one spot, changing every 10,
+    15, 30 or 60 seconds (SHUFFLE EVERY in the tray). Only that spot redraws.
+ 6  MORE TILES: ON (in the tray): a finer grid, so more fits on each page.
+
+ALMANAC
+ 7  The Almanac tile leads with the biggest release of the week, for example "THIS WEEK Grand Theft
+    Auto VI - today".
+ 8  Tapping it opens the new Almanac. THIS WEEK: the week's biggest games, films and TV, each with
+    headlines from Google News, and for games and films the Best Buy price and related sales. LOCAL:
+    your week (shifts, events, holidays), road and weather alerts, Prince George news. SKY: the moon,
+    three days of sun times, and on this day.
+ 9  The cloud looks every 6 hours. "Biggest" means most widely covered on Wikipedia, so it is the
+    world's big releases, not only Canada's.
+
+CALENDAR
+10  Adding a shift without typing: on a day, tap PICK HOURS, then a start (5a to 4a), the minutes
+    (00, 15, 30, 45) and a length (4 to 12 h) or an end time. "(last wk)" copies last week's shift for
+    that day. TYPE still lets you type one.
+
+ASLEEP SCREEN
+11  Settings > Look > YOUR CARDS WHILE ASLEEP: up to two cards under the clock on the asleep screens -
+    Big this week, Top deal, Shopping list, 3-day forecast, Moon & sun, or a Joke or fact. The first card
+    starts as Big this week; set it to Off if you'd rather not have it.
+
+LOGS
+12  The hub sends its log to your private cloud gist (kindle-log.txt) once a day, and on the next sync
+    after something goes wrong (a failed start, an update undone, an install that failed). The log says
+    why it was sent. Tokens are blanked out, as before.
+
+FIXES
+13  The GitHub setup notes no longer show the passphrase.
+
+####################################################################################################
+KITCHEN HUB 10.6 - SETTINGS REFRESH, SMART WAKE SCHEDULE
+Installs by itself like any update: merge it on GitHub, then the fridge offers it ("Tell me") or you tap
+Settings > Updates > CHECK FOR UPDATE.
+
+SETTINGS
+ 1  Every Settings tab scrolls: drag up or down anywhere on it, or tap the arrows on the right. The bar
+    on the right shows where you are and only appears when there is more below.
+ 2  New UPDATES tab: cloud brain, data from the cloud, check for update, send log, back up and restore
+    settings, the update choice, go back to the previous version and what's new - all in one place.
+ 3  PHONE tab: pairing, list sync, timer alerts, and the calendar and TV codes (now one per line, with
+    readable text beside them).
+ 4  The BATTERY tab joined SLEEP: the wake schedule, stay-awake time, standby picture, status and battery
+    history are all on one tab.
+ 5  Fixed: with a second person set up, CHECK FOR UPDATE, SEND LOG, BACK UP and RESTORE did nothing.
+ 6  The EXIT HUB note no longer mentions KUAL.
+
+SMART WAKE SCHEDULE (Settings > Sleep)
+ 7  "Smart: home, work, night" (the new default): the hub wakes every 15 minutes when you're home, every
+    2 hours while you're at work, and every 3 hours at night (11 PM to 6 AM). Each one can be changed.
+ 8  Work times come from your shifts in the calendar, with half an hour either side for the trip. When a
+    shift or the night ends, the hub wakes right then, so it's back to every 15 minutes when you get home.
+ 9  A full sync (Wi-Fi) still happens at most once an hour; a 15-minute wake just refreshes the screen.
+    "Full sync at most every" sets that. "Same all day" is the old fixed interval.
+
+SIDE RAIL
+10  The side rail hides while the hub sleeps, so the standby picture uses the whole screen. It comes back
+    when the hub wakes.
+
+UPDATES
+11  The fridge never installs an older version than the one it runs (for example a site that still has
+    an old kit). GO BACK TO THE PREVIOUS VERSION is still the way back.
+
+####################################################################################################
+KITCHEN HUB 10.5 - STARTS RELIABLY, STOPS CLEANLY
+A bug-fix release. No new features: everything here makes the hub start, restart, update and stop
+without locking up the Kindle.
+
+INSTALL
+ Because the fridge may still be running an older mix of files, copy this version over USB once:
+ 1  Tap "Kitchen Hub Reset" in the Kindle library (or restart the Kindle), then plug it into the PC.
+ 2  Copy everything in kindle/shiftcal over extensions/shiftcal on the Kindle. Your cloud.conf, lists
+    and settings are not in the kit, so they are kept. (eco.conf in the kit holds the defaults; skip it
+    if you changed settings by hand.)
+ 3  Copy the five files in kindle/documents to the Kindle's documents folder (the library buttons).
+ 4  Unplug, tap "Kitchen Hub Display". From 10.5 on, updates arrive by themselves again.
+ GitHub: upload the whole kit as before. The build check now also refuses an upload where the page and
+ the scripts are different versions, a script has Windows line endings, or a needed file is missing.
+
+"THE APPLICATION COULD NOT BE STARTED"
+ 1  The hub page was started twice: the launcher opened it, and the background loop sent a second
+    "start" a few seconds later, while the page was still loading - and again on every wake. The page is
+    now started in exactly one place, and never while it is already running.
+ 2  If the Kindle was slow to open the page, the launcher started a second copy of it behind the Kindle's
+    back after 10 seconds. That is gone; the launcher waits up to 30 seconds for the one copy.
+ 3  Two taps on Kitchen Hub Display started two launchers that fought each other. The second one now
+    steps aside.
+ 4  The hub recognises its own page by the exact process it started, so the Kindle's browser (or another
+    app) is never mistaken for the hub, and the hub never closes another app's window.
+
+THE RESTART LOOP
+ 5  "Install update" when there was nothing new still said "update installed - restarting the hub". A
+    second tap on INSTALL restarted the hub over and over. Now only a real install restarts it, once.
+ 6  A tap the page re-sends right after a restart is recognised and not run a second time.
+ 7  If the hub page closes on its own 3 times in 15 minutes, the hub stops cleanly (and says why on the
+    next launch) instead of reopening it forever.
+
+STOPPING AND CLEAN-UP
+ 8  One stop script (stop_hub.sh) for everything: the launcher, Reset, Soft Reset, Kill Background and
+    the hub's own exit all use it. Before 10.5 five scripts each had their own list of what to stop.
+ 9  Stopping asks nicely first and only forces programs that don't listen. After a forced stop it puts
+    back what the hub changes while it runs (the paused power manager, the wake alarm, the CPU setting).
+10  A sync that runs too long is stopped together with everything it started, and Wi-Fi goes off.
+    Before, its downloads kept running and Wi-Fi could stay on through the night.
+11  A page that never talks to the hub is stopped after 90 seconds as before - and the page now says
+    "I'm up" every 10 seconds until the hub hears it, so a working page is no longer stopped by mistake.
+12  Scripts saved on Windows (CR LF line endings) are fixed during the launch instead of stopping it.
+
+UPDATES
+13  Updates are checked on every download (certificate check), and so are your lists and books. The
+    kit carries its own up-to-date list of trusted certificates (cacert.pem). Only weather, news and
+    pictures may still be fetched unchecked, and only if a checked connection is impossible.
+14  If moving a new file into place fails halfway, the files already moved are put back.
+15  New default: "Tell me" - the fridge checks each night and shows "update ready"; you tap to install.
+    (Settings > Phone > Updates still offers "At night".)
+
+LISTS, PHONE AND PC
+16  A Siri or PC note picked up twice no longer re-opens items you had already ticked off.
+17  Your GitHub token no longer shows in the Kindle's process list (or in Reset's diag.txt).
+18  Two list edits at the same moment can no longer overwrite each other (the lock is only broken
+    when the program that held it is gone).
+19  A backslash typed in an item stays a backslash.
+20  PC: "kh add milk, eggs" adds two items. "kh done milk" ticks Milk but not Buttermilk; when more than
+    one item matches, it lists them and asks for the full name.
+21  Locked items get their random part from the system's secure random source.
+
+DATA
+22  When the weather or every news feed fails, the last forecast and stories are kept instead of an
+    empty tile. A slow network can't stretch a sync past 4 minutes: the extras wait for the next one.
+23  A news.conf saved on Windows works; a source name with quotes no longer breaks the news.
+24  On This Day: an event with quotes in its text no longer blanks the whole data file.
+25  Horoscopes: when only a few signs arrive, the next sync tries again instead of waiting a day.
+26  Photos over 3 MB are skipped, photos in use are never trimmed, and web pages over 3 MB are refused.
+27  Pantry: ground coffee, ground cinnamon, chicken broth, fish sauce, black pepper, pearl barley,
+    canned tomatoes, peanut butter, coconut milk, sour cream and cream cheese get the right shelf life.
+28  Cook ideas match whole words ("egg" no longer matches eggplant). Bill reminders still arrive when
+    the cloud brain missed the exact day.
+
+DIAGNOSTICS (library buttons)
+29  Kitchen Hub Stats: memory, storage, the busiest processes, which app each page process belongs to,
+    and the Kindle's own launch and error messages.
+30  Kitchen Hub Kill Background: stops every part of the hub and repairs what it changes.
+31  Kitchen Hub Soft Reset: snapshot, stop, reboot.
+32  For testing the freeze right after waking: FREEZE_POWERD=0 in eco.conf lets the Kindle's power
+    manager run while it sleeps (the default, 1, is the same as 10.4).
+
+NOT CHANGED
+ The time zone stays fixed at UTC-7: British Columbia stays on Pacific time all year since March 2026.
+
+####################################################################################################
+KITCHEN HUB 10.4 - SIDE RAIL, PANTRY, PRIVACY PIN, LOCKED BOOKS AND FIXES
+Install: upload the kit to GitHub like before (everything, including the .github folder). Replace
+kindle/shiftcal/mesquite/index.html with the patched one (kindle_mesquite_index.html). A fridge set to
+"At night" installs it after 2 am; to have it now, Settings > Phone > CHECK FOR UPDATE (tap twice).
+The phone app updates itself the next time you open it.
+
+BEFORE YOU UPLOAD
+ *  GitHub > your repo > Settings > Secrets and variables > Actions: HUB_PASS must be exactly your
+    PASSPHRASE from cloud.conf. Without it the cloud can't lock (or convert) books.
+ *  If your passphrase has spaces, put it in quotes in cloud.conf:  PASSPHRASE="four random words here"
+    (cloud.conf is read as a shell file - without quotes only the first word counts).
+ *  If cloud.conf has no PASSPHRASE line, the hub has been using a built-in one. Set your own (and the
+    same HUB_PASS), then pair the phone again.
+
+NEW ON THE FRIDGE
+ A  Side rail: the left edge shows the time and the apps you opened, newest first. Tap one to jump
+    back, or HOME for the tiles. HIDE gives the full width back; APPS > Side rail brings it back.
+ B  Pantry app: USE FIRST (expiry board), EVERYTHING (by place, with amounts), COOK (saved recipes
+    that use what's going off) and SETTINGS (places, shelf days, and a switch for each feature).
+ C  Pantry on the phone: a PANTRY tab. Food ticked off the shopping list goes into the pantry, and
+    staples that drop below their keep-at-least go back on the list once (the cloud brain does this).
+ D  Privacy PIN: each person can set a PIN in the Privacy app. Their Money, Notes, Board and Pay tiles
+    stay locked until it's typed, and lock again after 5 minutes (changeable) or when the Kindle
+    sleeps, so the screensaver can't show them. The phone and TV page aren't locked.
+
+LOCKED BOOKS
+ 1  Every book in your book cloud is locked with your passphrase before it reaches GitHub (AES-256).
+    The phone locks uploads itself; the cloud locks Gutenberg books, articles and converted EPUBs.
+ 2  Books stored before 10.4 are locked by the cloud brain, two per run.
+ 3  The fridge unlocks books as it downloads them (openssl) and checks each one byte for byte.
+    DOWNLOAD on the phone unlocks them too.
+ 4  No more DRM notes: whatever you upload is stored as it is.
+
+FIXED
+ 5  Phone, Recipes: a long dinner name showed one letter per line; the note under This week's dinners
+    was crossed out by the list's top line.
+ 6  Phone, Fridge: the timer buttons all say how many minutes (5, 10, 20, 45 min).
+ 7  Phone, Home: the savings goal date box is labelled; a goal removed on another phone no longer
+    breaks its buttons.
+ 8  Phone, Deals: names you watch keep the letters you typed (no automatic capital).
+ 9  Fridge: the layout editor's ADD bar wraps instead of running off the screen.
+10  Fridge: long paged lists show the whole BACK TO THE TOP button, and a heading is hidden when its
+    items are on another page (What's New looked like it had lost items 1-14).
+11  Fridge books: a reason with a colon in it is shown instead of dropped.
+12  Phone, Books: DOWNLOAD of a book that isn't in the cloud yet says so.
+13  The phone app's offline copy is refreshed (new cache), so the new scripts are used right away.
+14  The example cloud.conf no longer carries a sample passphrase.
+15  Fridge, Horoscope: the sign's name was cut off at the top (Pisces).
+
+PHONE
+16  The phone no longer wipes what you are typing when it syncs in the background (every 20 seconds):
+    notes, amounts, web addresses, the pantry settings panel. A book picked from the phone always uploads.
+17  Copy pairing link includes your passphrase and whose phone it is. Before, a Home Screen copy of the
+    app showed "(locked)" everywhere. The link is only for your own devices.
+18  Notice board: the chosen tool (Pen, Marker, Eraser) is highlighted, drawing no longer stutters on a busy
+    board, the eraser rubs out as you drag, and an interrupted touch leaves no stray line.
+19  Taller tabs, and the chosen tab scrolls into view (there are nine now).
+20  Store mode keeps the screen awake again after you switch apps and come back.
+21  Shopping aisles: peanut butter, eggplant, frozen meat, buns, pizza sauce and batteries go to the right
+    aisle. Rows of buttons wrap on narrow phones. Content clears the notch in landscape.
+
+SAFER CONNECTIONS (fridge)
+The fridge used to skip the certificate check on every download (curl -k), because older Kindle firmware
+has an outdated list of trusted certificates. Now it tries a checked connection first. Once that works,
+the fridge never goes back to unchecked ones, so a fake GitHub on your Wi-Fi can't read your token or slip
+in a fake update. Kindles whose list really is too old keep working unchecked and try again every day.
+If checked connections stop working for 3 days in a row, the fridge falls back so it can still update,
+and writes it in the log. New file: kindle/shiftcal/kcurl.sh. To start over, delete .tls in the shiftcal folder.
+
+####################################################################################################
+KITCHEN HUB 10.3 - YOUR BOOK CLOUD
+Install: upload the kit to GitHub like before (everything, including the .github folder). If your fridge is
+on 10.2 and set to "At night" it installs this by itself after 2 am; to have it now, Settings > Phone >
+CHECK FOR UPDATE (tap twice). The phone app updates itself next time you open it. The book cloud is made on
+the cloud brain's next run (within 15 minutes).
+
+BOOK CLOUD
+ 1  A private shelf for your books on your GitHub (a secret gist the cloud brain makes for you).
+ 2  Phone app, new BOOKS tab: upload books you own - EPUB, PDF, MOBI, AZW3, TXT, up to 30 MB.
+ 3  Each book is either ON THE KINDLE or CLOUD ONLY. Switch any time, from the fridge or the phone.
+ 4  Books marked for the Kindle download into its library by themselves at the next sync (two per sync,
+    checked byte for byte), in a "Kitchen Hub" folder.
+ 5  Move a book back to CLOUD ONLY and it's taken off the Kindle (it stays in the cloud).
+ 6  The fridge won't download a book if it would leave the Kindle with less than 50 MB free.
+ 7  EPUBs are turned into Kindle format (AZW3) by the cloud, so the Kindle's own reader opens them.
+    If that doesn't work the EPUB is kept as it is (KOReader reads it).
+ 8  DOWNLOAD on the phone brings any book back to the phone - your library goes where you go.
+ 9  DELETE removes a book everywhere: the shelf, the Kindle and the cloud.
+10  New Books app on the fridge: your shelf, what's on this Kindle, how much room is left, and any book
+    that couldn't download (and why).
+11  FREE BOOKS (fridge) and Free classics (phone): search Project Gutenberg's 70,000 public-domain books
+    and add one to your cloud. The cloud fetches the Kindle edition.
+12  Send an article to the Kindle (phone BOOKS tab, or "kh book <address>" on the PC): the cloud turns
+    the page into a Kindle book and it arrives with your other books.
+13  Web reader: SAVE TO LIBRARY keeps the page you're reading as a text file in the Kindle library
+    (Kitchen Hub / Web pages).
+14  PC tool: "kh books" lists your shelf, "kh book 1342" adds a Gutenberg classic by number.
+15  The fridge's check-in tells the phone which books are on the Kindle (shown with a check mark).
+
+FIXED
+16  Book requests from the phone were marked "unknown request" by the cloud before the book step saw them.
+17  The web reader's SAVE TO LIBRARY would have saved the last thing the loop downloaded, which could be a
+    search result list instead of the page you were reading; only reader pages are kept now.
+
+####################################################################################################
+KITCHEN HUB 10.2 - AUTO-UPDATE WITH ROLLBACK, A WEB READER, MORE EVERYWHERE
+Install: upload the kit to GitHub like before (everything, including the .github folder), then on the fridge
+Settings > Phone > CHECK FOR UPDATE (tap twice). This is the last update you have to install by hand:
+from now on the fridge updates itself at night, and undoes an update that doesn't start properly.
+
+AUTO-UPDATE + ROLLBACK
+ 1  The fridge checks your GitHub site once a night (after 2 am) and installs new versions by itself.
+ 2  Settings > Phone > Updates: "Only when I tap", "Tell me" or "At night" (the default).
+ 3  "Tell me": the news strip says "Update X is ready - tap to install", and your phone gets a push.
+ 4  Every update first saves a copy of each file it replaces.
+ 5  A new version is on probation until its page reports in after starting.
+ 6  If it never reports in (two whole wakes), the fridge goes back to the previous version by itself.
+ 7  If a new script won't even parse, it's undone before anything starts.
+ 8  A version that had to be undone is never installed again by itself.
+ 9  GO BACK TO THE PREVIOUS VERSION button in Settings > Phone (tap twice).
+10  Phone app (Fridge tab): update status, plus an "Undo last update" button.
+11  PC: "kh rollback" and "kh version".
+12  Phone pushes: "Fridge hub updated to X" once it starts fine, or "Fridge update undone" if it didn't.
+13  On GitHub, every upload is checked first (scripts parse, the page runs on the Kindle's old browser).
+    A broken upload gets a red X and the fridge never sees it.
+14  WHAT'S NEW: the notes for the new version show on the fridge once, after it updates
+    (and any time from Settings > Phone).
+
+WEB READER (Apps > Web)
+15  Type a web address or some search words (searching uses DuckDuckGo).
+16  Pages show as clean, large text sized for e-ink. The site's own scripts and pictures never load, so
+    heavy sites still read fine.
+17  Links are underlined with a number: tap one to follow it.
+18  BACK, RELOAD, and MORE for long pages.
+19  SAVED: sites that read well on e-ink are already there (NPR text, CNN Lite, CBC Lite, Wikipedia,
+    Environment Canada for Prince George, Hacker News). Use SAVE to add the page you're on.
+20  HISTORY of the pages you opened.
+21  Phone app: "Send a web page to the fridge" (Fridge tab) opens a recipe or article on the fridge.
+22  PC: "kh web <address or search words>".
+23  SEND TO PHONE pushes the page you're reading to your phone.
+24  KINDLE BROWSER opens the Kindle's own browser for pages that need it; the hub comes back at the
+    next wake.
+    (Firefox can't run on this Kindle: it needs a far newer Linux, graphics stack and more memory than the
+    Paperwhite has. The reader does the job on the hub itself.)
+
+TV
+25  New HOME slide: today's chores (ticked or not), bills this week, food to use up, flyer deals and the
+    joke of the day.
+
+PC TOOL
+26  "kh spend 42.50 groceries" logs a purchase.
+27  "kh food chicken 2" adds food with a best-before date.
+
+FIXED
+28  Long pages (pantry, money, the web reader) skipped any row taller than the screen, so you could never
+    see it. Now it's shown, cut at the bottom.
+29  Guest Wi-Fi BIG CODE: a long network name or password could still run past the bottom in landscape.
+30  The Kindle sync tests now also cover the update and rollback steps (backup, health, undo, skipping a
+    bad version).
+
+####################################################################################################
+KITCHEN HUB 10.1.2 - BUG SWEEP: 61 FIXES
+Install: upload the kit to GitHub like before (everything, including the .github folder), then on the fridge
+Settings > Phone > CHECK FOR UPDATE (tap twice). The phone app updates itself next time you open it.
+If you use the PC tool, copy the new pc/kh.ps1 over your old one.
+
+How these were found: lint and static checks on every file, a stress test that opens every fridge page on
+both screen sizes in both orientations with odd data (very long names, HTML in names, broken dates, empty
+cloud files, garbage weather), a midnight / month-end / New Year clock test, a fuzz test of the cloud
+brain and phone app with damaged records, and a read-through of the pay, calendar, inbox and update code.
+You asked for 200: these are the 61 that were real. I didn't pad the list.
+
+SHIFTS + PAY
+ 1  "6-2" (also "6-2p", "5-1") was read as 6 pm-2 am, or as a 20-hour shift. Now 6 am-2 pm.
+ 2  "4-12" was read as 4 pm to noon the next day. Now it ends at midnight.
+ 3  The fridge, the pay maths and the phone calendar each had their own shift reader and could disagree.
+    They now share one.
+ 4  Phone calendar: an overnight shift like "23-7" ended at 7 pm the same day.
+ 5  Weekly overtime only counted hours inside the pay period. A period that starts mid-week (the 1st or
+    16th) forgot that week's earlier hours and under-counted overtime.
+ 6  Easter Monday and Boxing Day were paid as stat holidays (1.5x). They aren't B.C. stats.
+ 7  Days off: the fridge only understood "off". "vac", "sick", "stat" and "x" showed as shifts (next-shift
+    line, both-off days, TV). The fridge, TV and cloud now share one list.
+
+MIDNIGHT + DATES
+ 8  At midnight only the calendar redrew. Pantry, money, pay, shifts, chores and the deals countdown kept
+    yesterday's "today/tomorrow" until the next sync.
+ 9  A record with a broken date showed "undefined NaN" on money, pantry, package and goal rows.
+10  Reminders every N months or every year now name the date ("every year on Oct 15").
+11  The fridge calendar only knew chores 3 weeks back and 3 months ahead. Now 6 weeks back and 5 months ahead.
+12  A remote "timer 10" sent while the fridge slept started a full 10-minute timer hours later. Now it runs
+    only what's left, or skips it.
+
+PHONE CALENDAR FEED
+13  "Every N months" chores went out with a blank repeat rule, which some calendar apps reject (dropping
+    the whole feed).
+14  "Take turns" chores were in nobody's calendar. Now each of you gets your own weeks.
+15  Bills and chores on the 29th-31st skipped short months in calendar apps (the fridge moves them to the
+    last day; the feed now does too).
+16  Events and chores at 11 pm had no length.
+
+SIRI / PC INBOX
+17  If both the fridge and the cloud read the same inbox note, every item was added twice.
+18  A command that didn't make sense ("timer: -5", "event: tomorrow lunch") went onto the shopping list
+    as text. That happened in the cloud and on the fridge.
+19  "event: 2026-11-20 3:30pm Dentist" (am/pm) put "3:30pm" in the title with no time. Impossible dates
+    made broken events.
+20  A "|" in an item split it into the wrong fields on the fridge.
+
+PC TOOL (kh.ps1)
+21  "kh done" with nothing after it ticked off the whole shopping list.
+22  Writes didn't check they landed. If the phone or fridge saved at the same moment, one change could
+    vanish. It now verifies and retries.
+23  "kh timer" with no number queued a 0-minute timer.
+24  "kh event" took times like 25:99 and events with no title.
+25  "kh chore" refused the every-N-months rule.
+26  "kh plan" crashed on an odd plan line.
+
+DEALS + FLYERS (cloud)
+27  More than 12 watched items: items 13+ were never price-checked. Now the longest-waiting go first.
+28  More than 20 list items: items 21+ were never flyer-checked, and each check forgot earlier matches.
+29  A Flipp outage, or one failed lookup, wiped every known sale from the fridge.
+30  A sale that ended stayed on the fridge until the next 6-hour check.
+31  Recipe ideas were wiped by a TheMealDB outage.
+32  Black Friday week was worked out in the wrong time zone (cloud and phone).
+33  Game reminders were skipped if the NHL had already marked the game "pre-game".
+34  The "Use it up" push listed food that expired weeks ago, every evening. Now only today, tomorrow and
+    the last 2 days.
+35  "The fridge hub went quiet" could push at 3 am. It now waits for morning.
+
+CLOUD BRAIN
+36  A damaged brain.json or extras file crashed every run (or switched deals off for good). It now starts
+    fresh.
+37  The list never shrank. Finished commands and notes, chore ticks, bill ticks and old meal plans piled
+    up forever, and the fridge decrypts every line on each sync. The brain now tidies once a day.
+38  Settings saved as something other than {...} crashed the money, waste and fun readers (fridge, phone,
+    cloud).
+
+FRIDGE SCREENS
+39  The fridge keyboard had no capitals control and no symbols, so a Wi-Fi password like "HomeNet#24!"
+    couldn't be typed (the guest Wi-Fi code would be wrong). Added Aa / abc / ABC and a #+= page.
+40  Apps page: a "<" in a calendar event title broke the Calendar card (it was read as HTML).
+41  Weather: a partial answer from the weather service showed "NaN°" everywhere. Now the last good
+    forecast stays.
+42  The weather page crashed on a forecast with missing hourly data.
+43  News: a story with no title or source showed as "2undefined".
+44  Recipes: one broken entry in the recipe feed blanked the whole list.
+45  Recipes: an entry with no source showed an "undefined" label; a numeric title crashed the reader.
+46  Cloud data with missing pieces (no store name, no team record, empty trivia, bad game time) printed
+    "undefined". All cloud data is now cleaned when it loads.
+47  A flyer with no store name read "at undefined".
+48  The waste chart drew broken bars if a count was damaged, and tossing then added text to the count.
+49  Long words (Wi-Fi passwords, links) ran off the side of pages. They wrap now.
+50  Guest Wi-Fi BIG CODE ran past the bottom of the screen in landscape.
+51  Long pages (pantry, money): page 2 could show a FRIDGE or Recent heading with no rows under it.
+52  Calendar: with the filter on the roommate, removing the roommate hid all your own shifts.
+53  Money: "you're ahead of it" (vs last month) was unclear. It now says how much more or less you've
+    spent so far.
+54  The settings backup to your gist practically never ran (its 6-hour timer freezes while the Kindle
+    sleeps). It now checks the real clock each awake minute.
+55  Settings restore accepted any part of a real setting's name and wrote junk into the Kindle's storage.
+56  An old, unused shift pop-up was still wired to two functions that no longer exist. Removed.
+
+PHONE
+57  With no signal, opening the TV page showed the phone app instead. The TV page is now saved for
+    offline use too.
+58  An every-2-weeks or yearly chore saved with the date box empty became a broken chore.
+59  "Tossed" counted wrong if the waste number had been damaged.
+
+UPDATES
+60  If the Kindle ran out of space halfway through an update, it could be left with half old, half new
+    files. Every file is now copied and checked before any is switched.
+61  The fridge's own inbox reader treated an empty "note:" as a shopping item.
+
+Behind the scenes: the Kindle sync tests were running against an old copy of hub_cloud.sh. They now test
+the real one, and new tests cover all of the above. The PC tool changes were checked by reading only (no
+Windows here to run them), so tell me if "kh" acts up.
+
+####################################################################################################
+KITCHEN HUB 10.1.1 - 55 NEW THINGS + 11 FIXES
+Install: upload the kit to GitHub like before (drag everything, including the .github folder), then on
+the fridge Settings > Phone > CHECK FOR UPDATE (tap twice). The phone app updates itself next time you open
+it (pull down to refresh if it looks old). New cloud bits (standings, jokes, recipe ideas) show up after
+the next cloud brain run.
+
+DEALS
+ 1  Black Friday / Boxing Day countdown on the Deals page and tile ("9 days to Black Friday").
+ 2  The same countdown on the phone's DEALS tab.
+ 3  LOWEST tag when a watched item is at the lowest price seen so far.
+ 4  Percent-off tag ("-25%") on watched items.
+ 5  CLEARANCE tag when Best Buy marks it clearance.
+ 6  Wishlist sorted best deal first (target hits, then lowest-ever, then biggest markdown) - fridge and phone.
+ 7  NEW tag on hot deals that showed up in the last 6 hours.
+ 8  Flyers: "buy the sale prices and save about $X".
+ 9  Flyers: which store has the most of your list cheapest.
+10  Deals tile shows the newest hot deal and the flyer savings.
+11  Morning briefing: items at your price, the newest hot deal, flyer savings.
+
+MONEY
+12  Logging a purchase starts with $5 / $10 / $20 / $50 / $100 buttons (or type any amount).
+13  This month: how much each of you paid.
+14  This month vs last month, compared to the same date.
+15  "On pace for $X this month" (page and tile).
+16  Total left in your budgets.
+17  Bills still to pay before the month ends.
+18  Savings goals can have a date; shows the $/week you need to make it (fridge and phone).
+19  New PAYCHEQUE tab: rough take-home after CPP, EI and income tax (2026 B.C. + federal rates).
+20  Hours worked this week and how many until weekly overtime (40 h).
+21  Your next shift: hours and what it pays.
+22  Next pay period so far (hours already scheduled and its take-home).
+23  Money tile: "Payday Fri - ~$X take-home" in the week before payday.
+24  Front page: one money line (spent this month, who owes who).
+25  Phone: flip back through previous months of spending.
+26  Phone: export all spending as a CSV file (opens in Excel / Sheets).
+27  Phone: who-paid and last month on the money card.
+28  Sunday "Your week" push now starts with the last 7 days: spending and chores done by each of you.
+
+FOOD
+29  Pantry quick buttons: Milk, Chicken, Ground beef, Bread, Eggs, Yogurt, Deli meat, Salad greens, Freezer
+    meat - one tap adds it with a sensible best-before date (fridge and phone).
+30  Pantry grouped into FRIDGE / FREEZER / PANTRY.
+31  New IDEAS tab: dinners that use up what expires in the next 3 days (from TheMealDB).
+32  Chart of food thrown out over the last 6 months.
+33  Food tile: how many things expire this week, plus a dinner idea.
+34  Phone: TOSSED button (counts toward the waste numbers) and the waste line.
+35  Phone: dinner ideas with links to the recipes.
+
+HOME
+36  Chores due today get a DONE button; pick who did it. UNDO if you tapped by mistake.
+37  Chore scoreboard for the month (who's ahead).
+38  A chore ticked off before its time doesn't send its reminder push.
+39  Chores listed by when they're next due, with a TODAY tag.
+40  Phone: "Chores today" with a tick button for each of you, plus the scoreboard.
+41  Phone: packages take a carrier and tracking number, with a TRACK button.
+42  Phone: LATE tag on packages past their date.
+43  Late packages in the morning briefing.
+44  Guest Wi-Fi: BIG CODE button fills the page so guests can scan from further away.
+45  Block heater push the evening before a night of -15 degrees or colder.
+46  Snow push the evening before 5 cm or more.
+47  Six more upkeep reminders: winter tires on (Oct 15), summer tires on (Apr 15), gutters, GFCI outlets,
+    bathroom fan, fire extinguisher.
+
+FUN
+48  Trivia keeps your score, streak and best streak.
+49  Word of the day is now a game: unscramble it from the meaning, then REVEAL.
+50  Canucks standings: place in the division, points, record.
+51  Scores refresh every 15 min around game time; the Fun tile shows LIVE scores.
+52  Game reminders (off by default): a push an hour before puck drop. Turn on in Fun > CANUCKS.
+53  New JOKES tab: a clean joke and a fact of the day.
+54  The Fun tile shows something different every half hour.
+
+EVERYWHERE
+55  New QUICK ADD app: purchase, food, leftovers, bill, package, chore or price watch from one page.
+
+FIXED
+ 1  "Every N months" reminders started on the 29th-31st skipped short months (now the last day instead).
+ 2  Yearly reminders on Feb 29 now land on Feb 28 in non-leap years.
+ 3  Flyers could "match" a list item to something unrelated when nothing really matched.
+ 4  New list items waited up to 6 h for a flyer check; now about 30 min.
+ 5  Hot-deal pushes for deals without a link could only ever fire once.
+ 6  If the trivia or word of the day failed to load, it wasn't retried until tomorrow (now hourly).
+ 7  A wishlist item you removed stayed on the Deals tile until the next cloud run.
+ 8  "+ WATCH" on a hot deal kept junk like " -" and "(YMMV)" in the name.
+ 9  Phone: a budget typed in lowercase ("groceries") never matched its category.
+10  Phone: "My price" could error if the item was removed on the fridge at the same moment.
+11  A few emoji (fire, hockey stick, pin) were swapped for symbols the Kindle's fonts are sure to have.
+
+####################################################################################################
+KITCHEN HUB 10.0 - DEALS, MONEY, FOOD, HOME, FUN
+Install: upload the kit to GitHub like before (drag everything, including the .github folder), then on
+the fridge Settings > Phone > CHECK FOR UPDATE (tap twice). Deals and flyers fill in after the next cloud
+brain run (within 15 min; Best Buy every 3 h, flyers every 6 h).
+New tiles are off by default: Edit tiles (grid button) > tap the tray chips DEALS / MONEY / FOOD / FUN.
+Every tile opens a full page with tabs; the same things are on the phone under DEALS and HOME.
+
+DEALS (fridge tile + phone DEALS tab)
+ 1  Wishlist: add anything ("air fryer", "PS5 controller"); the cloud brain checks Best Buy Canada for it.
+ 2  Shows the current Best Buy price, the regular price and how much it's marked down.
+ 3  Optional target price per item - set it from the fridge or the phone.
+ 4  Push to your phone when an item hits your target price.
+ 5  Push when a wishlist item drops 10% or more since the last check.
+ 6  Price history kept per item (lowest seen is shown).
+ 7  Sale end date shown when Best Buy gives one.
+ 8  Grocery flyers for V2N (Prince George) from Flipp: Save-On, Walmart, Real Canadian Superstore, etc.
+ 9  Flyer search runs for everything on your shopping list, so you see who has it on sale this week.
+10  Flyer price tag next to list items that are on sale somewhere ("$3.99 Walmart").
+11  Flyer "sale story" (e.g. "2 for $5", "Save $2") and valid-until date.
+12  Thursday push: "N things on your list are on sale this week" (new flyers drop Thursday).
+13  Hot deals feed from RedFlagDeals (Canada) - top deals, refreshed hourly.
+14  Push when a hot deal matches something on your wishlist.
+15  Black Friday week and Boxing week: a banner on the hot deals page, and deals are checked every 20 min.
+16  "+ WATCH" on any hot deal puts it on your wishlist in one tap.
+17  Deals tile summary: best markdown, count on sale, count of list items in flyers.
+18  Phone DEALS tab: add wishlist items, set targets, open the product page.
+
+MONEY (fridge tile + phone HOME tab)
+19  Log spending in two taps: amount, then a category chip (groceries, eating out, gas, fun, home, other).
+20  Who paid (you / roommate) on every expense.
+21  "Settle up": shows who owes who and how much, and records the payback.
+22  Monthly budgets per category, with a bar on the tile.
+23  Push when a category passes 90% of its budget.
+24  Bills: name, amount, due day of the month (rent, phone, internet, hydro...).
+25  Bills due in the next week show on the front page and the tile.
+26  Push 2 days before a bill is due, and again if it's overdue.
+27  Mark a bill paid from the fridge; it comes back next month by itself.
+28  Bills on autopay are marked AUTOPAY and don't nag you.
+29  Savings goals with a target and a progress bar; add money to a goal from the fridge or phone.
+30  This-month view: total spent, by category, by person, and the bigger expenses.
+31  Pay period estimate (from 9.9) now sits next to the month's spending so you can see what's left.
+32  Repeat rule "every N months" for things like car insurance or quarterly bills.
+
+FOOD
+33  Pantry: what's in the fridge/freezer with an optional use-by date.
+34  Leftovers: one tap logs "leftovers" with a 4-day use-by.
+35  Use-it-up list on the front page: things expiring today or tomorrow.
+36  Morning push for anything that has to be used today.
+37  "Used" / "Tossed" buttons; tossed items are counted as waste.
+38  Waste tracker: how many things were thrown out this month vs last (on the pantry page).
+39  "To list": a finished pantry item goes straight back onto the shopping list.
+40  Food tile: next item to use up plus counts.
+41  Meal plan "tonight" line stays on the Food page too.
+
+HOME
+42  Chores with rotation: "take turns" alternates you and your roommate week by week.
+43  Chore list shows whose turn it is next, with "(alternates)" on take-turns chores.
+44  Upkeep presets in one tap: furnace filter, fridge coils, smoke alarm test, dryer vent, water filter,
+    deep clean - each with a sensible repeat.
+45  Packages: track what's coming (name + carrier); shows on the front page until you mark it received.
+46  Packages line in the morning briefing.
+47  Guest Wi-Fi card: network and password in big text on the fridge, so guests can read it.
+48  Phone HOME tab: chores, bills, spending, pantry and packages in one place.
+49  Phone chore editor: "Whose job" now has "Take turns".
+
+FUN (fridge tile)
+50  Trivia question of the day (Open Trivia DB) - tap to reveal the answer, NEXT for another.
+51  Word of the day (Merriam-Webster) with its meaning.
+52  Canucks: next game, opponent, time (BC time), home/away, and last result.
+53  Game-day line in the morning briefing.
+54  Fun tile shows the word, today's question and the next Canucks game at a glance.
+
+CLOUD BRAIN
+55  New deals/extras step: Best Buy, Flipp, RFD, trivia, word, NHL - each on its own timer so GitHub
+    minutes stay low.
+56  Everything it finds goes into an encrypted extra.js in your cloud gist (same passphrase).
+57  extra.js is only rewritten when something changed (less noise, fewer Kindle downloads).
+58  The fridge and the phone both read it; the Kindle fetches it with the normal sync.
+59  Morning briefing now includes bills due, use-today food, packages, game day and flyer matches.
+60  Postal code for flyers can be changed: repo Settings > Secrets and variables > Actions > Variables,
+    add POSTAL (default V2N4Z9).
+
+FRIDGE PAGE
+61  New full-page overlay with tabs for Deals, Money, Food, Home and Fun (big text, BACK button).
+62  Quick chooser chips for categories/people instead of typing.
+63  New icons for the four new tiles and the apps page.
+64  The apps page has entries for Deals, Money, Food, Home and Fun.
+65  Front page: bills-due and use-it-up lines.
+66  New tiles re-draw when the list or money changes (no waiting for the next sync).
+67  Each wishlist item has a small price-trend line.
+68  Bills page shows OVERDUE / DUE TODAY / TOMORROW / IN 2 DAYS tags.
+69  All new data is shared with the phone and TV through the same encrypted list (last change wins).
+70  Phone app version bumped so it picks up the new screens right away.
+
+FIXED
+71  A timer check could get stuck "not due" for hours if the cloud clock ever jumped backwards.
+72  Tiles didn't refresh after adding things from the phone until the next full sync.
+73  "1 things on sale" grammar (and similar counts).
+74  Phone FRIDGE tab could say "Checked -3 min ago" when the clocks were a little out.
+75  The suspend back-off on the Kindle could grow past 6 s and delay waking up; capped.
+76  Calendar second-person link (ICS2) and the extras link are kept when re-pairing the cloud.
+
+That's 70 new things and 6 fixes, not the 100 you asked for - I'd rather ship 70 that work than pad the list.
+
+####################################################################################################
+KITCHEN HUB 9.9.1 - BIG VIEW FIXES + SPEED
+Install: upload the kit to GitHub like before, then on the fridge Settings > Phone > CHECK FOR UPDATE (tap twice).
+
+FIXED
+ 1  Tapping a tile opened the big view and then it snapped back small, so it took a second tap.
+    Cause: anything that re-packs the tiles (a sync finishing, new data, the time of day changing the
+    layout) shrank the tile back while the hub still thought it was open. The big view now survives that.
+ 2  The tap that opens the big view could also "press" the button that appears under your finger
+    (PREV/NEXT/CLOSE sit where small tiles at the bottom were). Taps in the first 0.3 s are ignored.
+ 3  Tiles that are already big (half the screen or more) skip the big view and open on the first tap.
+ 4  Big view formatting: tiles now draw their large layout (more rows, the forecast strip, etc.),
+    text grows to use the space, and nothing hides behind the button bar.
+ 5  Shifts tile: the pay line was added again on every refresh (showed twice or more). Fixed, and it's
+    hidden when the period has no hours yet.
+ 6  The "OPEN >" tag no longer shows inside the big view (the bar has OPEN).
+
+FASTER
+ 7  The list/calendar data was re-read and re-decrypted dozens of times per screen refresh. It's now
+    read once per change - fewer pauses after a tap and less battery while awake.
+ 8  "Most bought" chips were recounted on every list redraw; now only when the list changes.
+ 9  A doubled calendar + bulletin refresh after every sync removed.
+
+####################################################################################################
+KITCHEN HUB 9.9 - PEOPLE, PAY AND A BIG REFRESH
+===============================================
+INSTALL (no USB)
+  1. Upload the contents of kitchen_hub_9.9_github_kit.zip to your repo, the same way as last time
+     (Add file > Upload files > drag everything in > Commit). It replaces the old files.
+  2. Wait ~1 minute (GitHub rebuilds the fridge's update list), then on the fridge:
+     Settings > Phone > CHECK FOR UPDATE, then tap it again to install. The hub restarts by itself.
+     (Or from your phone: FRIDGE > Install update.)
+  3. Phone: open the app and pull to refresh once.
+  4. Your roommate: Settings > People > Person 2 > type his name. Then Settings > Phone shows HIS
+     calendar code and HIS phone pairing code (they appear after the next cloud brain run, ~15 min).
+  Pay: Settings > Pay. Your rate is already $18.25/h. Set "A pay period started on" to the first day of
+  one of your real pay periods, and when payday comes.
+
+50 NEW THINGS
+ People + roommate
+  1  Settings > People: two names, a letter each, and a "look" (solid, outline, striped, dotted, double, underlined)
+  2  Your roommate's own shifts: the day sheet has "Shift for: You / Him"
+  3  Each person's shifts in their own look on the calendar tile, full calendar, phone and TV
+  4  Events can be yours, his or shared (letter badge)
+  5  Full calendar filter: BOTH / you / him
+  6  Days you're both off are marked BOTH OFF
+  7  Day sheet warns when an event lands during a shift
+  8  Shifts tile: his next shift + your pay period so far
+  9  His own calendar subscription (calendar-p2.ics) with its own QR code
+ 10  His own phone pairing QR: what he adds shows his letter
+ Pay ($18.25/h, B.C. rules)
+ 11  Pay tile: this period's gross, hours, payday countdown (add it in APPS > Edit tiles)
+ 12  Settings > Pay: the period, gross, every shift's hours and pay, older/newer periods
+ 13  Daily overtime 1.5x after 8 h, 2x after 12 h; weekly 1.5x after 40 h
+ 14  Unpaid 30-min meal break on shifts over 5 h (switchable)
+ 15  Working a stat holiday = 1.5x
+ 16  Paid weekly, every 2 weeks, or the 1st + 16th; payday lag; any period start date
+ 17  Year-to-date gross
+ 18  A rate + settings for your roommate too
+ 19  Phone push the evening before payday with the expected gross
+ 20  "Payday today" in the morning briefing
+ Easier to understand
+ 21  New icon set: one line weight, made for e-ink
+ 22  A label under every bottom-bar button
+ 23  APPS: big squares, 6 to a page, page dots, the everyday ones first
+ 24  Tap a tile once: nearly full screen, with PREV / OPEN / NEXT / CLOSE (and swipe to the next tile)
+ 25  A 1-minute tour for anyone new (Look > SHOW THE TOUR)
+ 26  Settings tabs in plain words: Sleep, Tiles, Look, People, Pay, Phone, Markets, Battery, Log
+ 27  Text size presets up to Huge
+ 28  Plainer status: "2 MIN UNTIL SLEEP", "ASLEEP - WAKES 10:00 - PRESS THE BUTTON"
+ Clock + weather
+ 29  Huge clock style (time only)
+ 30  What to wear ("Parka, toque and gloves, boots")
+ 31  Rain/snow in words ("Snow from 3 pm, about 4 cm")
+ 32  Daylight length and the change tomorrow
+ 33  Environment Canada warnings in the top strip (after timers, notes, shift countdown and breaking news)
+ Shopping list
+ 34  Grouped by aisle (produce, meat, dairy, bakery, frozen, pantry, household)
+ 35  Who added each item (letter), and an "Adding as" switch on the fridge
+ 36  +1 for how many
+ 37  A note per item ("the 2% one")
+ 38  Star chips for what you buy most often
+ 39  UNDO after ticking or removing
+ 40  UNDO after clearing the cart
+ 41  The tile shows how long the oldest item has waited
+ 42  Long lists page through to the cart too
+ Phone + TV + PC
+ 43  Phone: pay card on the calendar tab
+ 44  Phone: both people's shifts in their looks; choose whose shift/event when adding
+ 45  Phone: list grouped by aisle, with letters, counts and notes
+ 46  Phone: type "milk, eggs, bread" = three items
+ 47  Phone: Store mode (bigger rows, screen stays on)
+ 48  TV: both people's shifts and events in their looks
+ 49  TV: pay period on the Fridge screen
+ 50  PC: "kh list" shows counts and notes
+
+FIXES
+  1  Clock: your log showed an 824x287 tile where the time was limited by height (149 px). A short wide
+     tile now gives the time 60% of its height (about 172 px there, the most the width allows).
+     For a bigger clock, make the clock tile L or use the Huge style.
+  2  No tile text shrinks below ~60% of the normal size any more
+  3  "suspend refused" after a repaint: retries back off (3 s, then 6 s) and the log notes it once
+  4  Keyboard: bigger letters on the keys
+  5  The old "peek" barely grew a tile; replaced by the big view (new 24)
+  6  Long shopping lists no longer cut the last row off when aisle headers are shown
+  7  Warnings never push aside a running timer, a note, the shift countdown or breaking news
+
+####################################################################################################
+KITCHEN HUB 9.8.5 - THE GITHUB UPDATE
+=====================================
+Install: copy this shiftcal folder over /mnt/us/extensions/shiftcal (cloud.conf, hub.tsv and your settings
+are kept - this package no longer contains eco.conf or stocks.conf, so they can't be overwritten), then run
+Kitchen_Hub_Display.sh from Documents.
+
+This is the last USB install: from now on the hub updates itself from your GitHub site
+(Settings > Phone > CHECK FOR UPDATE, or the phone app: FRIDGE > Install update).
+
+Then set up the GitHub kit (kitchen_hub_9.8.5_github_kit.zip -> GITHUB_SETUP.txt, ~15 minutes on the PC).
+Everything on the fridge still works without it; the kit adds the cloud brain, phone pushes, calendar
+subscription, the TV dashboard, Siri and the PC command line. FEATURES.txt lists all 56 additions.
+
+NEW ON THE FRIDGE
+- Notes from the phone/PC/Siri in the bulletin strip and on the standby page (tap = read).
+- Remote control from the phone/PC (timer, sync, update, log, screen, contrast).
+- Repeating chores in the calendar; tonight's planned dinner on the dinner screen + front page.
+- Weather/news/recipes come as one file from the cloud brain when it's running: much shorter Wi-Fi time.
+- Self-update with checksums, daily log upload, settings backup/restore, Siri inbox.
+- Settings > Phone > GitHub cloud: status, update, log, backup, calendar + TV QR codes, cloud data on/off.
+
+####################################################################################################
+KITCHEN HUB 9.8
+===============
+Install: copy the shiftcal folder over /mnt/us/extensions/shiftcal (your cloud.conf,
+hub.tsv and settings are kept), then run Kitchen_Hub_Display.sh from Documents as usual.
+
+FIXED
+- The tiny clock. The page is rotated with CSS, and the "does it fit?" check was reading
+  the wrong screen edges, so the clock always shrank to its smallest size. The check now
+  follows the rotation, and the clock (tile, standby front page, night screen) is sized from
+  its measured width instead. Each size is written to power.log as "page: clock ..." -
+  please send power.log once if it still looks small.
+
+NEW
+- Recipes: SEARCH tab. Type anything (or tap an idea like Chili); the hub turns on Wi-Fi,
+  searches RecipeTin Eats, Budget Bytes and Cookie + Kate, and shows the results in about a
+  minute. Results open in the same reader as NEW recipes.
+- "+ ADD TO SHOPPING LIST" on every recipe (reader and the cook-mode ingredients page).
+  Amounts and units are stripped ("2 cups flour, sifted" -> Flour), salt/pepper/water are
+  skipped, and anything already on the list isn't added twice.
+- Automatic screens (Settings > Feel, each can be turned off or retimed):
+    Shift morning - 1-3 h before a shift: countdown, weather, road/weather alerts, today's events.
+    Dinner (4-7 pm) - a recipe idea, the shopping list, RECIPES and quick timer buttons.
+    Night (10 pm-6 am) - while asleep: big clock, tomorrow's shift + events, low-battery note.
+  They appear only after 45 s untouched; a tap dismisses one for the rest of the day.
+- Settings > Feel: Contrast (Normal/Strong/Max), Text weight (Normal/Bold), the three screens,
+  News sources (CKPG, CBC BC/Canada/World/Business/Tech) and topic mutes
+  (sports, showbiz, crime, politics, U.S.).
+- Battery: a week of history. Settings > System shows the drain over the whole week, hours/days
+  left and roughly when it will be empty. Your phone gets ONE ntfy alert when about a day is left
+  (resets when you charge).
+
+BATTERY / SYNC SAVINGS
+- Night (midnight-6 am): news every 3 h only, no recipe fetch, no markets.
+- Markets only on weekdays 6 am-2 pm; On This Day once a day; What's On feeds every 3 h
+  (alerts every wake); recipes every 6 h.
+
+####################################################################################################
+KITCHEN HUB 9.8.5 - 56 NEW THINGS, AND WHAT EACH ONE IMPROVES
+==============================================================
+Inspiration: MagInkDash and Timeframe (e-ink family dashboards), FamQuest (fridge chores), Hanselman's wall
+calendar, "keepalive" Actions, ntfy, Apple Shortcuts. Everything below is built and tested here; the TV and
+Siri parts depend on the Apple apps described in GITHUB_SETUP.txt / SHORTCUTS.txt.
+
+THE CLOUD BRAIN (GitHub Actions, every 15 min, free)
+ 1. Cloud data bundle - weather, news, what's on, recipes and horoscopes fetched on GitHub; the Kindle downloads
+    ONE file instead of ~25: a few seconds of Wi-Fi instead of a minute-plus of fetching -> battery.
+ 2. Falls back to fetching directly if the bundle is missing or over 2 h old - never worse than 9.8.
+ 3. Your news sources and markets list (fridge Settings) travel to the cloud with the fridge's check-in.
+ 4. No quiet hours in the cloud: night-time news is fresh in the morning without the fridge spending battery.
+ 5. Morning briefing push (7 am): weather, shift, events, chores, tonight's dinner, list count.
+ 6. "Tomorrow: shift 10:45-2:45p" push at 8 pm, with tomorrow's weather.
+ 7. "Shift at 10:45am - starts in 55 min, it's -4 out" push.
+ 8. Event reminder an hour before (events with a time).
+ 9. Chore pushes at their time (garbage night!).
+10. Birthdays/anniversaries: a week ahead and the day before.
+11. "Tomorrow is Family Day" stat-holiday heads-up (store hours).
+12. Sunday 6 pm: your week ahead in one push.
+13. Saturday: "12 things on the list - shopping day?"
+14. Watchdog: "The fridge hub went quiet" if it misses its check-ins (dead battery, Wi-Fi, crash).
+15. Low-battery push from the cloud as a backup to the fridge's own reminder.
+16. New Environment Canada warnings for Prince George pushed once each.
+17. Meal plan: fills empty dinners for the next 7 days from your saved recipes + the recipe feeds; never
+    touches a day you set or cleared.
+18. Recipe import from any link (JSON-LD recipe card) - from the phone, PC, or the iPhone share sheet.
+19. Calendar feed (.ics): shifts with real start/end times, events with a 30-min alert, chores as true repeats,
+    B.C. stat holidays - subscribe on iPhone, Outlook, Google Calendar.
+20. TV data, locked with your passphrase.
+21. Siri/PC inbox: plain "milk, eggs" lines become locked list items within minutes.
+22. Re-locks anything that arrived unlocked.
+23. "Test phone push" request from the phone app.
+24. Keep-alive: GitHub stops schedules after 60 quiet days; the brain commits one tiny file a month so it never dies.
+25. Writes only when something changed (fewer gist revisions; the fridge's check stays a tiny 304).
+26. Update manifest built automatically when you upload new fridge files.
+
+THE FRIDGE (Kindle)
+27. Updates itself from your GitHub site: every file checksum-verified, all-or-nothing, then it restarts itself.
+    No more USB after this one. (Tested: a tampered file aborts the update and nothing changes.)
+28. Fridge notes from the phone/PC/Siri appear in the bulletin strip and on the standby front page; tap = read
+    (the phone sees "read").
+29. Remote control from the phone/PC: timer, sync now, check/install update, upload log, front page/tiles,
+    contrast, open a screen, reload. Each runs once and reports back.
+30. Repeating chores in every calendar view (tile, day sheet, full calendar), marked with their rule.
+31. Tonight's planned dinner on the dinner screen and the standby front page.
+32. Check-in (kindle.json): battery, 7-day drain, hours left, version, last sync - for the phone, TV and brain.
+33. Log upload (daily + on demand) to your cloud gist: you can send me logs without a cable.
+34. Settings backup/restore: your layout and every Feel setting, locked in the gist; one tap after a reinstall.
+35. Reads the Siri/PC inbox itself at every sync, so "add milk" shows up at the next wake.
+36. Settings > Phone > GitHub cloud: brain status, update button, log button, backup/restore,
+    calendar QR (scan to subscribe) and TV QR.
+37. "Data from the cloud" on/off switch.
+
+THE PHONE APP
+38. FRIDGE tab: battery %, days/hours left, last check-in (warns if quiet), version, cloud-data status.
+39. Pin a note on the fridge.
+40. Remote control buttons (timers, sync, update, log, screen, contrast, reload).
+41. Read the fridge's log right on the phone.
+42. Chores editor: weekly (any days), every 2 weeks, monthly, last day of month, yearly, daily - optional time.
+43. Meal plan: this week's dinners, tap a day to change it, x to clear, re-roll the week.
+44. Import a recipe from a link.
+45. Subscribe-to-calendar and TV links (open/copy).
+46. Test-push button. Also fixed: the add-item bar no longer floats over other tabs; 5 tabs fit an iPhone.
+
+THE TV (Apple TV / any big screen)
+47. Living-room dashboard in the almanac style: Today (big clock, notes, shift, events, dinner, weather, alerts,
+    list), Week (7 columns with shifts, events, chores, dinners), Kitchen (list, chores, dinner plan),
+    News (+ what's on in P.G.), Fridge (battery, On This Day, markets, new recipes).
+48. Cook on the TV: down arrow -> pick a recipe -> ingredients -> big steps with the remote.
+49. Night mode 11 pm-6 am (just the clock and tomorrow); dark colours in the evening, light by day (D toggles).
+50. Burn-in care (the page drifts a few pixels), auto-refresh every 5 min, offline-tolerant.
+51. Optional photo frame slide from photos/ (public - read the warning).
+
+THE PC
+52. kh command line: add, list, done, note, timer, event, chore, recipe, plan, status, log, tv, cal, sync,
+    update, remotelog - same encryption as the fridge (self-tested before every write).
+53. "kh tv" opens the dashboard - perfect second-monitor view (F11).
+54. Desktop notifications via ntfy in the browser (timers, shifts, briefing).
+
+SIRI / APPLE WATCH / HOMEPOD
+55. "Hey Siri, add to fridge list" / "leave a fridge note" / "fridge timer" (also from the Watch and HomePod).
+56. Share any recipe page from Safari to the hub; NFC tag on the fridge door; arrive-at-the-store automation.

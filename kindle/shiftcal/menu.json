@@ -25,16 +25,6 @@
                     "exitmenu": false
                 },
                 {
-                    "name": "Status bar probe (writes statusbar_probe.txt)",
-                    "action": "/bin/sh /mnt/us/extensions/shiftcal/probe_statusbar.sh",
-                    "exitmenu": false
-                },
-                {
-                    "name": "Stats (task manager)",
-                    "action": "/bin/sh /mnt/us/extensions/shiftcal/hub_stats.sh",
-                    "exitmenu": false
-                },
-                {
                     "name": "Reset: snapshot to diag.txt, then stop everything",
                     "action": "/bin/sh /mnt/us/extensions/shiftcal/hub_reset.sh",
                     "exitmenu": false

@@ -52,3 +52,5 @@ select { font: inherit; padding: .5em; border: 1px solid var(--line); border-rad
 .tot .card b { font-size: 1.5em; display: block; } .tot .best { border: 2px solid var(--fg); }
 table.pc { width: 100%; border-collapse: collapse; font-size: .9em; } table.pc td, table.pc th { border-bottom: 1px solid var(--line); padding: .5em .4em; text-align: left; vertical-align: top; }
 table.pc select { max-width: 14em; font-size: .85em; } .wrap { overflow-x: auto; }
+.desk-only { display: none; } body.desktop .desk-only:not(.hidden) { display: block; }
+#push-cats label { display: inline-block; width: 48%; margin: .2em 0; } #push-cats label input { display: inline; width: auto; margin-right: .4em; }

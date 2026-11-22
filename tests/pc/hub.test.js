@@ -147,6 +147,12 @@ function signed(key, method, p, body, ts) {
         global.window = {}; eval(items.text); assert.ok(window.HUB_ITEMS.lines.some(l => /Eggs/.test(l)));
         assert.strictEqual((await request(S.port, "GET", "/kindle/../../../cloud.conf.example", null, { Cookie: cookie }, LAN)).status, 404);
     });
+    await t("logs bundle: hub log, devices, no keys", async () => {
+        fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ legacyPass: "secret-words", port: 1 }));
+        const b = await request(S.port, "GET", "/api/logs/bundle");
+        assert.strictEqual(b.status, 200); assert.ok(/==== devices ====/.test(b.text) && /iPhone/.test(b.text));
+        assert.ok(b.text.indexOf("secret-words") < 0 && b.text.indexOf(key.secret) < 0, "no passphrase or device key");
+    });
     await t("revoked device is out", async () => {
         assert.strictEqual((await request(S.port, "DELETE", "/api/devices/" + key.id)).status, 200);
         assert.strictEqual((await request(S.port, "GET", "/api/status", null, signed(key, "GET", "/api/status"), "192.168.1.52")).status, 401);

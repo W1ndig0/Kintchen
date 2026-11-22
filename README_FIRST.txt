@@ -1,24 +1,26 @@
-KITCHEN HUB 10.5 - THE WHOLE KIT
-This is a complete kit (not just the changed files): upload all of it to GitHub, replacing what is
-there, including the .github folder. Read UPDATE_10.5.txt first - it says how to put 10.5 on the fridge
-over USB once, since the fridge may still be running a mix of older files.
+KITCHEN HUB 11 - THE WHOLE KIT
+==============================
+Kitchen Hub turns a Kindle into a kitchen display. Since 11.0 the brain runs on your own Windows PC: the
+list, the jobs (meal plan, pantry, reminders), the fridge's weather/news/recipes package, phone alerts,
+fridge updates, books and the price check. Nothing needs GitHub to run.
 
 WHAT IS WHERE
-  index.html, extra*.js, hubdata.js, sw.js, tv.html, manifest.json   the phone app and TV page
-  cloud/                    the cloud brain (runs on GitHub Actions)
-  kindle/shiftcal/          the fridge: copy this folder to extensions/shiftcal on the Kindle
-  kindle/documents/         the library buttons: copy to the Kindle's documents folder
-                            (Display, Stats, Kill Background, Soft Reset, Reset)
-  kindle/manifest.txt       what the fridge downloads when it updates itself (GitHub rebuilds it)
-  pc/                       the PC tool (kh.cmd, kh.ps1)
-  tests/                    checks for the launcher, loop and updater on a Linux PC (not needed on
-                            the fridge or the website; see tests/README.txt)
+  Install Kitchen Hub.cmd   double-click on the PC (no administrator, no password) - see pc/hub/README.txt
+  Uninstall Kitchen Hub.cmd stops it and removes it from startup (your data stays)
+  pc/hub/                   the hub and its control panel (phone layout + desktop mode)
+  cloud/                    the jobs the hub runs (brain.js, the package builder, deals, pantry...)
+  kindle/shiftcal/          the fridge: copy to extensions/shiftcal on the Kindle (first time only; after
+                            that it updates itself from the PC)
+  kindle/documents/         the library buttons: Display and Reset
+  tests/                    checks (Linux): node tests/pc/*.test.js, KH_TESTS=$(pwd) sh tests/tNN.sh
+  HISTORY.txt               every update note before 11
+  UPDATE_11.*.txt           what changed in each 11.x version
 
-BEFORE YOU UPLOAD: GitHub secret HUB_PASS must equal PASSPHRASE in cloud.conf (see UPDATE_10.4.txt).
-Never put your real passphrase in cloud.conf.example - the repo is public.
+PAIRING
+  Fridge:  Settings > PC > PAIR WITH YOUR PC (the PC's address + the code from control panel > Devices >
+           Pair a device), or paste the 3 lines from "Pair the fridge" into cloud.conf.
+  Phone:   control panel > Devices > Pair a device, scan the code. With Tailscale for away from home.
 
-NEW FILES ON THE FRIDGE IN 10.5
-  hub_common.sh   the one place that starts the page, stops programs and repairs system state
-  stop_hub.sh     rewritten: the one way to stop the hub (used by every button and the launcher)
-  cacert.pem      an up-to-date list of trusted certificates, so every download is checked
-  hub_stats.sh, hub_killbg.sh, hub_softreset.sh   the diagnostics buttons, now part of the kit
+STILL HERE FROM BEFORE 11 (until you switch the GitHub cloud off)
+  index.html, extra*.js, hubdata.js, sw.js, tv.html, tvctl.js, manifest.json, photos/   the old phone app and
+  TV page on GitHub Pages;  .github/   the old cloud brain;  GITHUB_SETUP.txt   how that was set up.

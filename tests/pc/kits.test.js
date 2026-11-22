@@ -48,5 +48,21 @@ function startHub(data, port) {
         const p = await startHub(data, 8794);
         try { const k = await getJson(8794, "/api/kit"); assert.strictEqual(k.kit, ""); assert.ok(/would not start/.test(fs.readFileSync(data + "/hub.log", "utf8"))); } finally { p.kill(); }
     });
+    await t("the fridge's PRICE CHECK button: the PC answers in the list", async () => {
+        const d2 = fs.mkdtempSync(path.join(os.tmpdir(), "khpcb-"));
+        const p = await startHub(d2, 8795);
+        try {
+            const HubData = require(ROOT + "/cloud/hubdata.js"), n = Date.now();
+            const body = [HubData.makeLine(n, "s1", "shop", "open", "Milk"), HubData.makeLine(n, "k1", "pcreq", "open", "pricecheck")].join("\n") + "\n";
+            await new Promise((res, rej) => { const q = http.request({ host: "127.0.0.1", port: 8795, method: "POST", path: "/api/store" }, r => { r.resume(); r.on("end", res); }); q.on("error", rej); q.end(body); });
+            let text = "";
+            for (let i = 0; i < 40 && !/\tpricecheck\tpc\topen\t/.test(text); i++) {
+                await new Promise(r => setTimeout(r, 500));
+                text = await new Promise(res => http.get({ host: "127.0.0.1", port: 8795, path: "/api/store" }, r => { let b = ""; r.on("data", d => b += d); r.on("end", () => res(b)); }));
+            }
+            assert.ok(/\tpricecheck\tpc\topen\tCheapest: /.test(text), text);
+            assert.ok(/\tk1\tpcreq\tdone\t/.test(text), "the ask is marked done");
+        } finally { p.kill(); }
+    });
     console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
 })();

@@ -1664,7 +1664,7 @@ function exitHub() {
 khMark("main: v9.2 CHROME tiles, sysbar, settings");
 // =====================  v9.2 CHROME (tiles, sysbar, settings)  =======
 // =====================================================================
-var VERSION = "11.1";
+var VERSION = "11.2";
 var DIAG_SENT = {};      // 10.9.3: set up here, before anything at start-up can call diagOnce (see diagOnce)
 var W = 0, H = 0, PAD = 4, FS = 16, PORTRAIT = false;
 var MAST_H = 0, SYSBAR_H = 0, GRID_Y = 0, GRID_H = 0;
@@ -4162,8 +4162,8 @@ function renderShopView() {
 function cloudFootText() {
     if (!window.HUB_CLOUD || !(window.HUB_CLOUD.gist || window.HUB_CLOUD.pc)) return "Saved on the fridge. Pair the fridge with your PC to have the list on your phone too.";
     if (CLOUD_ST && CLOUD_ST.indexOf("ok") !== 0 && CLOUD_ST !== "never" && CLOUD_ST !== "not set up") return "&#9679; " + esc(CLOUD_ST);
-    if (CLOUD_PEND) return "Saved here &middot; reaches your phone on the next sync.";
-    return "In sync with your phone.";
+    if (CLOUD_PEND) return "Saved here &middot; reaches your " + (window.HUB_CLOUD.pc ? "PC and phone" : "phone") + " on the next sync.";
+    return window.HUB_CLOUD.pc ? "In sync with your PC." : "In sync with your phone.";
 }
 function openShopQR() {
     var box = $("sv-qrbox"), cap, txt;

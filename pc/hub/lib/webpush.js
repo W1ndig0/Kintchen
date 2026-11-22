@@ -47,6 +47,27 @@ function encrypt(payload, p256dh, auth, opts) {
     return Buffer.concat([salt, rs, Buffer.from([asPub.length]), asPub, ct]);
 }
 
+// alert kinds, for per-device on/off (desktop mode > Status > alerts). Worked out from the alert's title when the
+// job that sent it didn't say.
+const CATS = [["briefing", "Morning briefing"], ["week", "Sunday week ahead"], ["shifts", "Shifts"], ["events", "Events and reminders"],
+              ["birthdays", "Birthdays and anniversaries"], ["holidays", "Holidays"], ["shopping", "Shopping day"], ["food", "Food to use up / running low"],
+              ["deals", "Deals and price drops"], ["bills", "Bills, budget and payday"], ["fridge", "The fridge (battery, timers, gone quiet)"], ["price", "Price check results"]];
+function catOf(a) {
+    if (a.cat) return a.cat;
+    const t = String(a.title || "") + " " + String(a.tags || "");
+    if (/^Good morning/.test(t)) return "briefing";
+    if (/^Your week/.test(t)) return "week";
+    if (/fridge|Kitchen Hub battery|timer|went quiet/i.test(t)) return "fridge";
+    if (/shift/i.test(t)) return "shifts";
+    if (/birthday|anniversar/i.test(t)) return "birthdays";
+    if (/^Tomorrow is /.test(t)) return "holidays";
+    if (/things? on the list|shopping/i.test(t)) return "shopping";
+    if (/use it up|pantry|running low/i.test(t)) return "food";
+    if (/price drop|target hit|on sale|hot deal/i.test(t)) return "deals";
+    if (/bill|budget|payday/i.test(t)) return "bills";
+    if (/price check/i.test(t)) return "price";
+    return "events";
+}
 class Pusher {
     constructor(dir, log) {
         this.dir = dir; this.log = log || (() => {});
@@ -67,7 +88,8 @@ class Pusher {
         const x = this.subs[device]; if (!x) return null;
         if (s) {
             const h = (v, d) => (Number.isInteger(+v) && +v >= 0 && +v <= 23) ? +v : d;
-            x.settings = { on: s.on !== false, quietFrom: h(s.quietFrom, x.settings.quietFrom), quietTo: h(s.quietTo, x.settings.quietTo) };
+            const off = {}; (Array.isArray(s.off) ? s.off : Object.keys(x.settings.off || {})).forEach(k => { if (CATS.some(c => c[0] === k)) off[k] = 1; });
+            x.settings = { on: s.on !== false, quietFrom: h(s.quietFrom, x.settings.quietFrom), quietTo: h(s.quietTo, x.settings.quietTo), off };
             this.save();
         }
         return x.settings;
@@ -82,7 +104,7 @@ class Pusher {
         let n = 0;
         for (const dev of Object.keys(this.subs)) {
             const s = this.subs[dev];
-            if (!s.settings.on || (this.quiet(s.settings, now) && (alert.prio || 3) < 5)) continue;
+            if (!s.settings.on || (s.settings.off && s.settings.off[catOf(alert)]) || (this.quiet(s.settings, now) && (alert.prio || 3) < 5)) continue;
             try {
                 const r = await fetch(s.endpoint, { method: "POST", body: encrypt(payload, s.keys.p256dh, s.keys.auth),
                     headers: { Authorization: vapidHeader(s.endpoint, this.keys), "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream",
@@ -94,4 +116,4 @@ class Pusher {
         return n;
     }
 }
-module.exports = { Pusher, encrypt, vapidHeader, vapidKeys, b64u, unb64u };
+module.exports = { CATS, catOf, Pusher, encrypt, vapidHeader, vapidKeys, b64u, unb64u };

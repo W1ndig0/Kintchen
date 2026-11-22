@@ -238,6 +238,26 @@ pc_manifest() {
     head -1 "$T/b.$$" | grep -q '^version ' || return 1
     mv "$T/b.$$" "$1"; printf '%s\n' "$U" > "$2"; rm -f "$T/h.$$"
 }
+# v11: pair with the PC: $1 = http://address:port, $2 = the pairing code shown in the PC's control panel.
+# Writes PC_URL / PC_ID / PC_KEY to cloud.conf; the answer for the page goes in mesquite/pcpair.js.
+pc_pair() {
+    PJ="$DIR/mesquite/pcpair.js"
+    printf '{"code":"%s","name":"Fridge","kind":"kindle"}' "$2" > "$T/pp.$$"
+    CODE=$("$CURL" -s --connect-timeout 6 --max-time 20 -X POST -H "Content-Type: application/json" --data-binary "@$T/pp.$$" -o "$T/b.$$" -w '%{http_code}' "$1/api/pair" 2>/dev/null)
+    rm -f "$T/pp.$$"
+    ID=$(sed -n 's/.*"id" *: *"\(d[0-9a-f]\{12\}\)".*/\1/p' "$T/b.$$" 2>/dev/null); KEY=$(sed -n 's/.*"secret" *: *"\([0-9a-f]\{64\}\)".*/\1/p' "$T/b.$$" 2>/dev/null)
+    if [ "$CODE" = "200" ] && [ -n "$ID" ] && [ -n "$KEY" ]; then
+        [ -f "$CONF" ] || ( umask 077; echo "# Kitchen Hub" > "$CONF" )
+        HC_DIR=$DIR; . "$DIR/hub_common.sh" 2>/dev/null
+        if hub_conf_set PC_URL "$1" && hub_conf_set PC_ID "$ID" && hub_conf_set PC_KEY "$KEY"; then
+            echo "window.HUB_PCPAIR={ok:1,msg:\"Paired\",ts:$(date +%s)};" > "$PJ"; say "paired with the PC at $1"; rm -f "$T/b.$$"; return 0
+        fi
+        M="could not write cloud.conf"
+    else
+        case "$CODE" in 000) M="no answer from $1 - check the address and that the PC is on" ;; 403) M="the PC refused the code - make a new one and type it again" ;; 429) M="too many tries - wait 15 minutes" ;; *) M="the PC answered $CODE" ;; esac
+    fi
+    echo "window.HUB_PCPAIR={ok:0,msg:\"$M\",ts:$(date +%s)};" > "$PJ"; say "pairing: $M"; rm -f "$T/b.$$"; return 1
+}
 pc_alert() {      # $1 = text: the PC sends it to your phone (instead of ntfy)
     printf '%s' "$1" | tr -d '\r\n' | cut -c1-200 > "$T/al.$$"
     CODE=$(pc_api POST /api/kindle/alert "$T/al.$$"); rm -f "$T/al.$$" "$T/h.$$" "$T/b.$$"
@@ -364,4 +384,5 @@ case "$1" in
     pcmode) pc_mode ;;
     manifest) pc_mode && pc_manifest "$2" "$3" ;;
     alert) pc_mode && pc_alert "$2" ;;
+    pair) pc_pair "$2" "$3" ;;
 esac

@@ -32,8 +32,40 @@
             codes.innerHTML = ics ? "<div class='gh-q'><div class='gh-qr'>" + qrSvg(ics) + "</div><div class='hv-hint'><b>Calendar</b><br>Scan with the iPhone camera: shifts, events, chores and holidays in your phone's calendar (it refreshes when the phone can reach the PC).</div></div>"
                                   : "<div class='hv-hint'>The calendar code appears after the PC's first sync with the fridge.</div>";
         }
+        // v11: pair with the PC from here (no USB): its address, then the code its control panel shows
+        var pb = $("ph-pair11");
+        if (!pb) { pb = document.createElement("div"); pb.id = "ph-pair11"; pb.style.marginTop = ".5em"; hint.parentNode.appendChild(pb); }
+        pb.innerHTML = "<span class='opt-btn" + (c.pc ? "" : " big sel") + "' id='ph-pairbtn'>" + (c.pc ? "PAIR AGAIN" : "PAIR WITH YOUR PC") + "</span><div class='hv-hint' id='ph-pairmsg'></div>";
+        bindTap($("ph-pairbtn"), pairWithPC);
         gitHubPane();
     };
+    function pairWithPC() {
+        var last = ""; try { last = window.localStorage.getItem("pg_pcaddr") || ""; } catch (e) {}
+        if (!last && C().pc) last = pcAddr();
+        kbOpen("PC address (the control panel shows it, e.g. 192.168.1.20)", last, function(addr) {
+            addr = String(addr || "").replace(/\s+/g, "");
+            if (!addr) return;
+            try { window.localStorage.setItem("pg_pcaddr", addr); } catch (e) {}
+            kbOpen("Code from the PC (Devices > Pair a device)", "", function(code) {
+                code = String(code || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+                if (code.length < 6) return;
+                var m = $("ph-pairmsg"); if (m) m.innerHTML = "Pairing with " + esc(addr) + "&hellip;";
+                var t0 = new Date().getTime() / 1000;
+                sendPower("pcpair=" + encodeURIComponent(addr + " " + code));
+                (function poll(n) {
+                    loadScript("pcpair.js", function(ok) {
+                        var r = window.HUB_PCPAIR, el = $("ph-pairmsg");
+                        if (ok && r && r.ts >= t0 - 5) {
+                            if (el) el.innerHTML = r.ok ? "<b>Paired.</b> The first sync with the PC is running." : "Didn't work: " + esc(r.msg);
+                            loadScript("cloud.js", function() { if (HUB_OPEN && curTab === "phone") renderPhonePane(); });
+                            return;
+                        }
+                        if (n < 30) setTimeout(function() { poll(n + 1); }, 2000); else if (el) el.innerHTML = "No answer yet - look at Settings &rsaquo; System &rsaquo; Log.";
+                    });
+                })(0);
+            });
+        });
+    }
     phoneAlertsPane = function() {
         var box = $("ph-ntfy"); if (!box) return;
         box.innerHTML = "<div class='hv-hint'>" + (C().pc ? "Timer and battery alerts go to your phone through the PC: in the Kitchen Hub app on the phone, Status &rsaquo; Turn on alerts."
@@ -118,5 +150,52 @@
             return h;
         };
     }
+    // ---------- 5. the layout and settings travel to the PC (and come back from it) ----------
+    // The fridge's layout, Look and other settings live in this page's storage. With the PC paired, a copy goes to
+    // the PC whenever they change (cfg item "cfgkindle"), and a layout made in the PC's control panel arrives as
+    // "cfgpc": applied once at the next sync, then marked done so the PC shows "applied".
+    khEvery(60000, function() { try { if (C().pc) cfgBackup(false); } catch (e) {} });
+    function applyFromPC() {
+        try {
+            if (!C().pc) return;
+            var cs = itemsOf("cfg"), p = null, i;
+            for (i = 0; i < cs.length; i++) if (cs[i].id === "cfgpc" && cs[i].state === "open" && !cs[i].locked) p = cs[i];
+            if (!p) return;
+            var o = JSON.parse(p.text), keys = o.keys || {}, n = 0;
+            for (var k in keys) if (keys.hasOwnProperty(k) && CFG_KEYS.indexOf(k) >= 0 && typeof keys[k] === "string") { window.localStorage.setItem(k, keys[k]); n++; }
+            itemEdit("cfgpc", "cfg", "done", p.text);
+            try { window.localStorage.removeItem("pg_cfg_bk"); } catch (e) {}      // so the new layout is backed up to the PC again
+            if (n) setTimeout(function() { location.reload(); }, 1500);
+        } catch (e) {}
+    }
+    var __apply11 = applyItems;
+    applyItems = function() { __apply11(); applyFromPC(); };
+    setTimeout(applyFromPC, 3000);      // the list already loaded before this file: look once now too
+
+    // ---------- 6. price check from the fridge (the PC does it; the answer shows under the list) ----------
+    var __shop11 = renderShopView;
+    renderShopView = function() {
+        __shop11();
+        var f = $("sv-foot"); if (!f || !C().pc) return;
+        var r = null, ps = itemsOf("pc"), q = itemsOf("pcreq"), asked = false, i;
+        for (i = 0; i < ps.length; i++) if (ps[i].id === "pricecheck") r = ps[i];
+        for (i = 0; i < q.length; i++) if (q[i].state === "open" && q[i].text === "pricecheck") asked = true;
+        f.innerHTML += "<div style='margin-top:.4em'><span class='opt-btn' id='sv-price'>" + (asked ? "PRICE CHECK ASKED&hellip;" : "PRICE CHECK") + "</span> " +
+                       (r ? "<span class='hv-hint'>" + esc(r.text) + "</span>" : "<span class='hv-hint'>Which one store is cheapest for this list (the PC checks).</span>") + "</div>";
+        bindTap($("sv-price"), function() { itemEdit(HubData.newId("k"), "pcreq", "open", "pricecheck"); });      // the edit itself goes to the PC right away (no extra sync)
+    };
+
+    // ---------- 7. the web reader is gone (it needed the fridge to fetch pages itself) ----------
+    var __apps11 = appList;
+    appList = function() {
+        var L = __apps11(), out = [];
+        for (var i = 0; i < L.length; i++) {
+            if (L[i][0] === "web") continue;
+            if (L[i][0] === "books" && typeof L[i][2] === "string") L[i][2] = L[i][2].replace(/ in your cloud/, " from your PC");
+            out.push(L[i]);
+        }
+        return out;
+    };
+
     khMark && khMark("v11: the hub on the PC");
 })();

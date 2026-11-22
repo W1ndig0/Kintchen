@@ -66,8 +66,27 @@ const pusher = new Pusher(DATA, log);
 const jobs = new BrainHost({ store, dataDir: DATA, log, env: cfg.jobsEnv || {}, onAlert: a => pusher.send(a).catch(() => {}) });
 const server = createServer({ store, auth, dataDir: DATA, webDir: path.join(__dirname, "web"),
                               kindleDir: path.join(ROOT, "kindle", "shiftcal", "mesquite"), log, jobs, pusher, books, prices, calToken: cfg.calToken, pkgToken: cfg.pkgToken, shiftcalDir: path.join(ROOT, "kindle", "shiftcal"), port: PORT,
-                              onRestart: () => { log("restarting for the new kit"); process.exit(75); }, publicUrl: cfg.publicUrl,
+                              onPriceCheck: publishPrice, onRestart: () => { log("restarting for the new kit"); process.exit(75); }, publicUrl: cfg.publicUrl,
                               shared: { "hubdata.js": path.join(ROOT, "cloud", "hubdata.js"), "qr.js": path.join(ROOT, "kindle", "shiftcal", "mesquite", "qr.js") } });
+// the fridge's PRICE CHECK button: an open "pcreq" item "pricecheck" -> the check runs here, the answer goes back as
+// the "pc" item "pricecheck" (shown under the fridge's list) and to the phone as an alert
+const HubData = require("../../cloud/hubdata.js");
+function publishPrice(r) {
+    const old = HubData.items(store.text, "pc").find(i => i.id === "pricecheck");
+    if (r && r.summary && (!old || old.text !== r.summary)) store.merge(HubData.makeLine(Math.max(Date.now(), old ? old.ts + 1 : 0), "pricecheck", "pc", "open", r.summary.slice(0, 300)));
+}
+let priceBusy = false;
+store.onChange(() => {
+    if (priceBusy) return;
+    const asks = HubData.items(store.text, "pcreq").filter(i => i.state === "open" && i.text === "pricecheck");
+    if (!asks.length) return;
+    priceBusy = true;
+    const done = () => { store.merge(asks.map(a => HubData.makeLine(Math.max(Date.now(), a.ts + 1), a.id, "pcreq", "done", "pricecheck"))); priceBusy = false; };
+    const list = HubData.items(store.text, "shop").filter(i => i.state === "open" && i.text[0] !== "~").map(i => { const x = HubData.HubCal.parseShop(i.text); return { name: x.name, qty: x.qty }; }).filter(i => i.name);
+    if (!list.length) { publishPrice({ summary: "The list is empty." }); done(); return; }
+    prices.check(list).then(r => { publishPrice(r); pusher.send({ title: "Price check", body: r.summary, prio: 3, cat: "price" }).catch(() => {}); log("price check asked by the fridge"); })
+          .catch(e => log("price check failed: " + e.message)).then(done, done);
+});
 server.on("error", e => { log("cannot start: " + e.message + (e.code === "EADDRINUSE" ? " (is the hub already running?)" : "")); process.exit(1); });
 jobs.start().then(() => {
     server.listen(PORT, "0.0.0.0", () => log("Kitchen Hub " + VERSION + " on port " + PORT + ", data in " + DATA));

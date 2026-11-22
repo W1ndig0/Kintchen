@@ -52,10 +52,10 @@
     // ---------- list ----------
     function saveLocal() { LS.setItem("kh_store", STORE); LS.setItem("kh_pending", JSON.stringify(PENDING)); }
     function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return "&#" + c.charCodeAt(0) + ";"; }); }
-    function change(id, state, text) {
+    function change(id, state, text, kind) {
         var cur = STORE.split("\n"), ts = Date.now();
         for (var i = 0; i < cur.length; i++) { var it = HubData.parseLine(cur[i]); if (it && it.id === id && it.ts >= ts) ts = it.ts + 1; }
-        var line = HubData.makeLine(ts, id, "shop", state, text);
+        var line = HubData.makeLine(ts, id, kind || "shop", state, text);
         PENDING.push(line); STORE = HubData.merge([STORE, line], Date.now()); saveLocal(); renderList(); push();
     }
     function push() {
@@ -142,6 +142,10 @@
             $("push-on").classList.toggle("hidden", k.subscribed); $("push-set").classList.toggle("hidden", !k.subscribed);
             $("push-msg").textContent = k.subscribed ? "" : "Get reminders, the morning briefing and fridge warnings on this device.";
             if (k.settings) { $("push-enabled").checked = k.settings.on; $("push-qf").value = k.settings.quietFrom; $("push-qt").value = k.settings.quietTo; }
+            // desktop mode: every kind of alert on its own
+            $("push-cats").classList.toggle("hidden", !k.subscribed || !k.cats);
+            if (k.subscribed && k.cats) $("push-cats").innerHTML = "<p class='msg'>Which alerts this device gets:</p>" + k.cats.map(function (c) {
+                return "<label><input type='checkbox' data-cat='" + c[0] + "'" + (k.settings.off && k.settings.off[c[0]] ? "" : " checked") + "> " + esc(c[1]) + "</label>"; }).join("");
         }).catch(function () {});
     }
     function keyBytes(s) { var b = atob(s.replace(/-/g, "+").replace(/_/g, "/")), o = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) o[i] = b.charCodeAt(i); return o; }
@@ -154,7 +158,9 @@
         }).then(function (sub) { return call("POST", "/api/push/subscribe", sub.toJSON()); })
           .then(renderPush).catch(function (e) { $("push-msg").textContent = e.message; });
     };
-    $("push-save").onclick = function () { call("POST", "/api/push/settings", { on: $("push-enabled").checked, quietFrom: $("push-qf").value, quietTo: $("push-qt").value }).then(renderPush); };
+    function pushOff() { var off = []; Array.prototype.forEach.call(document.querySelectorAll("#push-cats input[data-cat]"), function (i) { if (!i.checked) off.push(i.dataset.cat); }); return off; }
+    $("push-save").onclick = function () { call("POST", "/api/push/settings", { on: $("push-enabled").checked, quietFrom: $("push-qf").value, quietTo: $("push-qt").value, off: pushOff() }).then(renderPush); };
+    $("push-cats").onchange = function () { $("push-save").onclick(); };
     $("push-test").onclick = function () { call("POST", "/api/push/test").then(function (r) { $("push-msg").textContent = r.sent ? "Sent." : "Nothing was sent (alerts off or quiet hours)."; }); };
     $("push-off").onclick = function () {
         navigator.serviceWorker.ready.then(function (r) { return r.pushManager.getSubscription(); }).then(function (s) { if (s) s.unsubscribe(); })
@@ -170,6 +176,9 @@
             .then(function (r) { $("kit-msg").textContent = r.error ? "Refused: " + r.error : "Kit " + r.version + " installed. The hub restarts in a few seconds (if it doesn't come back within a minute, use the tray icon > Restart)."; });
     };
     $("kit-install").onclick = function () { call("POST", "/api/queue", { action: "update-install" }).then(function () { $("kit-msg").textContent = "Queued: the fridge installs it at its next wake."; }); };
+    $("logs-dl").onclick = function () {
+        call("GET", "/api/logs/bundle").then(function (t) { var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([t], { type: "text/plain" })); a.download = "kitchen-hub-logs-" + new Date().toISOString().slice(0, 10) + ".txt"; a.click(); });
+    };
     $("jobs-run").onclick = function () { call("POST", "/api/jobs/run").then(function () { $("jobs-last").textContent = "Running now…"; setTimeout(renderStatus, 8000); }); };
 
     // ---------- desktop: virtual Kindle ----------
@@ -303,6 +312,62 @@
         f.text().then(function (t) { return call("POST", "/api/prices/book.csv", t); }).then(function (r) { alert(r.added + " prices added"); renderBook(); });
     };
 
+    // ---------- desktop: the fridge's layout ----------
+    var TILES = { cal: "Calendar", clock: "Clock", wx: "Weather", fc: "Forecast", news: "News", mkt: "Markets", alm: "Almanac", shifts: "Shifts", timer: "Timer",
+                  shop: "Shopping", board: "Board", rcp: "Recipes", horo: "Horoscope", pay: "Pay", deals: "Deals", money: "Money", food: "Pantry", fun: "Fun" };
+    var LY = null, LYO = "land", LYROT = "0";
+    function cfgItem(id) { var r = null; HubData.items(STORE, "cfg").forEach(function (i) { if (i.id === id) r = i; }); return r; }
+    function loadLayoutFromFridge() {
+        var c = cfgItem("cfgkindle"), o = null;
+        try { o = c && c.text[0] !== "~" ? JSON.parse(c.text) : null; } catch (e) {}
+        if (!o || !o.pg_tiles_v92) { LY = null; return null; }
+        try { LY = JSON.parse(o.pg_tiles_v92); } catch (e) { LY = null; }
+        LYROT = o.pg_rot6 || "0";
+        return o;
+    }
+    function renderLayout() {
+        var o = loadLayoutFromFridge(), p = cfgItem("cfgpc");
+        $("ly-state").textContent = !o ? "The fridge hasn't sent its layout yet (it does within a minute of being awake with the PC paired)." :
+            p && p.state === "open" ? "Sent - the fridge applies it at its next sync." : p && p.state === "done" ? "The last layout you sent was applied " + ago(p.ts) + "." : "This is the fridge's current layout.";
+        if (!LY) { $("ly-list").innerHTML = ""; return; }
+        $("ly-rot").value = LYROT;
+        var list = LY[LYO] || [];
+        $("ly-list").innerHTML = list.map(function (t, i) {
+            var where = t.hid ? "h" : t.pg ? "2" : "1";
+            return "<li><span class='t'><b>" + esc(TILES[t.id] || t.id) + "</b></span>" +
+                   "<select data-i='" + i + "' data-f='where'><option value='1'" + (where === "1" ? " selected" : "") + ">Page 1</option><option value='2'" + (where === "2" ? " selected" : "") + ">Page 2</option><option value='h'" + (where === "h" ? " selected" : "") + ">Hidden</option></select> " +
+                   "<select data-i='" + i + "' data-f='sz'>" + ["S", "M", "L", "XL"].map(function (z) { return "<option" + (t.sz === z ? " selected" : "") + ">" + z + "</option>"; }).join("") + "</select> " +
+                   "<button class='x' data-up='" + i + "'>▲</button><button class='x' data-down='" + i + "'>▼</button></li>";
+        }).join("");
+    }
+    $("ly-orient").onchange = function () { LYO = this.value; renderLayout(); };
+    $("ly-list").onchange = function (e) {
+        var sel = e.target, t = LY[LYO][+sel.dataset.i]; if (!t) return;
+        if (sel.dataset.f === "sz") t.sz = sel.value;
+        else { t.hid = sel.value === "h" ? 1 : 0; t.pg = sel.value === "2" ? 1 : 0; }
+        LY.preset = "custom";
+    };
+    $("ly-list").onclick = function (e) {
+        var b = e.target.closest("button"); if (!b) return;
+        var l = LY[LYO], i = +(b.dataset.up || b.dataset.down), j = b.dataset.up !== undefined ? i - 1 : i + 1;
+        if (j < 0 || j >= l.length) return;
+        var x = l[i]; l[i] = l[j]; l[j] = x; LY.preset = "custom"; renderLayout();
+    };
+    function layoutKeys() { return { pg_tiles_v92: JSON.stringify(LY), pg_rot6: $("ly-rot").value }; }
+    $("ly-preview").onclick = function () {
+        if (!LY) return;
+        show("kindle");
+        setTimeout(function () {
+            try { var w = $("vk").contentWindow, k = layoutKeys(); for (var n in k) w.localStorage.setItem(n, k[n]); w.location.reload(); } catch (e) { alert("Open the Virtual Kindle once first, then try again."); }
+        }, 1500);
+    };
+    $("ly-send").onclick = function () {
+        if (!LY) return;
+        change("cfgpc", "open", JSON.stringify({ at: Date.now(), keys: layoutKeys() }), "cfg");
+        $("ly-state").textContent = "Sent - the fridge applies it at its next sync.";      // (the list keeps your edits)
+    };
+    $("ly-reload").onclick = function () { pull().then(renderLayout); };
+
     // ---------- desktop: books ----------
     function renderBooks() {
         call("GET", "/api/books").then(function (b) {
@@ -320,14 +385,14 @@
         var forced = LS.getItem("kh_desktop");
         var desk = forced === "1" ? true : forced === "0" ? false : window.innerWidth >= 900;
         document.body.classList.toggle("desktop", desk); $("dm-switch").checked = desk;
-        if (!desk && /kindle|queue|devices|books/.test(TAB)) show("list");
+        if (!desk && /kindle|queue|devices|books|layout/.test(TAB)) show("list");
     }
     $("dm-switch").onchange = function () { LS.setItem("kh_desktop", this.checked ? "1" : "0"); applyLayout(); };
     function show(t) {
         TAB = t;
         Array.prototype.forEach.call(document.querySelectorAll("#nav button"), function (b) { b.classList.toggle("sel", b.getAttribute("data-tab") === t); });
         Array.prototype.forEach.call(document.querySelectorAll("main section"), function (s) { s.classList.toggle("hidden", s.id !== "tab-" + t); });
-        if (t === "list") push(); if (t === "status") renderStatus(); if (t === "kindle") openKindle(); if (t === "queue") renderQueue(); if (t === "devices") renderDevices(); if (t === "books") renderBooks(); if (t === "prices") renderBook();
+        if (t === "list") push(); if (t === "status") renderStatus(); if (t === "kindle") openKindle(); if (t === "queue") renderQueue(); if (t === "devices") renderDevices(); if (t === "books") renderBooks(); if (t === "prices") renderBook(); if (t === "layout") pull().then(renderLayout);
     }
     $("nav").onclick = function (e) { var b = e.target.closest("button[data-tab]"); if (b) show(b.getAttribute("data-tab")); };
     window.addEventListener("resize", function () { applyLayout(); if (TAB === "kindle") fitKindle(); });

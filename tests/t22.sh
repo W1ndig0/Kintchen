@@ -9,7 +9,7 @@ export HUB_TEST_STEP=30 HUB_QUICK_SEC=4 FAKE_WIFI=CONNECTED
 H=$HUB_DIR; C="$H/eco.conf"
 wifi_ons() { grep 'wirelessEnable 1' "$KT/lipc.log" 2>/dev/null | wc -l | tr -d ' '; }
 printf 'PASSPHRASE=TEST-PASS-1234\n' > "$H/cloud.conf"
-BASE='INTERVAL_MIN=5\nWAKE_WINDOW=4\nWIFI_TIMEOUT=2\nSCREENSAVER_MODE=off\nPILLOW_DISABLE=2\nAUTO_UPDATE=0\nNIGHT_FROM=0\nNIGHT_TO=0\nSLEEP_CLOCK=hour\n'
+BASE='ECO_V=112\nSYNC_MODE=manual\nLISTS_ON_WAKE=0\nINTERVAL_MIN=5\nWAKE_WINDOW=4\nWIFI_TIMEOUT=2\nSCREENSAVER_MODE=off\nPILLOW_DISABLE=2\nAUTO_UPDATE=0\nNIGHT_FROM=0\nNIGHT_TO=0\nSLEEP_CLOCK=hour\n'
 
 # ---- 1. defaults: nothing turns Wi-Fi on by itself (timer wakes, a button press)
 printf "$BASE"'DAILY_SESSION=0\n' > "$C"; : > "$KT/lipc.log"

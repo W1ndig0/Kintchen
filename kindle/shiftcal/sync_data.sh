@@ -98,6 +98,8 @@ if [ "$1" != "search" ] && [ -z "$CLOUD_BUNDLE" ] && [ "${USE_CLOUD_DATA:-1}" = 
     fi
     rm -f "$BP"
 fi
+# 11.2: BUNDLE_ONLY=1 (a list sync that only looks for the PC's new package): no package, no fetching here
+[ "${BUNDLE_ONLY:-0}" = "1" ] && { echo "No new package from the PC - nothing else fetched (list sync)"; exit 0; }
 fetch_extras "$1"      # (only reached when the package wasn't used)
 # v11: with the PC hub, the fridge's own fetching is only the fallback for when the PC is off: weather and news.
 PC_MODE=0; grep -q '^PC_KEY=[0-9a-f]' "$DIR/cloud.conf" 2>/dev/null && PC_MODE=1

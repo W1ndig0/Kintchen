@@ -7,7 +7,7 @@ ping_page "aw=$((N-600))-$((N+7200)),$((N+86400))-$((N+90000)),junk&rid=902" >/d
 grep -q '^SMART_SLEEP=1$' $HUB_DIR/eco.conf && grep -q '^AWAY_MIN=120$' $HUB_DIR/eco.conf && ok "schedule saved in eco.conf" || bad "eco.conf"
 # 10.10: the home / work / night wake intervals are retired: the clock ticks in standby and the page is redrawn
 # hourly whatever the schedule. Work times are still saved; night still comes from the night hours (23-6 here).
-waitfor 'grep -q "next wake .*(hourly redraw)" $HUB_DIR/power.log' 30 && ok "10.10: wakes for the hourly redraw at work too" || bad "no hourly wake line: $(grep 'next wake' $HUB_DIR/power.log | tail -1)"
+waitfor 'grep -q "next wake .*(hourly redraw\\|sync every 2 h)" $HUB_DIR/power.log' 30 && ok "10.10: wakes for the hourly redraw (or the 11.2 sync every 2 h) at work too" || bad "no hourly wake line: $(grep 'next wake' $HUB_DIR/power.log | tail -1)"
 grep -q 'aways: 2' $HUB_DIR/mesquite/state.js && grep -Eq 'where: "(home|night)"' $HUB_DIR/mesquite/state.js && ok "state.js tells the page (home or night, 2 work times)" || bad "state.js: $(grep -o 'where[^,]*,[^,]*' $HUB_DIR/mesquite/state.js)"
 ping_page "aw0=1&rid=903" >/dev/null; sleep 1
 [ ! -s "$HUB_DIR/.away" ] && ok "no shifts: work times cleared" || bad "aw0 did not clear"

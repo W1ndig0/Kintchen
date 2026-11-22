@@ -1,3 +1,5 @@
+(Before 11: how the GitHub cloud was set up. The hub on your PC replaces all of this - see README_FIRST.txt.)
+
 KITCHEN HUB 9.8.5 - THE GITHUB KIT
 ==================================
 This folder is your GitHub Pages repository (github.com/W1ndig0/Kintchen), plus a "cloud brain" that runs

@@ -73,6 +73,22 @@ const sh = (args, dir, extra) => new Promise(res => {
         s4.close();
         assert.strictEqual(r.code, 0); assert.strictEqual(got.length, 1); assert.strictEqual(got[0].body, "Timer done: pasta");
     });
+    await t("pair the fridge from its own screen (address + code), no USB", async () => {
+        const k5 = fs.mkdtempSync(path.join(os.tmpdir(), "khK5-")); cp.execSync("cp -r " + K + "/. " + k5 + "/"); fs.mkdirSync(k5 + "/mesquite", { recursive: true });
+        try { fs.unlinkSync(k5 + "/cloud.conf"); } catch (e) {}
+        const code = auth.newCode().code;
+        let r = await sh([k5 + "/hub_cloud.sh", "pair", base, "WRONGCOD"], k5);
+        assert.notStrictEqual(r.code, 0); assert.ok(/refused the code/.test(fs.readFileSync(k5 + "/mesquite/pcpair.js", "utf8")));
+        const code2 = auth.newCode().code;
+        r = await sh([k5 + "/hub_cloud.sh", "pair", base, code2], k5);
+        assert.strictEqual(r.code, 0, fs.readFileSync(k5 + "/sync.log", "utf8"));
+        const c = fs.readFileSync(k5 + "/cloud.conf", "utf8");
+        assert.ok(c.indexOf("PC_URL=" + base) >= 0 && /PC_ID=d[0-9a-f]{12}/.test(c) && /PC_KEY=[0-9a-f]{64}/.test(c), c);
+        assert.ok(/ok:1/.test(fs.readFileSync(k5 + "/mesquite/pcpair.js", "utf8")));
+        assert.ok(auth.list().some(d => d.kind === "kindle" && c.indexOf(d.id) >= 0), "the PC lists it as a fridge");
+        r = await sh([k5 + "/hub_cloud.sh", "sync"], k5);
+        assert.ok(/^ok /.test(fs.readFileSync(k5 + "/.cloud_status", "utf8")), "and it can sync right away");
+    });
     await t("recipe search runs on the PC", async () => {
         await sh([kdir + "/hub_cloud.sh", "rsearch", "leek soup"], kdir);
         assert.ok(/HUB_RSEARCH=\{q:"leek soup"/.test(fs.readFileSync(kdir + "/mesquite/rsearch.js", "utf8")));

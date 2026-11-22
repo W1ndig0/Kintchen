@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="11.1"
+VERSION="11.2"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -88,20 +88,26 @@ load_conf() {
                                        #         0-24 = this light while awake, off while it sleeps
     # 10.10: sleep, sync and battery settings (Settings > Sleep). See UPDATE_10.10.txt.
     SLEEP_CLOCK=min                    # standby clock: min = every minute (time only), 15 = every 15 min, hour, off
-    NIGHT_CLOCK=same                   # at night (NIGHT_FROM-NIGHT_TO): same = like the day, hour = the hour only, off
+    NIGHT_CLOCK=hour                   # at night (NIGHT_FROM-NIGHT_TO): same = like the day, hour = the hour only, off (11.2: hour)
     NIGHT_DEGHOST=1                    # a full (flashing) redraw each hour at night clears e-ink ghosting from the ticks
     HOURLY_REFRESH=1                   # the standby page is redrawn on the hour (news, countdowns, new day)
     WX_ANIM=1                          # ~10 s weather animation + bird of the hour on the hourly redraw
     TIMER_TICK=0                       # 1 = a running kitchen timer counts down on the standby screen every minute
-    SYNC_MODE=manual                   # cloud data: manual (SYNC only) or every 2 / 6 / 12 hours
+    SYNC_MODE=2                        # weather/news/lists: manual (SYNC only) or every 2 / 6 / 12 hours (11.2: 2, the PC's rhythm)
     EDIT_PUSH=now                      # Kindle edits to the cloud: now (short Wi-Fi burst) or sync (with the next sync)
-    LISTS_ON_WAKE=0                    # 1 = fetch phone list changes on every button press (Wi-Fi each time)
+    LISTS_ON_WAKE=1                    # 1 = fetch list changes on every button press (a few seconds of home Wi-Fi) (11.2: on)
     DAILY_SESSION=1                    # one Wi-Fi session a day: clock check, phone commands, new data if any, update check, report
     DAILY_HOUR=3
     LOWBATT_SAVER=1                    # below 15%: clock every 15 min, no animation
     CLOCK_DRAW=auto                    # auto = the loop draws the digits when the Kindle can; page = the page redraws the minute
     AUTO_UPDATE=1                      # 0 = only when you tap, 1 = check nightly and tell you (10.5 default), 2 = install at night (undone by itselfif it fails)
+    ECO_V=0
     [ -f "$CONF" ] && . "$CONF"
+    # 11.2: the battery review - the night clock shows the hour only, weather/news come from the PC every 2 hours,
+    # and a power-button press fetches list changes. Applied once to an existing eco.conf (you can change them
+    # back in Settings > Sleep); later changes you make are kept.
+    case "$ECO_V" in ''|*[!0-9]*) ECO_V=0 ;; esac
+    if [ "$ECO_V" -lt 112 ]; then NIGHT_CLOCK=hour; SYNC_MODE=2; LISTS_ON_WAKE=1; ECO_V=112; ECO_MOVED=1; fi
     case "$AUTO_UPDATE" in 0|1|2) ;; *) AUTO_UPDATE=1 ;; esac
     case "$FREEZE_POWERD" in 0|1) ;; *) FREEZE_POWERD=1 ;; esac
     case "$LOCAL_ONLY" in 0|1) ;; *) LOCAL_ONLY=0 ;; esac
@@ -181,6 +187,7 @@ AWAY_MIN=$AWAY_MIN
 NIGHT_MIN=$NIGHT_MIN
 NIGHT_FROM=$NIGHT_FROM
 NIGHT_TO=$NIGHT_TO
+ECO_V=$ECO_V
 EOT
     mv "$CONF.tmp" "$CONF"
 }
@@ -497,6 +504,13 @@ start_sync() {   # 10.10: "" = full SYNC (you asked) | lists = edit burst (lists
                     N=$((N + 1))
                 done
             fi
+            if [ "$1" = "lists" ] && grep -q '^PC_KEY=[0-9a-f]' "$DIR/cloud.conf" 2>/dev/null; then
+                BT0=$(cat "$DIR/.bundle_ts" 2>/dev/null)
+                ONLY_IF_NEW=1 BUNDLE_ONLY=1 nice -n 10 /bin/sh "$DIR/sync_data.sh"
+                if [ -n "$(cat "$DIR/.bundle_ts" 2>/dev/null)" ] && [ "$(cat "$DIR/.bundle_ts" 2>/dev/null)" != "$BT0" ]; then
+                    date +%s > "$LAST_SYNC_F"; log "edit burst also brought the PC's new package (counts as the scheduled sync)"
+                fi
+            fi
             if [ "$1" != "lists" ]; then
                 # weather, news, deals ... in one package; the daily session only takes it if the brain made a new one
                 USE_CLOUD_DATA=$USE_CLOUD_DATA ONLY_IF_NEW=$([ "$1" = "daily" ] && echo 1 || echo 0) nice -n 10 /bin/sh "$DIR/sync_data.sh"
@@ -540,15 +554,6 @@ start_search() {   # a recipe search uses the same one-at-a-time network job as 
     ) &
     SYNC_PID=$!
 }
-start_web() {     # 10.2: the hub's web reader (same one-at-a-time network job)
-    (
-        trap - EXIT INT TERM
-        if wifi_on; then log "$(sh "$DIR/web_fetch.sh" "$1" "$2")"; else
-            printf 'window.HUB_WEB={id:"%s",url:"",final:"",code:0,err:"Wi-Fi did not connect",ts:%s,html:""};\n' "$2" "$(date +%s)" > "$DIR/mesquite/web.js"; log "web: no Wi-Fi"; fi
-        wifi_off
-    ) &
-    SYNC_PID=$!
-}
 start_job() {     # 9.8.5: update-check | update-install | logup | status  (same one-at-a-time network job)
     if [ "$BOOT" = "1" ]; then echo "$1" > "$DIR/.job_next"; return; fi     # 10.4.1: after the page is up
     (
@@ -569,8 +574,12 @@ start_job() {     # 9.8.5: update-check | update-install | logup | status  (same
                     [ "$?" = "0" ] && { log "night update installed - restarting the hub"; echo "night update installed" > "$DIR/.relaunch"; } ;;
                 logup) [ -f "$DIR/hub_sys.sh" ] && sh "$DIR/hub_sys.sh" >/dev/null 2>&1; sh "$DIR/hub_cloud.sh" log ;;      # 10.10: the system snapshot only for SEND LOG
                 status) sh "$DIR/hub_cloud.sh" status ;;
+                pcpair)      # v11: pair with the PC from Settings > PC (address + the code the PC shows)
+                    read -r PPU PPC < "$DIR/.pcpair_req" 2>/dev/null; rm -f "$DIR/.pcpair_req"
+                    if [ -n "$PPU" ] && sh "$DIR/hub_cloud.sh" pair "$PPU" "$PPC"; then log "paired with the PC at $PPU"; write_cloud_js; sh "$DIR/hub_cloud.sh" sync
+                    else log "pairing with the PC failed"; fi ;;
             esac
-        else log "$1: no Wi-Fi"; fi
+        else log "$1: no Wi-Fi"; echo "window.HUB_PCPAIR={ok:0,msg:\"No Wi-Fi\",ts:$(date +%s)};" > "$DIR/mesquite/pcpair.js"; fi
         wifi_off
     ) &
     SYNC_PID=$!
@@ -677,7 +686,7 @@ poll_settings_http() {
         NEWU=$((NOWQ + 90)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
         if sync_running; then log "sync requested (already running)"; else log "sync requested from the hub"; start_sync; fi
     fi
-    if has stocks item cloudsync cloudwake rsearch news job clouddata books savepage web wid kbrowser health autoupd diag notify alerts; then      # 10.10.4: cloud, lists and jobs
+    if has stocks item cloudsync cloudwake rsearch news job clouddata pcpair books savepage web wid kbrowser health autoupd diag notify alerts; then      # 10.10.4: cloud, lists and jobs
         STK=$(qv stocks)
         if [ -n "$STK" ]; then
             # "SYM~LABEL,SYM~LABEL" url-encoded; keep only safe characters, max 10 lines
@@ -739,31 +748,31 @@ poll_settings_http() {
             update-rollback)
                 log "rollback asked for from the hub"
                 if sh "$DIR/hub_update.sh" rollback; then relaunch "rolled back from the hub"; fi ;;
-            update-check|update-install|update-auto|logup|status)
+            update-check|update-install|update-auto|logup|status|pcpair)
                 NEWU=$((NOWQ + 180)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
                 if sync_running; then log "$JB waits for the running sync"; echo "$JB" > "$DIR/.job_next"; else log "job: $JB"; start_job "$JB"; fi ;;
         esac
         V=$(num_or_empty "$(qv clouddata)")
         if [ -n "$V" ]; then case "$V" in 1) USE_CLOUD_DATA=1 ;; *) USE_CLOUD_DATA=0 ;; esac; CHANGED=1; write_cloud_js; log "cloud data: $USE_CLOUD_DATA"; fi
+        PP=$(qv pcpair)
+        if [ -n "$PP" ]; then        # v11: "address code" from Settings > PC
+            PPD=$(urldecode "$PP" | tr -d '\r\n')
+            PPU=${PPD%% *}; PPC=$(printf '%s' "${PPD#* }" | tr 'a-z' 'A-Z' | tr -cd 'A-Z0-9')
+            case "$PPU" in http://*|https://*) ;; *) PPU="http://$PPU" ;; esac
+            case "$PPU" in *:[0-9]*) ;; *) PPU="$PPU:8770" ;; esac
+            case "$PPU" in *[!A-Za-z0-9:/._-]*) log "pairing: odd PC address refused" ;;
+                *) if [ ${#PPC} -ge 6 ] && [ ${#PPC} -le 12 ]; then
+                       printf '%s %s\n' "$PPU" "$PPC" > "$DIR/.pcpair_req"; NEWU=$((NOWQ + 180)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
+                       if sync_running; then echo pcpair > "$DIR/.job_next"; else start_job pcpair; fi
+                   else log "pairing: the code should be 8 letters/numbers"; fi ;;
+            esac
+        fi
         BK=$(qv books)
         if [ -n "$BK" ]; then       # 10.3: which books belong on the Kindle: lines "id<TAB>file name"
             urldecode "$BK" | awk -F'\t' 'NF == 2 && $1 ~ /^[A-Za-z0-9]+$/ && $2 !~ /\// && $2 !~ /^\./ && length($2) < 120 { print $1 "\t" $2 }' > "$DIR/.books_want.tmp"
             if ! cmp -s "$DIR/.books_want.tmp" "$DIR/.books_want"; then mv "$DIR/.books_want.tmp" "$DIR/.books_want"; log "books on the Kindle: $(grep -c . "$DIR/.books_want")"; sync_running || start_sync lists; else rm -f "$DIR/.books_want.tmp"; fi
         fi
-        SP=$(qv savepage)
-        if [ -n "$SP" ]; then       # 10.3: the web page you're reading -> a text file in the Kindle library
-            SPN=$(urldecode "$SP" | tr -cd 'A-Za-z0-9 ._()-' | cut -c1-80)
-            [ -n "$SPN" ] && log "$(sh "$DIR/web_fetch.sh" save "$SPN")"
-        fi
-        WU=$(qv web)
-        if [ -n "$WU" ]; then
-            WU=$(urldecode "$WU" | tr -d '\r\n"`$\\' | cut -c1-500); WID=$(qv wid | tr -cd 'A-Za-z0-9' | cut -c1-20)
-            NEWU=$((NOWQ + 240)); [ "$NEWU" -gt "$AWAKE_UNTIL" ] && AWAKE_UNTIL=$NEWU
-            case "$WU" in
-                q:*|http://*|https://*|[A-Za-z0-9]*.*)
-                    if sync_running; then log "web page waits for the running sync"; printf '%s\n%s\n' "$WU" "$WID" > "$DIR/.web_next"; else log "web: page asked for"; start_web "$WU" "$WID"; fi ;;
-            esac
-        fi
+        # (11.2: the web reader and "save page" are gone: web= and savepage= are ignored)
         if [ "$(qv kbrowser)" = "1" ]; then log "opening the Kindle's own browser (the hub comes back at the next wake)"; AWAY=1; lipc-set-prop com.lab126.appmgrd start app://com.lab126.browser 2>/dev/null; fi
         HV=$(qv health | tr -cd 'A-Za-z0-9.-')
         # 10.4.1: ANY message from the page proves the new page started. The listener takes one message at a
@@ -1353,6 +1362,7 @@ kill_stray_nc() {
 # ---------------------------------------------------------------- start
 echo $$ > "$PIDF"
 load_conf
+[ "$ECO_MOVED" = "1" ] && [ -f "$CONF" ] && { save_conf; log "11.2 battery settings: night clock hour only, PC package every 2 h, lists on button press (change in Settings > Sleep)"; }
 read_last_sync
 log "start v$VERSION pid $$ (interval ${INTERVAL_MIN}m, window ${WAKE_WINDOW}s, screenshot=${SCREENSAVER_MODE}, hide-statusbar=${PILLOW_DISABLE}, nc=${HAVE_NC}, battery $(battery_pct)%)"
 # 10.10: the clock digit and weather animation pictures ship as one archive (one download in an update)
@@ -1493,7 +1503,7 @@ while true; do
         [ -f "$DIR/.relaunch" ] && ! sync_running && relaunch "$(cat "$DIR/.relaunch" 2>/dev/null)"
         [ "$BOOT" = "1" ] && [ $(( $(date +%s) - BOOT_T0 )) -ge "$BOOT_WAIT" ] && boot_failed
         if [ "$BOOT" != "1" ] && [ -s "$DIR/.job_next" ] && ! sync_running; then J2=$(cat "$DIR/.job_next"); rm -f "$DIR/.job_next"; log "job: $J2"; start_job "$J2"; fi
-        if [ -s "$DIR/.web_next" ] && ! sync_running; then W1=$(sed -n 1p "$DIR/.web_next"); W2=$(sed -n 2p "$DIR/.web_next"); rm -f "$DIR/.web_next"; start_web "$W1" "$W2"; fi
+        rm -f "$DIR/.web_next"
         if [ -s "$DIR/.rsearch_next" ] && ! sync_running; then Q2=$(cat "$DIR/.rsearch_next"); rm -f "$DIR/.rsearch_next"; log "recipe search: $Q2"; start_search "$Q2"; fi
         if [ "${CLOUD_DUE:-0}" -gt 0 ] && [ "$(date +%s)" -ge "$CLOUD_DUE" ]; then
             CLOUD_DUE=0
@@ -1542,7 +1552,7 @@ while true; do
     if [ "$SCREENSAVER_MODE" != "off" ]; then
         PAINT_FULL=$HOURLY_NOW capture_and_freeze_display
         # 10.10: the weather animation (~10 s) over the standby weather picture, on the hourly redraw
-        [ "$HOURLY_NOW" = "1" ] && [ "$WX_ANIM" = "1" ] && ! saver_on && play_wx_anim
+        [ "$HOURLY_NOW" = "1" ] && [ "$WX_ANIM" = "1" ] && ! saver_on && ! is_night_at "$(date +%s)" && play_wx_anim      # 11.2: not at night (nobody watching)
     fi
     QUICK_ACTIVE=0; HOURLY_NOW=0
     CLK_LAST=""          # 10.10.2: the first tick draws every slot (the page may not have shown the current time)

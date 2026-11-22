@@ -33,6 +33,7 @@
     <button data-tab="prices">Prices</button>
     <button data-tab="status">Status</button>
     <button data-tab="kindle" class="desk">Virtual Kindle</button>
+    <button data-tab="layout" class="desk">Fridge layout</button>
     <button data-tab="queue" class="desk">Fridge queue</button>
     <button data-tab="books" class="desk">Books</button>
     <button data-tab="devices" class="desk">Devices</button>
@@ -69,6 +70,8 @@
       <h3 class="sub">Jobs (meal plan, pantry, reminders, calendar, the fridge's package) - every 30 minutes</h3>
       <div class="row"><button id="jobs-run">Run jobs now</button><span id="jobs-last" class="msg"></span></div>
       <div id="cal-box" class="hidden card row"><div id="cal-qr" class="qr"></div><div><b>Calendar</b><p class="msg">Scan with the iPhone camera to subscribe (shifts, events, chores, holidays). It refreshes when the phone can reach the PC (home Wi-Fi or Tailscale).</p><p class="msg" id="cal-link"></p></div></div>
+      <h3 class="sub desk-only">Logs</h3>
+      <div class="row desk-only"><button id="logs-dl">Download the logs bundle</button><span class="msg">Hub and fridge logs in one file - attach it in chat with Claude when something's wrong. No keys or passwords in it.</span></div>
       <h3 class="sub">Fridge updates (from this PC)</h3>
       <div class="row"><span id="kit-msg" class="msg"></span><button id="kit-pull" class="hidden">Get the newest kit</button><button id="kit-install">Install on the fridge</button></div>
       <div class="row" id="kit-zip-row"><label class="dm">Install a kit file (.zip) on this PC <input type="file" id="kit-zip" accept=".zip"></label></div>
@@ -80,6 +83,7 @@
         <span class="msg">to</span><input id="push-qt" type="number" min="0" max="23" style="width:4.5em">
         <button id="push-save">Save</button><button id="push-test">Send a test</button><button id="push-off">Turn off on this device</button>
       </div>
+      <div id="push-cats" class="hidden desk-only"></div>
       <h3 class="sub">Recent alerts</h3>
       <ul id="alerts" class="items"></ul>
     </section>
@@ -90,6 +94,17 @@
         <span class="msg">The real fridge page, fed with the PC's data. Taps here don't reach the fridge; use the queue for that.</span>
       </div>
       <div id="vk-wrap"><iframe id="vk" title="Virtual Kindle"></iframe></div>
+    </section>
+    <section id="tab-layout" class="hidden">
+      <p class="msg" id="ly-state"></p>
+      <div class="row">
+        <select id="ly-orient"><option value="land">Sideways (landscape)</option><option value="port">Upright (portrait)</option></select>
+        <label class="dm">Turned <select id="ly-rot"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label>
+        <button id="ly-reload">Get the fridge's layout again</button>
+      </div>
+      <ul id="ly-list" class="items"></ul>
+      <div class="row"><button id="ly-preview">Preview in the virtual Kindle</button><button id="ly-send" class="primary">Send to the fridge</button>
+        <span class="msg">The fridge applies it at its next sync and restarts its page.</span></div>
     </section>
     <section id="tab-queue" class="hidden">
       <div class="row" id="q-buttons">
