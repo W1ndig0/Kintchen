@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="11.2.3"
+VERSION="11.2.4"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -579,7 +579,7 @@ start_job() {     # 9.8.5: update-check | update-install | logup | status  (same
                     if [ -n "$PPU" ] && sh "$DIR/hub_cloud.sh" pair "$PPU" "$PPC"; then log "paired with the PC at $PPU"; write_cloud_js; sh "$DIR/hub_cloud.sh" sync
                     else log "pairing with the PC failed"; fi ;;
             esac
-        else log "$1: no Wi-Fi"; echo "window.HUB_PCPAIR={ok:0,msg:\"No Wi-Fi\",ts:$(date +%s)};" > "$DIR/mesquite/pcpair.js"; fi
+        else log "$1: no Wi-Fi"; rm -f "$DIR/.pcpair_req"; echo "window.HUB_PCPAIR={ok:0,msg:\"No Wi-Fi\",ts:$(date +%s)};" > "$DIR/mesquite/pcpair.js"; fi      # 11.2.4: the pairing code is not left on the Kindle
         wifi_off
     ) &
     SYNC_PID=$!
@@ -633,7 +633,8 @@ poll_settings_http() {
     NC_BIND=""; [ "$LOCAL_ONLY" = "1" ] && NC_BIND="-s 127.0.0.1"
     printf 'HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: text/plain\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok' | nc -l -p 8765 $NC_BIND -w 1 > "$NC_OUT" 2>/dev/null &
     NCP=$!
-    ( sleep 5; kill "$NCP" 2>/dev/null ) >/dev/null 2>&1 &
+    # 11.2.2: the watchdog's own sleep is stopped with it (killing only the subshell left a "sleep 5" behind for every poll)
+    ( sleep 5 & NCS=$!; trap 'kill "$NCS" 2>/dev/null; exit 0' TERM; wait "$NCS" 2>/dev/null; kill "$NCP" 2>/dev/null ) >/dev/null 2>&1 &
     NCW=$!
     wait "$NCP" 2>/dev/null; NCRC=$?
     kill "$NCW" 2>/dev/null

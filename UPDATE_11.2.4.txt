@@ -1,0 +1,7 @@
+KITCHEN HUB 11.2.4 - TIDIER KINDLE LOOP
+Installs by itself from your PC: Settings > Updates > CHECK FOR UPDATE (the PC part needs "Install a kit file" first).
+Small clean-ups in the Kindle's loop.
+
+FIXES
+ 1  Listening for the page no longer leaves a stray 5-second timer behind on every check while the fridge is awake.
+ 2  If pairing with the PC fails because there is no Wi-Fi, the pairing code is not kept on the Kindle.

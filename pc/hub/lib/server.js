@@ -12,7 +12,7 @@ const http = require("http"), fs = require("fs"), path = require("path"), crypto
 const { atomicWrite } = require("./store.js");
 const { isOwnerRequest, clientAddr } = require("./auth.js");
 
-const VERSION = "11.2.3";
+const VERSION = "11.2.4";
 const MAX_BODY = 2 * 1024 * 1024;
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
                 ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml",
