@@ -124,6 +124,43 @@ const sh = (args, dir, extra) => new Promise(res => {
         assert.ok(!/^VERSION="99.0"/m.test(fs.readFileSync(f2 + "/power_loop.sh", "utf8")), "nothing installed");
     });
     srv2.close();
+    // ---- the book folder ----
+    const { Books } = require(ROOT + "/pc/hub/lib/books.js");
+    const bdir = fs.mkdtempSync(path.join(os.tmpdir(), "khBooks-")), conv = path.join(bdir, "..", "fakeconv-" + process.pid);
+    fs.writeFileSync(conv, "#!/bin/sh\nprintf 'AZW3:' > \"$2\"; cat \"$1\" >> \"$2\"\n"); fs.chmodSync(conv, 0o755);
+    const bookBytes = Buffer.from(Array.from({ length: 5000 }, (_, i) => i % 251));
+    fs.writeFileSync(bdir + "/Moby Dick - Herman Melville.txt", bookBytes);
+    fs.writeFileSync(bdir + "/Emma.epub", "EPUBDATA");
+    const books = new Books({ booksDir: bdir, dataDir: data, store, convert: conv });
+    const srv3 = createServer({ store, auth, dataDir: data, webDir: ROOT + "/pc/hub/web", kindleDir: K + "/mesquite", ownerLocal: false, pkgToken, calToken, books });
+    await new Promise(r => srv3.listen(0, "127.0.0.1", r));
+    const base3 = "http://127.0.0.1:" + srv3.address().port, lib = fs.mkdtempSync(path.join(os.tmpdir(), "khLib-"));
+    await t("book folder: each file becomes a book item for the fridge (EPUB converted)", () => {
+        assert.strictEqual(books.scan(), 2);
+        const its = store.items().filter(i => i.kind === "book"), moby = its.find(i => /^Moby Dick\|Herman Melville\|txt\|5000\|kindle\|pc/.test(i.text));
+        assert.ok(moby, its.map(i => i.text).join(" / ")); assert.ok(its.some(i => /^Emma\|\|azw3\|.*\|epub$/.test(i.text)));
+        assert.strictEqual(books.scan(), 0, "nothing new the second time");
+    });
+    await t("the fridge's own downloader fetches them from the PC into its library, checksums intact", async () => {
+        fs.writeFileSync(kdir + "/cloud.conf", "PC_URL=" + base3 + "\nPC_ID=" + key.id + "\nPC_KEY=" + key.secret + "\n");
+        await sh([kdir + "/hub_cloud.sh", "sync"], kdir);       // gets BOOKS_URL
+        assert.ok(/BOOKS_URL=/.test(fs.readFileSync(kdir + "/.cloud_links", "utf8")));
+        fs.copyFileSync(K + "/hub_books.sh", kdir + "/hub_books.sh");
+        const ids = store.items().filter(i => i.kind === "book");
+        // what the fridge page writes (bookName): "Title - Author.ext"
+        fs.writeFileSync(kdir + "/.books_want", ids.map(i => { const f = i.text.split("|"); return i.id + "\t" + (f[1] ? f[0] + " - " + f[1] : f[0]) + "." + f[2]; }).join("\n") + "\n");
+        await sh([kdir + "/hub_books.sh"], kdir, { HUB_LIB: lib, CURL_BIN: "curl" });
+        assert.ok(fs.readFileSync(lib + "/Moby Dick - Herman Melville.txt").equals(bookBytes), fs.readFileSync(kdir + "/sync.log", "utf8").slice(-500));
+        assert.strictEqual(fs.readFileSync(lib + "/Emma.azw3", "utf8"), "AZW3:EPUBDATA");
+    });
+    await t("taking a book out of the folder takes it off the fridge", async () => {
+        fs.unlinkSync(bdir + "/Emma.epub"); assert.strictEqual(books.scan(), 1);
+        assert.ok(!store.items().some(i => i.kind === "book" && /^Emma/.test(i.text)));
+        fs.writeFileSync(kdir + "/.books_want", fs.readFileSync(kdir + "/.books_want", "utf8").split("\n").filter(l => !/Emma/.test(l)).join("\n"));
+        await sh([kdir + "/hub_books.sh"], kdir, { HUB_LIB: lib, CURL_BIN: "curl" });
+        assert.ok(!fs.existsSync(lib + "/Emma.azw3") && fs.existsSync(lib + "/Moby Dick - Herman Melville.txt"));
+    });
+    srv3.close();
     srv.close();
     console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
 })();

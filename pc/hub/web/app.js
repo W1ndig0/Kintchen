@@ -229,19 +229,31 @@
         }).catch(function (e) { alert(e.message); });
     };
 
+    // ---------- desktop: books ----------
+    function renderBooks() {
+        call("GET", "/api/books").then(function (b) {
+            $("bk-folder").textContent = b.folder;
+            $("bk-cal").textContent = b.calibre === false ? "Calibre isn't installed: EPUB books are sent as they are (the Kindle's own reader can't open them). Install Calibre (free) to have them converted." : "";
+            $("bk-list").innerHTML = b.books.map(function (x) {
+                return "<li><span class='t'>" + esc(x.name) + " <span class='n'>" + esc(x.ext.toUpperCase()) + " · " + Math.round(x.size / 1024) + " KB" + (x.conv === "epub" ? " · converted from EPUB" : x.conv === "fail" ? " · EPUB not converted" : "") + "</span></span></li>";
+            }).join("") || "<li class='msg'>The folder is empty.</li>";
+        }).catch(function (e) { setOnline(false, e); });
+    }
+    $("bk-scan").onclick = function () { call("POST", "/api/books/scan").then(renderBooks); };
+
     // ---------- layout + tabs ----------
     function applyLayout() {
         var forced = LS.getItem("kh_desktop");
         var desk = forced === "1" ? true : forced === "0" ? false : window.innerWidth >= 900;
         document.body.classList.toggle("desktop", desk); $("dm-switch").checked = desk;
-        if (!desk && /kindle|queue|devices/.test(TAB)) show("list");
+        if (!desk && /kindle|queue|devices|books/.test(TAB)) show("list");
     }
     $("dm-switch").onchange = function () { LS.setItem("kh_desktop", this.checked ? "1" : "0"); applyLayout(); };
     function show(t) {
         TAB = t;
         Array.prototype.forEach.call(document.querySelectorAll("#nav button"), function (b) { b.classList.toggle("sel", b.getAttribute("data-tab") === t); });
         Array.prototype.forEach.call(document.querySelectorAll("main section"), function (s) { s.classList.toggle("hidden", s.id !== "tab-" + t); });
-        if (t === "list") push(); if (t === "status") renderStatus(); if (t === "kindle") openKindle(); if (t === "queue") renderQueue(); if (t === "devices") renderDevices();
+        if (t === "list") push(); if (t === "status") renderStatus(); if (t === "kindle") openKindle(); if (t === "queue") renderQueue(); if (t === "devices") renderDevices(); if (t === "books") renderBooks();
     }
     $("nav").onclick = function (e) { var b = e.target.closest("button[data-tab]"); if (b) show(b.getAttribute("data-tab")); };
     window.addEventListener("resize", function () { applyLayout(); if (TAB === "kindle") fitKindle(); });

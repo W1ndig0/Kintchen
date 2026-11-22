@@ -406,8 +406,9 @@ async function main() {
         else edit(r.id, "req", "done", r.text + "|fail|unknown request");
     }
 
-    // 3b. 10.3: the book cloud (Gutenberg requests, EPUB conversion, tidying)
-    try {
+    // 3b. 10.3: the book cloud (Gutenberg requests, EPUB conversion, tidying). v11: on the PC the book folder does
+    // this instead (pc/hub/lib/books.js), so NO_BOOK_CLOUD=1 skips it
+    if (process.env.NO_BOOK_CLOUD !== "1") try {
         const bb = process.env.BOOKS_BASE, bget = bb ? (u, ms, o) => get(bb + "/ext/" + encodeURIComponent(u), ms, o) : get, bbin = bb ? (u, ms) => fetchBin(bb + "/ext/" + encodeURIComponent(u), ms) : fetchBin;   // tests
         await require("./books.js")({ gh, items, allItems, edit, newId, log, brain, NOW, TODAY, HubCal, fileText, get: bget, fetchBin: bbin, txt, decodeEnts });
     } catch (e) { log("books failed: " + String(e.message || e).slice(0, 80)); }

@@ -150,6 +150,7 @@ function createServer(opts) {
                 let at = 0; try { at = Math.floor((JSON.parse(fs.readFileSync(path.join(dataDir, "gist", "main", "brain.json"), "utf8")).lastRun || 0) / 1000); } catch (e) {}
                 const pk = opts.pkgToken ? share + "/pkg/" + opts.pkgToken : "";
                 return send(res, 200, (pk ? "BUNDLE_URL=" + pk + "/bundle.txt\nEXTRA_URL=" + pk + "/extra.js\n" : "") +
+                                      (opts.books && opts.pkgToken ? "BOOKS_URL=" + share + "/books/" + opts.pkgToken + "/\n" : "") +
                                       (opts.calToken ? "ICS_URL=" + share + "/cal/" + opts.calToken + "/calendar.ics\n" : "") + (at ? "BRAIN_AT=" + at + "\n" : ""), "text/plain; charset=utf-8");
             }
             if (p === "/api/kindle/status" && m === "POST") {
@@ -203,6 +204,11 @@ function createServer(opts) {
             log("kit: git pull -> " + r.status);
             return send(res, r.status === 0 ? 200 : 500, { ok: r.status === 0, out: String((r.stdout || "") + (r.stderr || "")).slice(-1500) });
         }
+        if (p === "/api/books" && m === "GET" && opts.books) {
+            return send(res, 200, { folder: opts.books.dir, calibre: opts.books.convert === null ? null : !!opts.books.convert,
+                                    books: Object.keys(opts.books.known).map(id => { const k = opts.books.known[id]; return { id, name: k.name, ext: k.ext, size: k.size, conv: k.conv }; }) });
+        }
+        if (p === "/api/books/scan" && m === "POST" && opts.books) return send(res, 200, { changes: opts.books.scan(now()) });
         if (p === "/api/view" && m === "POST") {       // a cookie so the virtual Kindle frame can load its data files
             const v = crypto.randomBytes(24).toString("hex"), until = now() + 12 * 3600000;
             for (const [k, t] of views) if (t < now()) views.delete(k);
@@ -251,6 +257,13 @@ function createServer(opts) {
                     const b = fs.readFileSync(f), r = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range || "");
                     if (r) { const a = +r[1], e = Math.min(+r[2], b.length - 1); return send(res, 206, b.subarray(a, e + 1), "text/plain; charset=utf-8", { "Content-Range": "bytes " + a + "-" + e + "/" + b.length }); }
                     return send(res, 200, b, "text/plain; charset=utf-8");
+                }
+                // the book folder, in the book-gist layout the fridge's downloader already reads
+                const bm = /^\/books\/([0-9a-f]{32})\/(bk_[0-9a-z]+\.(meta|p0))$/.exec(p);
+                if (bm) {
+                    if (!opts.books || !opts.pkgToken || bm[1] !== opts.pkgToken) return err(res, 404, "not found");
+                    const b = opts.books.serve(bm[2]);
+                    return b === null ? err(res, 404, "not found") : send(res, 200, b, "text/plain; charset=utf-8");
                 }
                 // fridge update files (the code itself; the signed list above says which and their checksums)
                 const um = /^\/upd\/([0-9a-f]{32})\/kindle\/shiftcal\/(.+)$/.exec(p);

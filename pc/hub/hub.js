@@ -5,6 +5,7 @@
  *   hub.tsv (+ .bak)   the list, plain text        devices.json   paired devices
  *   queue.json         actions for the fridge       config.json    { "port": 8770, "publicUrl": "https://<pc>.<tailnet>.ts.net" }
  *   hub.log            what happened (rotated at 1 MB)
+ * Book folder: Documents\Kitchen Hub Books (config "booksDir"): every book in it goes to the fridge's library.
  *   import.tsv         drop the old gist's hub.tsv here once (+ import.pass = your passphrase): merged in at start,
  *                      unlocked to plain text, renamed to import.done.tsv; import.pass is deleted
  * Options: --port N   --data DIR */
@@ -58,14 +59,18 @@ const { BrainHost } = require("./lib/brainhost.js");
 if (!cfg.pkgToken) { cfg.pkgToken = require("crypto").randomBytes(16).toString("hex"); fs.writeFileSync(path.join(DATA, "config.json"), JSON.stringify(cfg, null, 1)); }
 if (!cfg.calToken) { cfg.calToken = require("crypto").randomBytes(16).toString("hex"); fs.writeFileSync(path.join(DATA, "config.json"), JSON.stringify(cfg, null, 1)); }
 const { Pusher } = require("./lib/webpush.js");
+const { Books } = require("./lib/books.js");
+const books = new Books({ booksDir: cfg.booksDir || path.join(os.homedir(), "Documents", "Kitchen Hub Books"), dataDir: DATA, store, log });
 const pusher = new Pusher(DATA, log);
 const jobs = new BrainHost({ store, dataDir: DATA, log, env: cfg.jobsEnv || {}, onAlert: a => pusher.send(a).catch(() => {}) });
 const server = createServer({ store, auth, dataDir: DATA, webDir: path.join(__dirname, "web"),
-                              kindleDir: path.join(ROOT, "kindle", "shiftcal", "mesquite"), log, jobs, pusher, calToken: cfg.calToken, pkgToken: cfg.pkgToken, shiftcalDir: path.join(ROOT, "kindle", "shiftcal"), port: PORT, publicUrl: cfg.publicUrl,
+                              kindleDir: path.join(ROOT, "kindle", "shiftcal", "mesquite"), log, jobs, pusher, books, calToken: cfg.calToken, pkgToken: cfg.pkgToken, shiftcalDir: path.join(ROOT, "kindle", "shiftcal"), port: PORT, publicUrl: cfg.publicUrl,
                               shared: { "hubdata.js": path.join(ROOT, "cloud", "hubdata.js"), "qr.js": path.join(ROOT, "kindle", "shiftcal", "mesquite", "qr.js") } });
 server.on("error", e => { log("cannot start: " + e.message + (e.code === "EADDRINUSE" ? " (is the hub already running?)" : "")); process.exit(1); });
 jobs.start().then(() => {
     server.listen(PORT, "0.0.0.0", () => log("Kitchen Hub " + VERSION + " on port " + PORT + ", data in " + DATA));
+    const scanBooks = () => { try { books.scan(); } catch (e) { log("books: " + e.message); } };
+    scanBooks(); setInterval(scanBooks, 2 * 60000);
     if (!process.argv.includes("--no-jobs")) { jobs.schedule(); setTimeout(() => jobs.run("start"), 20000); }
 });
 process.on("SIGINT", () => { log("stopped"); process.exit(0); });

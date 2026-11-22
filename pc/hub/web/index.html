@@ -33,6 +33,7 @@
     <button data-tab="status">Status</button>
     <button data-tab="kindle" class="desk">Virtual Kindle</button>
     <button data-tab="queue" class="desk">Fridge queue</button>
+    <button data-tab="books" class="desk">Books</button>
     <button data-tab="devices" class="desk">Devices</button>
   </nav>
   <main>
@@ -87,6 +88,12 @@
       </div>
       <p class="msg">The fridge sleeps most of the time: actions are delivered at its next wake.</p>
       <ul id="queue" class="items"></ul>
+    </section>
+    <section id="tab-books" class="hidden">
+      <p class="msg">Every book in this folder goes to the fridge's library at its next sync; take it out and it leaves the fridge. Name files "Title - Author.epub" for a proper title.</p>
+      <div class="row"><b id="bk-folder"></b><button id="bk-scan">Look again now</button></div>
+      <p class="msg" id="bk-cal"></p>
+      <ul id="bk-list" class="items"></ul>
     </section>
     <section id="tab-devices" class="hidden">
       <div class="row"><button id="pair-new" class="primary">Pair a device</button><button id="pair-kindle">Pair the fridge</button></div>

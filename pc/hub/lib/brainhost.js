@@ -75,7 +75,7 @@ class BrainHost {
         const env = Object.assign({ PATH: process.env.PATH, SystemRoot: process.env.SystemRoot || "", TEMP: process.env.TEMP || "", TMP: process.env.TMP || "",
                                     GIST_ID: "main", GIST_TOKEN: "local", GH_API: base, CLOUD_GIST_ID: "cloud", HUB_PASS: "",
                                     NTFY_TOPIC: "hub", NTFY_URL: base + "/ntfy", POSTAL: this.env.POSTAL || "V2L" },
-                                  { PACKAGE_NODE: "1" }, this.env);
+                                  { PACKAGE_NODE: "1", NO_BOOK_CLOUD: "1" }, this.env);
         this.running = new Promise(resolve => {
             const p = cp.spawn(process.execPath, [BRAIN], { env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
             let out = ""; p.stdout.on("data", d => out += d); p.stderr.on("data", d => out += d);
