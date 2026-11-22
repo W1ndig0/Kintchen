@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="11.2.1"
+VERSION="11.2.2"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -353,7 +353,7 @@ EOT
     mv "$STATE_JS.tmp" "$STATE_JS"
 }
 
-still_owner() { [ "$(cat "$PIDF" 2>/dev/null)" = "$$" ]; }
+still_owner() { SO_P=""; read -r SO_P < "$PIDF" 2>/dev/null; [ "$SO_P" = "$$" ]; }      # 11.2.2: read, not cat (a fork and a subshell, every second awake and every standby tick)
 
 app_running() { hub_page_running; }     # 10.5: only the hub's own page counts (hub_common.sh)
 
@@ -1255,15 +1255,15 @@ next_wake() {        # NEXT_WAKE_EPOCH + NW_WHY from the hourly redraws, the dai
     [ -n "$HUB_TEST_STEP" ] && { NW=$((NWN + HUB_TEST_STEP)); NW_WHY="test step"; }      # tests only
     NEXT_WAKE_EPOCH=$NW
 }
-clock_glyphs() {     # the six clock slots for now: hour (2), colon, minutes (2), am/pm  - e.g. "b 9 c 0 5 pm"
+clock_glyphs() {     # the six clock slots for now: hour (2), colon, minutes (2), am/pm  - e.g. "b 9 c 0 5 pm" (in NEWG)
     set -- $(date '+%I %M %p')
     CH1=${1%?}; CH2=${1#?}; [ "$CH1" = "0" ] && CH1=b
     CM1=${2%?}; CM2=${2#?}
     case "$3" in [Pp]*) CAP=pm ;; *) CAP=am ;; esac
-    echo "$CH1 $CH2 c $CM1 $CM2 $CAP"
+    NEWG="$CH1 $CH2 c $CM1 $CM2 $CAP"      # 11.2.2: set here, not echoed (no subshell per tick)
 }
 draw_clock_tick() {  # redraw only the slots whose digit changed (usually one)
-    NEWG=$(clock_glyphs)
+    clock_glyphs
     [ "$NEWG" = "$CLK_LAST" ] && return 0
     read -r GSZ GROT X1 Y1 X2 Y2 X3 Y3 X4 Y4 X5 Y5 X6 Y6 < "$DIR/.sleep_geo" || return 1
     set -- $NEWG; G1=$1 G2=$2 G3=$3 G4=$4 G5=$5 G6=$6
@@ -1297,7 +1297,7 @@ play_wx_anim() {     # ~10 s simple loop of the current weather over the standby
 }
 tick_suspend() {     # one RTC sleep until epoch $1; returns 0 = alarm, 2 = woke early (power button), 1 = refused
     echo 0 > "$RTC" 2>/dev/null; echo "$1" > "$RTC" 2>/dev/null
-    [ "$(cat "$RTC" 2>/dev/null)" = "$1" ] || return 1
+    RTV=""; read -r RTV < "$RTC" 2>/dev/null; [ "$RTV" = "$1" ] || return 1
     TS0=$(date +%s); do_suspend; TRC=$?; TS1=$(date +%s)
     echo 0 > "$RTC" 2>/dev/null
     [ "$TRC" = "0" ] && [ "$TS1" -ge $(( $1 - 2 )) ] && return 0
@@ -1328,7 +1328,8 @@ sleep_clock() {      # sleep until epoch $1, ticking the standby clock; returns 
         [ "$SC_R" = "2" ] && break
         # 10.10.5: woke up to 2 s before the minute (tick_suspend allows that): the digits drawn now would be last minute's, and
         # the next tick is a whole minute away. Wait for the minute.
-        SC_W=$(( NB - $(date +%s) )); [ "$SC_W" -gt 0 ] && [ "$SC_W" -le 3 ] && sleep "$SC_W"
+        # (11.2.2: tick_suspend's own clock reading says whether this is needed - usually it is not, so no extra date)
+        if [ "$TS1" -lt "$NB" ]; then SC_W=$(( NB - $(date +%s) )); [ "$SC_W" -gt 0 ] && [ "$SC_W" -le 3 ] && sleep "$SC_W"; fi
         [ "$NB" = "$SC_END" ] && { SC_R=0; break; }
         SC_TA=$(uptime_cs); SC_N=$((SC_N + 1))
         if [ "$SC_BY" = "loop" ]; then draw_clock_tick; else sleep 2; fi      # the page redraws the minute itself
@@ -1503,7 +1504,6 @@ while true; do
         [ -f "$DIR/.relaunch" ] && ! sync_running && relaunch "$(cat "$DIR/.relaunch" 2>/dev/null)"
         [ "$BOOT" = "1" ] && [ $(( $(date +%s) - BOOT_T0 )) -ge "$BOOT_WAIT" ] && boot_failed
         if [ "$BOOT" != "1" ] && [ -s "$DIR/.job_next" ] && ! sync_running; then J2=$(cat "$DIR/.job_next"); rm -f "$DIR/.job_next"; log "job: $J2"; start_job "$J2"; fi
-        rm -f "$DIR/.web_next"
         if [ -s "$DIR/.rsearch_next" ] && ! sync_running; then Q2=$(cat "$DIR/.rsearch_next"); rm -f "$DIR/.rsearch_next"; log "recipe search: $Q2"; start_search "$Q2"; fi
         if [ "${CLOUD_DUE:-0}" -gt 0 ] && [ "$(date +%s)" -ge "$CLOUD_DUE" ]; then
             CLOUD_DUE=0

@@ -49,15 +49,29 @@ llock() {     # 10.5: the lock is only broken when its owner is gone (or after 6
 lunlock() { rm -rf "$T/llock"; }
 merge_local() { llock; merge "$LOCAL" "$LOCAL" "$@"; lunlock; }
 
+num0v() { case "$1" in ""|*[!0-9]*) echo 0 ;; *) echo "$1" ;; esac; }
 write_js() {
     ST=$(cat "$STF" 2>/dev/null); [ -n "$ST" ] || ST="never"
     PEND=0; [ -f "$REMOTE" ] && ! cmp -s "$LOCAL" "$REMOTE" && PEND=1
     [ -f "$REMOTE" ] || { [ "$(grep -c -v '^#' "$LOCAL")" != "0" ] && PEND=1; }
-    {
-        echo "window.HUB_ITEMS = { st: \"$ST\", pending: $PEND, at: $(date +%s), lines: ["
-        grep -v '^#' "$LOCAL" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$/",/'
-        echo '""] };'
-    } > "$JS.$$" && mv "$JS.$$" "$JS"
+    # 11.2.2: the page redraws its tiles whenever "at" changes. A sync that changed nothing (every button press
+    # runs one now) used to stamp a new "at" and redraw the whole screen for nothing, so the file is left alone
+    # when the lists, the pending flag and the sync result (ok / the error) are all as they were.
+    { grep -v '^#' "$LOCAL" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$/",/'; echo '""] };'; } > "$JS.b.$$"
+    AT=$(date +%s)
+    if [ -f "$JS" ]; then
+        OLDH=$(head -1 "$JS" 2>/dev/null)
+        OLDAT=${OLDH#*at: }; OLDAT=$(num0v "${OLDAT%%,*}"); [ "$AT" -gt "$OLDAT" ] || AT=$((OLDAT + 1))      # two changes in one second must still differ
+        OLDST=${OLDH#*st: \"}; OLDST=${OLDST%%\", pending:*}
+        case "$OLDH" in *"pending: $PEND,"*) SAMEP=1 ;; *) SAMEP=0 ;; esac
+        NEWST=$ST; case "$ST" in "ok "*) NEWST=ok ;; esac
+        case "$OLDST" in "ok "*) OLDST=ok ;; esac
+        if [ "$SAMEP" = "1" ] && [ "$OLDST" = "$NEWST" ] && tail -n +2 "$JS" 2>/dev/null | cmp -s - "$JS.b.$$"; then
+            rm -f "$JS.b.$$"; return 0
+        fi
+    fi
+    { echo "window.HUB_ITEMS = { st: \"$ST\", pending: $PEND, at: $AT, lines: ["; cat "$JS.b.$$"; } > "$JS.$$" && mv "$JS.$$" "$JS"
+    rm -f "$JS.b.$$"
 }
 
 # api METHOD URL [curl args] -> prints the http code; body in $T/b.$$, headers in $T/h.$$

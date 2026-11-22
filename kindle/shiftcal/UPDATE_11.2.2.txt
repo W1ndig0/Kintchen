@@ -1,0 +1,11 @@
+KITCHEN HUB 11.2.2 - LESS WORK FOR THE KINDLE
+Installs by itself from your PC: Settings > Updates > CHECK FOR UPDATE. Only the Kindle changes; the PC part stays 11.2.1.
+The Kindle's scripts gone over for wasted work. These were found and fixed.
+
+FIXES
+ 1  A list sync that changed nothing no longer makes the screen redraw. Every button press runs a sync now, and each one used to stamp the lists as "new" so all the tiles were drawn again (a flash on the e-ink and battery for nothing).
+ 2  The standby clock does less work each minute (about 6 fewer small programs started per tick): it reads the alarm and the loop's owner itself and skips a time check it did not need.
+ 3  The awake loop no longer deletes a leftover file every second.
+
+NOTES
+ 4  Changes waiting to reach the PC, a changed list, or a sync error still update the screen at once.
