@@ -115,6 +115,8 @@
             var f = k.fridge;
             $("kit-msg").textContent = "This PC offers " + (k.offered || "?") + ". The fridge runs " + (f && f.v ? f.v + " (checked in " + ago(f.ts * 1000) + ")" : "an unknown version (it hasn't checked in with the PC yet)") + ".";
             $("kit-pull").classList.toggle("hidden", !k.git || !/^(127\.|localhost)/.test(location.hostname));
+            $("kit-zip-row").classList.toggle("hidden", !/^(127\.|localhost)/.test(location.hostname));
+            if (k.kit) $("kit-msg").textContent += " Running the kit installed from a file (" + k.kit + ").";
         }).catch(function () {});
         call("GET", "/api/jobs").then(function (j) {
             var l = j.last;
@@ -161,6 +163,12 @@
     if ("serviceWorker" in navigator) { try { navigator.serviceWorker.register("sw.js"); } catch (e) {} }
 
     $("kit-pull").onclick = function () { $("kit-msg").textContent = "Getting the newest kit…"; call("POST", "/api/kit/pull").then(function (r) { alert(r.out || "Done"); renderStatus(); }).catch(function (e) { alert(e.message); }); };
+    $("kit-zip").onchange = function () {
+        var f = this.files[0]; if (!f) return;
+        $("kit-msg").textContent = "Checking and installing " + f.name + "…";
+        f.arrayBuffer().then(function (b) { return fetch("/api/kit/install", { method: "POST", body: b }).then(function (r) { return r.json(); }); })
+            .then(function (r) { $("kit-msg").textContent = r.error ? "Refused: " + r.error : "Kit " + r.version + " installed. The hub restarts in a few seconds (if it doesn't come back within a minute, use the tray icon > Restart)."; });
+    };
     $("kit-install").onclick = function () { call("POST", "/api/queue", { action: "update-install" }).then(function () { $("kit-msg").textContent = "Queued: the fridge installs it at its next wake."; }); };
     $("jobs-run").onclick = function () { call("POST", "/api/jobs/run").then(function () { $("jobs-last").textContent = "Running now…"; setTimeout(renderStatus, 8000); }); };
 

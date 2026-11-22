@@ -47,6 +47,25 @@ MOVING THE FRIDGE TO THE PC (one USB step)
   say it can be switched off.
   Fridge actions (sync, timer, update, note...) go in Fridge queue; logs land in the data folder\logs.
 
+FRIDGE UPDATES FROM THE PC (no GitHub)
+  A paired fridge gets its updates from the PC: the PC signs the list of files with the fridge's key, the
+  fridge checks it and every file's checksum. Status > Fridge updates shows both versions; "Install on the
+  fridge" queues it. New versions reach the PC by:
+    - Status > Install a kit file (.zip): the whole kit, checked (versions match, every file parses) and kept
+      in the data folder\kits (last 3). The hub restarts on it; if it won't start, the built-in copy runs.
+    - or "Get the newest kit" (git pull) while the repo still lives on GitHub.
+
+BOOK FOLDER
+  Documents\Kitchen Hub Books (or "booksDir" in config.json). Every book in it goes to the fridge's library
+  at its next sync; take it out and it leaves the fridge. EPUB is converted with Calibre if it is installed.
+
+PRICE CHECK (Prices tab, phone and desktop)
+  Checks the open list at Costco, Superstore, Walmart and Save-On-Foods: the cheapest single store, every
+  store's total, what each is missing, and the difference on the items both stores have. Prices come from
+  your price book (type them in, or import a CSV - the only source for most Costco prices) and the stores'
+  flyers / Walmart online prices via Flipp (unofficial; if it stops working the price book still does).
+  Change any pick and it is remembered. Postal code: "postal" in config.json (default V2L5M1).
+
 SECURITY
   - Answers only the home network, Tailscale and the PC itself; everything else is dropped.
   - Every device signs every request with its own key; replays and requests with a clock 5+ min off are refused;

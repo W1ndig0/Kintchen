@@ -196,7 +196,19 @@ function createServer(opts) {
             let offered = "", fridge = null;
             try { offered = (/^VERSION="([^"]*)"/m.exec(fs.readFileSync(path.join(opts.shiftcalDir, "power_loop.sh"), "utf8")) || [])[1] || ""; } catch (e) {}
             try { fridge = JSON.parse(fs.readFileSync(path.join(dataDir, "gist", "main", "kindle.json"), "utf8")); } catch (e) {}
-            return send(res, 200, { offered, fridge: fridge ? { v: fridge.v, pct: fridge.pct, ts: fridge.ts } : null, git: fs.existsSync(path.join(opts.shiftcalDir, "..", "..", ".git")) });
+            return send(res, 200, { offered, fridge: fridge ? { v: fridge.v, pct: fridge.pct, ts: fridge.ts } : null, git: fs.existsSync(path.join(opts.shiftcalDir, "..", "..", ".git")),
+                                    kit: process.env.KH_KIT || "" });
+        }
+        if (p === "/api/kit/install" && m === "POST") {
+            if (who !== "owner") return err(res, 403, "only on the PC itself");
+            const r = require("./kits.js").install(dataDir, body, now());
+            if (r.error) { log("kit install refused: " + r.error); return err(res, 400, r.error); }
+            let c = {}; try { c = JSON.parse(fs.readFileSync(path.join(dataDir, "config.json"), "utf8")); } catch (e) {}
+            c.kitDir = r.dir; atomicWrite(path.join(dataDir, "config.json"), JSON.stringify(c, null, 1));
+            log("kit " + r.version + " installed (" + r.dir + ") - restarting");
+            send(res, 200, r);
+            if (opts.onRestart) setTimeout(opts.onRestart, 800);
+            return;
         }
         if (p === "/api/kit/pull" && m === "POST" && opts.shiftcalDir) {
             if (who !== "owner") return err(res, 403, "only on the PC itself");
@@ -247,7 +259,8 @@ function createServer(opts) {
         if (!homeAddr(addr)) { req.destroy(); return; }
         let url; try { url = new URL(req.url, "http://hub"); } catch (e) { return err(res, 400, "bad address"); }
         const chunks = []; let size = 0;
-        req.on("data", c => { size += c.length; if (size > MAX_BODY) { err(res, 413, "too big"); req.destroy(); } else chunks.push(c); });
+        const limit = url.pathname === "/api/kit/install" ? 60 * 1024 * 1024 : MAX_BODY;      // a whole kit as a zip
+        req.on("data", c => { size += c.length; if (size > limit) { err(res, 413, "too big"); req.destroy(); } else chunks.push(c); });
         req.on("end", async () => {
             if (res.writableEnded) return;
             const body = Buffer.concat(chunks), p = url.pathname;
