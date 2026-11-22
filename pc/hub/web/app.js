@@ -111,6 +111,11 @@
                                     c("Waiting for the fridge", s.queue) + c("Paired devices", s.devices) + c("PC clock", new Date(s.time).toLocaleString());
         }).catch(function (e) { setOnline(false, e); $("status").innerHTML = "<p class='msg'>Can't reach the PC.</p>"; });
         renderPush();
+        call("GET", "/api/kit").then(function (k) {
+            var f = k.fridge;
+            $("kit-msg").textContent = "This PC offers " + (k.offered || "?") + ". The fridge runs " + (f && f.v ? f.v + " (checked in " + ago(f.ts * 1000) + ")" : "an unknown version (it hasn't checked in with the PC yet)") + ".";
+            $("kit-pull").classList.toggle("hidden", !k.git || !/^(127\.|localhost)/.test(location.hostname));
+        }).catch(function () {});
         call("GET", "/api/jobs").then(function (j) {
             var l = j.last;
             $("jobs-last").textContent = j.running ? "Running now…" : !l ? "Not run yet." :
@@ -155,6 +160,8 @@
     };
     if ("serviceWorker" in navigator) { try { navigator.serviceWorker.register("sw.js"); } catch (e) {} }
 
+    $("kit-pull").onclick = function () { $("kit-msg").textContent = "Getting the newest kit…"; call("POST", "/api/kit/pull").then(function (r) { alert(r.out || "Done"); renderStatus(); }).catch(function (e) { alert(e.message); }); };
+    $("kit-install").onclick = function () { call("POST", "/api/queue", { action: "update-install" }).then(function () { $("kit-msg").textContent = "Queued: the fridge installs it at its next wake."; }); };
     $("jobs-run").onclick = function () { call("POST", "/api/jobs/run").then(function () { $("jobs-last").textContent = "Running now…"; setTimeout(renderStatus, 8000); }); };
 
     // ---------- desktop: virtual Kindle ----------

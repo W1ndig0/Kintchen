@@ -61,7 +61,7 @@ const { Pusher } = require("./lib/webpush.js");
 const pusher = new Pusher(DATA, log);
 const jobs = new BrainHost({ store, dataDir: DATA, log, env: cfg.jobsEnv || {}, onAlert: a => pusher.send(a).catch(() => {}) });
 const server = createServer({ store, auth, dataDir: DATA, webDir: path.join(__dirname, "web"),
-                              kindleDir: path.join(ROOT, "kindle", "shiftcal", "mesquite"), log, jobs, pusher, calToken: cfg.calToken, pkgToken: cfg.pkgToken, port: PORT, publicUrl: cfg.publicUrl,
+                              kindleDir: path.join(ROOT, "kindle", "shiftcal", "mesquite"), log, jobs, pusher, calToken: cfg.calToken, pkgToken: cfg.pkgToken, shiftcalDir: path.join(ROOT, "kindle", "shiftcal"), port: PORT, publicUrl: cfg.publicUrl,
                               shared: { "hubdata.js": path.join(ROOT, "cloud", "hubdata.js"), "qr.js": path.join(ROOT, "kindle", "shiftcal", "mesquite", "qr.js") } });
 server.on("error", e => { log("cannot start: " + e.message + (e.code === "EADDRINUSE" ? " (is the hub already running?)" : "")); process.exit(1); });
 jobs.start().then(() => {

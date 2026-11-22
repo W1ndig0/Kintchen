@@ -224,6 +224,20 @@ pc_sync() {
     cmp -s "$LOCAL" "$T/up.$$" || say "lists synced with the PC, $N items"
     write_js
 }
+# $1 = where to save the update list, $2 = where to save the files' address. The PC signs the list's body
+# (X-KH-Body: HMAC of the body with this fridge's key); a list without the right signature is refused.
+pc_manifest() {
+    [ -n "$OSSL" ] || { say "updates from the PC need openssl"; return 1; }
+    CODE=$(pc_api GET /api/kindle/update "")
+    [ "$CODE" = "200" ] || { say "update list from the PC: $CODE"; return 1; }
+    WANT=$(tr -d '\r' < "$T/h.$$" | sed -n 's/^[Xx]-[Kk][Hh]-[Bb]ody: *\([0-9a-f]\{64\}\).*/\1/p' | head -1)
+    GOT=$("$OSSL" dgst -sha256 -mac HMAC -macopt "hexkey:$PC_KEY" < "$T/b.$$" | awk '{ print $NF }')
+    [ -n "$WANT" ] && [ "$WANT" = "$GOT" ] || { say "update list from the PC: signature wrong - refused"; return 1; }
+    U=$(tr -d '\r' < "$T/h.$$" | sed -n 's/^[Xx]-[Kk][Hh]-[Ff]iles: *\(http[^ ]*\).*/\1/p' | head -1)
+    case "$U" in "$PC_URL"/upd/*) ;; *) say "update list from the PC: odd files address - refused"; return 1 ;; esac
+    head -1 "$T/b.$$" | grep -q '^version ' || return 1
+    mv "$T/b.$$" "$1"; printf '%s\n' "$U" > "$2"; rm -f "$T/h.$$"
+}
 pc_rsearch() {     # $1 = what to search -> mesquite/rsearch.js (the PC does the search)
     Q=$(printf '%s' "$1" | tr -cd 'A-Za-z0-9 -' | cut -c1-40 | sed 's/ /+/g')
     CODE=$(pc_api GET "/api/kindle/rsearch?q=$Q" "")
@@ -343,4 +357,5 @@ case "$1" in
     log) do_log ;;
     rsearch) pc_mode && pc_rsearch "$2" ;;
     pcmode) pc_mode ;;
+    manifest) pc_mode && pc_manifest "$2" "$3" ;;
 esac

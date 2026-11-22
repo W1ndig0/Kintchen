@@ -165,6 +165,11 @@ function createServer(opts) {
                 log("fridge log received (" + body.length + " bytes)");
                 return send(res, 200, { ok: 1 });
             }
+            if (p === "/api/kindle/update" && m === "GET" && opts.shiftcalDir && opts.pkgToken) {
+                const t = require("./updates.js").manifest(opts.shiftcalDir);
+                const sig = crypto.createHmac("sha256", Buffer.from(dev.secret, "hex")).update(t).digest("hex");
+                return send(res, 200, t, "text/plain; charset=utf-8", { "X-KH-Body": sig, "X-KH-Files": share + "/upd/" + opts.pkgToken + "/kindle" });
+            }
             if (p === "/api/kindle/rsearch" && m === "GET") {
                 const d = path.join(dataDir, "pkgcache"); fs.mkdirSync(d, { recursive: true });
                 const t = await (opts.rsearch || require("../../../cloud/package.js").search)(d, url.searchParams.get("q") || "");
@@ -185,6 +190,18 @@ function createServer(opts) {
             if (p === "/api/push/unsubscribe" && m === "POST") { P.unsubscribe(who); return send(res, 200, { ok: 1 }); }
             if (p === "/api/push/settings" && m === "POST") { const st = P.settings(who, j); return st ? send(res, 200, st) : err(res, 404, "alerts aren't on for this device"); }
             if (p === "/api/push/test" && m === "POST") { const n = await P.send({ title: "Kitchen Hub", body: "Test alert from your PC", prio: 5 }); return send(res, 200, { sent: n }); }
+        }
+        if (p === "/api/kit" && m === "GET" && opts.shiftcalDir) {
+            let offered = "", fridge = null;
+            try { offered = (/^VERSION="([^"]*)"/m.exec(fs.readFileSync(path.join(opts.shiftcalDir, "power_loop.sh"), "utf8")) || [])[1] || ""; } catch (e) {}
+            try { fridge = JSON.parse(fs.readFileSync(path.join(dataDir, "gist", "main", "kindle.json"), "utf8")); } catch (e) {}
+            return send(res, 200, { offered, fridge: fridge ? { v: fridge.v, pct: fridge.pct, ts: fridge.ts } : null, git: fs.existsSync(path.join(opts.shiftcalDir, "..", "..", ".git")) });
+        }
+        if (p === "/api/kit/pull" && m === "POST" && opts.shiftcalDir) {
+            if (who !== "owner") return err(res, 403, "only on the PC itself");
+            const r = require("child_process").spawnSync("git", ["pull", "--ff-only"], { cwd: path.join(opts.shiftcalDir, "..", ".."), encoding: "utf8", timeout: 120000, windowsHide: true });
+            log("kit: git pull -> " + r.status);
+            return send(res, r.status === 0 ? 200 : 500, { ok: r.status === 0, out: String((r.stdout || "") + (r.stderr || "")).slice(-1500) });
         }
         if (p === "/api/view" && m === "POST") {       // a cookie so the virtual Kindle frame can load its data files
             const v = crypto.randomBytes(24).toString("hex"), until = now() + 12 * 3600000;
@@ -234,6 +251,14 @@ function createServer(opts) {
                     const b = fs.readFileSync(f), r = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range || "");
                     if (r) { const a = +r[1], e = Math.min(+r[2], b.length - 1); return send(res, 206, b.subarray(a, e + 1), "text/plain; charset=utf-8", { "Content-Range": "bytes " + a + "-" + e + "/" + b.length }); }
                     return send(res, 200, b, "text/plain; charset=utf-8");
+                }
+                // fridge update files (the code itself; the signed list above says which and their checksums)
+                const um = /^\/upd\/([0-9a-f]{32})\/kindle\/shiftcal\/(.+)$/.exec(p);
+                if (um) {
+                    if (!opts.pkgToken || um[1] !== opts.pkgToken || !opts.shiftcalDir) return err(res, 404, "not found");
+                    const rel = decodeURIComponent(um[2]);
+                    if (/(^|\/)\./.test(rel)) return err(res, 404, "not found");
+                    return serveFile(res, opts.shiftcalDir, rel);
                 }
                 if (p.startsWith("/kindle/")) {
                     if (!viewOk(req)) return err(res, 403, "open the virtual Kindle from desktop mode");

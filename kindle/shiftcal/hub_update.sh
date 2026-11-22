@@ -16,7 +16,7 @@ DIR=${HUB_DIR:-/mnt/us/extensions/shiftcal}
 LOG=$DIR/sync.log
 ST=$DIR/.update
 JS=$DIR/mesquite/update.js
-PAGES_URL=""
+PAGES_URL=""; PC_URL=""; PC_ID=""; PC_KEY=""
 [ -f "$DIR/cloud.conf" ] && . "$DIR/cloud.conf"
 CURL=/usr/bin/curl; [ -x "$CURL" ] || CURL=curl
 KC_STRICT=1      # 10.5: update code is never downloaded without a certificate check
@@ -62,8 +62,17 @@ if [ "$1" = "rollback" ]; then
     echo "rolled back $CUR $(date '+%m-%d %H:%M')" >> "$DIR/.log_want"      # 10.7: send the log on the next sync
     state rolledback "$PV" 0 "Went back to $PV (from $CUR)"; exit 0
 fi
+# v11: paired with the PC hub, updates come from the PC (no GitHub). The list of files and their checksums is
+# signed by the PC with this fridge's key and checked here (hub_cloud.sh manifest), so nobody else on the Wi-Fi
+# can hand the fridge different files; every file is then checked against that list as before.
+if [ -n "$PC_URL" ] && [ -n "$PC_KEY" ] && [ -n "$PC_ID" ]; then
+    if sh "$DIR/hub_cloud.sh" manifest "$ST/manifest.txt" "$ST/upd_base"; then
+        BASE=$(cat "$ST/upd_base"); C=200
+    else C=000; say "the PC's update list could not be fetched or wasn't signed right"; fi
+else
 case "$BASE" in https://*|http://127.0.0.1*) ;; *) state error "" 0 "PAGES_URL is not set in cloud.conf"; exit 1 ;; esac
 C=$(kcurl -s --connect-timeout 8 --max-time 25 -o "$ST/manifest.txt" -w '%{http_code}' "$BASE/manifest.txt?t=$(date +%s)" 2>/dev/null)
+fi
 [ "$C" = "200" ] && head -1 "$ST/manifest.txt" | grep -q '^version ' || { state error "" 0 "no manifest on your site ($C) - upload the kindle folder from the GitHub kit"; say "no manifest ($C)"; exit 1; }
 NV=$(sed -n '1s/^version //p' "$ST/manifest.txt" | tr -cd 'A-Za-z0-9.-')
 # which files differ from what is installed now

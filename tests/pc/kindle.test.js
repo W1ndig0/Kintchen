@@ -92,6 +92,38 @@ const sh = (args, dir, extra) => new Promise(res => {
         await sh([kdir + "/hub_cloud.sh", "sync"], kdir);
         assert.strictEqual(fs.readFileSync(kdir + "/.cloud_status", "utf8").trim(), "not set up");
     });
+    // ---- updates from the PC ----
+    const newKit = fs.mkdtempSync(path.join(os.tmpdir(), "khKit-"));
+    cp.execSync("cp -r " + K + "/. " + newKit + "/");
+    fs.writeFileSync(newKit + "/power_loop.sh", fs.readFileSync(newKit + "/power_loop.sh", "utf8").replace(/^VERSION="[^"]*"/m, 'VERSION="99.0"'));
+    fs.writeFileSync(newKit + "/mesquite/index.html", fs.readFileSync(newKit + "/mesquite/index.html", "utf8").replace(/^var VERSION = "[^"]*";/m, 'var VERSION = "99.0";'));
+    const srv2 = createServer({ store, auth, dataDir: data, webDir: ROOT + "/pc/hub/web", kindleDir: K + "/mesquite", ownerLocal: false, pkgToken, calToken, shiftcalDir: newKit });
+    await new Promise(r => srv2.listen(0, "127.0.0.1", r));
+    const base2 = "http://127.0.0.1:" + srv2.address().port;
+    const fridge = fs.mkdtempSync(path.join(os.tmpdir(), "khFr-"));
+    cp.execSync("cp -r " + K + "/. " + fridge + "/");
+    const conf2 = "PC_URL=" + base2 + "\nPC_ID=" + key.id + "\nPC_KEY=" + key.secret + "\n";
+    await t("update check from the PC sees the new version (signed list)", async () => {
+        fs.writeFileSync(fridge + "/cloud.conf", conf2);
+        await sh([fridge + "/hub_update.sh", "check"], fridge);
+        const u = fs.readFileSync(fridge + "/mesquite/update.js", "utf8");
+        assert.ok(/state:"available"/.test(u) && /nv:"99.0"/.test(u), u + fs.readFileSync(fridge + "/sync.log", "utf8").slice(-400));
+    });
+    await t("update install from the PC: every file checked, new version in place", async () => {
+        const r = await sh([fridge + "/hub_update.sh", "install"], fridge);
+        assert.strictEqual(r.code, 0, fs.readFileSync(fridge + "/sync.log", "utf8").slice(-500));
+        assert.ok(/^VERSION="99.0"/m.test(fs.readFileSync(fridge + "/power_loop.sh", "utf8")));
+        assert.strictEqual(fs.readFileSync(fridge + "/hub_cloud.sh", "utf8"), fs.readFileSync(newKit + "/hub_cloud.sh", "utf8"));
+    });
+    await t("an update list not signed with this fridge's key is refused", async () => {
+        const other = auth.pair(auth.newCode().code, "Other", "kindle");
+        const f2 = fs.mkdtempSync(path.join(os.tmpdir(), "khFr2-")); cp.execSync("cp -r " + K + "/. " + f2 + "/");
+        // the fridge thinks its key is X, the PC signs for the real device id: signatures can't match
+        fs.writeFileSync(f2 + "/cloud.conf", "PC_URL=" + base2 + "\nPC_ID=" + other.id + "\nPC_KEY=" + "11".repeat(32) + "\n");
+        await sh([f2 + "/hub_update.sh", "install"], f2);
+        assert.ok(!/^VERSION="99.0"/m.test(fs.readFileSync(f2 + "/power_loop.sh", "utf8")), "nothing installed");
+    });
+    srv2.close();
     srv.close();
     console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
 })();
