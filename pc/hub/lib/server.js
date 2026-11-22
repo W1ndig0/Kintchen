@@ -10,9 +10,9 @@
 "use strict";
 const http = require("http"), fs = require("fs"), path = require("path"), crypto = require("crypto");
 const { atomicWrite } = require("./store.js");
-const { isLocal } = require("./auth.js");
+const { isOwnerRequest, clientAddr } = require("./auth.js");
 
-const VERSION = "11.2";
+const VERSION = "11.2.1";
 const MAX_BODY = 2 * 1024 * 1024;
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
                 ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml",
@@ -72,7 +72,7 @@ function createServer(opts) {
         });
     }
     function viewOk(req) {
-        if (isLocal(req.socket.remoteAddress)) return true;
+        if (isOwnerRequest(req)) return true;
         const m = /(?:^|;\s*)kh_view=([0-9a-f]{48})/.exec(req.headers.cookie || "");
         const t = m && views.get(m[1]);
         return !!(t && t > now());
@@ -85,6 +85,9 @@ function createServer(opts) {
 
     async function api(req, res, url, body, who) {
         const p = url.pathname, m = req.method;
+        // 11.2.1: the fridge's key only opens what the fridge needs (its list, check-in, package, updates, alerts): a lost or
+        // copied fridge key can't make new pairing codes, list or remove devices, install a kit or run the jobs
+        if (who !== "owner" && auth.devices[who] && auth.devices[who].kind === "kindle" && !(p === "/api/store" || p === "/api/status" || p.startsWith("/api/kindle/"))) return err(res, 403, "not for the fridge");
         if (p === "/api/status" && m === "GET") {
             const kin = auth.list().filter(d => d.kind === "kindle").sort((a, b) => b.seen - a.seen)[0];
             return send(res, 200, { app: "kitchen-hub", version: VERSION, time: now(), items: store.items().length,
@@ -219,7 +222,7 @@ function createServer(opts) {
         }
         if (p === "/api/kit/pull" && m === "POST" && opts.shiftcalDir) {
             if (who !== "owner") return err(res, 403, "only on the PC itself");
-            const r = require("child_process").spawnSync("git", ["pull", "--ff-only"], { cwd: path.join(opts.shiftcalDir, "..", ".."), encoding: "utf8", timeout: 120000, windowsHide: true });
+            const r = require("child_process").spawnSync("git", ["pull", "--ff-only"], { cwd: path.join(opts.shiftcalDir, "..", ".."), encoding: "utf8", timeout: 60000, windowsHide: true, env: Object.assign({}, process.env, { GIT_TERMINAL_PROMPT: "0" }) });      // 11.2.1: never wait for a password prompt nobody can see
             log("kit: git pull -> " + r.status);
             return send(res, r.status === 0 ? 200 : 500, { ok: r.status === 0, out: String((r.stdout || "") + (r.stderr || "")).slice(-1500) });
         }
@@ -293,11 +296,12 @@ function createServer(opts) {
             try {
                 if (p === "/api/hello") return send(res, 200, { app: "kitchen-hub", version: VERSION });
                 if (p === "/api/pair" && req.method === "POST") {
-                    if (auth.locked(addr)) return err(res, 429, "too many tries - wait 15 minutes");
+                    const who = clientAddr(req);
+                    if (auth.locked(who)) return err(res, 429, "too many tries - wait 15 minutes");
                     let j = {}; try { j = JSON.parse(body); } catch (e) {}
                     const r = auth.pair(j.code, j.name, j.kind);
-                    if (r.error) { auth.failed(addr); return err(res, 403, r.error); }
-                    log("paired " + j.kind + " '" + j.name + "' from " + addr);
+                    if (r.error) { auth.failed(who); return err(res, 403, r.error); }
+                    log("paired " + j.kind + " '" + j.name + "' from " + who);
                     return send(res, 200, r);
                 }
                 if (p.startsWith("/api/")) {
@@ -322,7 +326,7 @@ function createServer(opts) {
                     return send(res, 200, b, "text/plain; charset=utf-8");
                 }
                 // the book folder, in the book-gist layout the fridge's downloader already reads
-                const bm = /^\/books\/([0-9a-f]{32})\/(bk_[0-9a-z]+\.(meta|p0))$/.exec(p);
+                const bm = /^\/books\/([0-9a-f]{32})\/(bk_[0-9a-z]+\.(meta|p\d{1,4}))$/.exec(p);
                 if (bm) {
                     if (!opts.books || !opts.pkgToken || bm[1] !== opts.pkgToken) return err(res, 404, "not found");
                     const b = opts.books.serve(bm[2]);

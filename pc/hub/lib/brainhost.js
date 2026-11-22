@@ -80,7 +80,11 @@ class BrainHost {
             const p = cp.spawn(process.execPath, [BRAIN], { env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
             let out = ""; p.stdout.on("data", d => out += d); p.stderr.on("data", d => out += d);
             const kill = setTimeout(() => p.kill(), 8 * 60000);
-            p.on("exit", code => {
+            let ended = false;
+            p.on("error", e => { out += "\ncould not start: " + e.message; });
+            p.on("close", code => {
+                if (ended) return; ended = true;
+                if (code === null || code === undefined) code = 1;
                 clearTimeout(kill);
                 this.last = { at: t0, why, code, secs: Math.round((Date.now() - t0) / 1000), out: out.slice(-4000), bundle: env.SKIP_BUNDLE !== "1" };
                 this.log("jobs (" + why + "): " + (code === 0 ? "ok" : "FAILED code " + code) + " in " + this.last.secs + " s");

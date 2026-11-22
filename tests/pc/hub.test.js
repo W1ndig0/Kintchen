@@ -153,6 +153,69 @@ function signed(key, method, p, body, ts) {
         assert.strictEqual(b.status, 200); assert.ok(/==== devices ====/.test(b.text) && /iPhone/.test(b.text));
         assert.ok(b.text.indexOf("secret-words") < 0 && b.text.indexOf(key.secret) < 0, "no passphrase or device key");
     });
+    // ---- 11.2.1: who counts as "the PC itself" ----
+    await t("not the PC itself: through tailscale serve (proxy headers), from another site's page, or with a rebound Host", async () => {
+        const dev = async (h, m, p, b) => request(S.port, m || "GET", p || "/api/devices", b, h);        // from 127.0.0.1, like every request the proxy forwards
+        assert.strictEqual((await dev({})).status, 200, "the PC's own browser is the owner");
+        assert.strictEqual((await dev({ "X-Forwarded-For": "100.101.102.103", Host: "pc.tail1234.ts.net" })).status, 401, "tailscale serve: must pair");
+        assert.strictEqual((await dev({ "Tailscale-User-Login": "someone@example.com" })).status, 401, "identity header only");
+        assert.strictEqual((await dev({ "X-Forwarded-For": "100.101.102.103" })).status, 401, "forwarded for, Host looks local");
+        assert.strictEqual((await dev({ Host: "evil.example:8770" })).status, 401, "DNS rebinding");
+        assert.strictEqual((await dev({ Origin: "http://evil.example", "Content-Type": "text/plain" }, "POST", "/api/queue", JSON.stringify({ action: "sync" }))).status, 401, "another site's POST");
+        assert.strictEqual((await dev({ Origin: "null" }, "POST", "/api/queue", JSON.stringify({ action: "sync" }))).status, 401, "sandboxed page's POST");
+        assert.strictEqual((await dev({ "Sec-Fetch-Site": "cross-site" })).status, 401, "browser says cross-site");
+        const same = await dev({ Origin: "http://127.0.0.1:" + S.port, "Sec-Fetch-Site": "same-origin" }, "POST", "/api/queue", JSON.stringify({ action: "log" }));
+        assert.strictEqual(same.status, 200, "the panel's own POST still works");
+        const q = JSON.parse(same.text); await request(S.port, "DELETE", "/api/queue/" + q.id);
+        assert.strictEqual((await dev({ Host: "localhost:" + S.port })).status, 200, "localhost works too");
+        // the kit install (runs code) is owner-only: a proxied request is refused before it gets that far
+        assert.strictEqual((await dev({ "X-Forwarded-For": "100.101.102.103" }, "POST", "/api/kit/install", "x")).status, 401);
+        // and the virtual Kindle's files need the cookie when proxied
+        assert.strictEqual((await dev({ "X-Forwarded-For": "100.101.102.103" }, "GET", "/kindle/index.html")).status, 403);
+    });
+    await t("a proxied phone pairs and signs like any other device; one bad proxied client doesn't lock the others", async () => {
+        const code = JSON.parse((await request(S.port, "POST", "/api/pair/code")).text).code;
+        const pr = await request(S.port, "POST", "/api/pair", JSON.stringify({ code, name: "Phone via serve", kind: "phone" }), { "X-Forwarded-For": "100.64.1.1", Host: "pc.ts.net" });
+        assert.strictEqual(pr.status, 200); const k2 = JSON.parse(pr.text);
+        const ok = await request(S.port, "GET", "/api/status", null, Object.assign({ "X-Forwarded-For": "100.64.1.1", Host: "pc.ts.net" }, signed(k2, "GET", "/api/status")));
+        assert.strictEqual(ok.status, 200);
+        for (let i = 0; i < 12; i++) await request(S.port, "GET", "/api/status", null, { "X-Forwarded-For": "100.64.9.9", Host: "pc.ts.net", "X-KH-Dev": "dnope" });
+        assert.strictEqual((await request(S.port, "GET", "/api/status", null, Object.assign({ "X-Forwarded-For": "100.64.9.9", Host: "pc.ts.net" }, { "X-KH-Dev": "dx" }))).status, 429, "the bad client is locked");
+        assert.strictEqual((await request(S.port, "GET", "/api/status", null, Object.assign({ "X-Forwarded-For": "100.64.1.1", Host: "pc.ts.net" }, signed(k2, "GET", "/api/status")))).status, 200, "the good one is not");
+        await request(S.port, "DELETE", "/api/devices/" + k2.id);
+    });
+    await t("the fridge's key opens only what the fridge needs", async () => {
+        const c = JSON.parse((await request(S.port, "POST", "/api/pair/code")).text).code;
+        const fk = JSON.parse((await request(S.port, "POST", "/api/pair", JSON.stringify({ code: c, name: "Fridge", kind: "kindle" }), null, "192.168.1.60")).text);
+        const as = (m, p, b) => request(S.port, m, p, b, signed(fk, m, p, b || ""), "192.168.1.60");
+        assert.strictEqual((await as("GET", "/api/store")).status, 200);
+        for (const [m, p] of [["POST", "/api/pair/code"], ["POST", "/api/pair/kindle"], ["GET", "/api/devices"], ["POST", "/api/jobs/run"], ["POST", "/api/kit/install"], ["GET", "/api/logs/bundle"]])
+            assert.strictEqual((await as(m, p, m === "POST" ? "x" : "")).status, 403, m + " " + p);
+        await request(S.port, "DELETE", "/api/devices/" + fk.id);
+    });
+    await t("bad requests are counted in a row: a good one clears the count", async () => {
+        const d = tmp(), now = () => 1e12, a = new Auth(d, now), c = a.newCode().code, k = a.pair(c, "x", "phone");
+        const mk = (sig) => ({ socket: { remoteAddress: "192.168.1.70" }, headers: { "x-kh-dev": k.id, "x-kh-ts": "1000000000000.ab", "x-kh-sig": sig }, method: "GET", url: "/api/status" });
+        for (let i = 0; i < 9; i++) assert.strictEqual(a.check(mk("0".repeat(64)), "").code, 401);
+        const good = a.check(mk(sigFor(k.secret, "1000000000000.ab", "GET", "/api/status", "")), "");
+        assert.ok(good.who === k.id, "a good request in between");
+        for (let i = 0; i < 9; i++) assert.strictEqual(a.check(mk("1".repeat(64)), "").code, 401, "still not locked after 9 more");
+    });
+    await t("book folder: one file that can't be read yet doesn't stop the others or look removed", async () => {
+        const { Books } = require(ROOT + "/pc/hub/lib/books.js");
+        const d = tmp(), bd = path.join(d, "books"), st = new Store(path.join(d, "s")); fs.mkdirSync(bd);
+        fs.writeFileSync(path.join(bd, "Good - Author.txt"), "hello"); fs.writeFileSync(path.join(bd, "Busy.txt"), "x");
+        const b = new Books({ booksDir: bd, dataDir: path.join(d, "data"), store: st, convert: "" });
+        fs.mkdirSync(path.join(d, "data"), { recursive: true });
+        const real = b.prepare.bind(b); let busy = true;
+        b.prepare = (id, f, s2) => { if (busy && f === "Busy.txt") { const e = new Error("locked"); e.code = "EBUSY"; throw e; } return real(id, f, s2); };
+        assert.strictEqual(b.scan(), 1, "the readable book went");
+        assert.strictEqual(st.items("book").length, 1);
+        busy = false; assert.strictEqual(b.scan(), 1, "the other one goes once it can be read");
+        assert.strictEqual(st.items("book").filter(i => i.state !== "del").length, 2);
+        fs.unlinkSync(path.join(bd, "Busy.txt")); b.prepare = real;
+        assert.strictEqual(b.scan(), 1); assert.strictEqual(st.items("book").filter(i => i.state === "open").length, 1, "removed from the folder = off the list");
+    });
     await t("revoked device is out", async () => {
         assert.strictEqual((await request(S.port, "DELETE", "/api/devices/" + key.id)).status, 200);
         assert.strictEqual((await request(S.port, "GET", "/api/status", null, signed(key, "GET", "/api/status"), "192.168.1.52")).status, 401);

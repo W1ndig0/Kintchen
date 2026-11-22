@@ -1,0 +1,13 @@
+# Kitchen Hub: the fridge runs these with BusyBox sh, which breaks on Windows (CRLF) line endings, and the PC's
+# "update from git" would then hand the fridge broken scripts. Keep LF everywhere except the Windows launchers.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.vbs text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.zip binary
+*.ico binary
+*.gz binary

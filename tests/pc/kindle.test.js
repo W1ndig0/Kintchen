@@ -186,6 +186,20 @@ const sh = (args, dir, extra) => new Promise(res => {
         await sh([kdir + "/hub_books.sh"], kdir, { HUB_LIB: lib, CURL_BIN: "curl" });
         assert.ok(!fs.existsSync(lib + "/Emma.azw3") && fs.existsSync(lib + "/Moby Dick - Herman Melville.txt"));
     });
+    await t("a big book goes in parts (the fridge's small RAM disk) and the fridge's downloader puts it back together", async () => {
+        const big = require("crypto").randomBytes(4200000);          // 3 parts of up to 1.5 MB
+        fs.writeFileSync(bdir + "/Big One - Someone.pdf", big);
+        assert.strictEqual(books.scan(), 1);
+        const it = store.items().find(i => i.kind === "book" && /^Big One/.test(i.text));
+        const meta = await (await fetch(base3 + "/books/" + pkgToken + "/bk_" + it.id + ".meta")).text();
+        assert.strictEqual(meta.trim().split(" ")[3], "3", meta);
+        assert.strictEqual((await fetch(base3 + "/books/" + pkgToken + "/bk_" + it.id + ".p3")).status, 404, "no part past the end");
+        const p0 = await (await fetch(base3 + "/books/" + pkgToken + "/bk_" + it.id + ".p0")).text();
+        assert.ok(p0.length < 2200000, "a part is about 2 MB of base64, not the whole book (" + p0.length + ")");
+        fs.writeFileSync(kdir + "/.books_want", fs.readFileSync(kdir + "/.books_want", "utf8").trim() + "\n" + it.id + "\tBig One - Someone.pdf\n");
+        await sh([kdir + "/hub_books.sh"], kdir, { HUB_LIB: lib, CURL_BIN: "curl" });
+        assert.ok(fs.existsSync(lib + "/Big One - Someone.pdf") && fs.readFileSync(lib + "/Big One - Someone.pdf").equals(big), fs.readFileSync(kdir + "/sync.log", "utf8").slice(-400));
+    });
     srv3.close();
     srv.close();
     console.log("\n" + pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

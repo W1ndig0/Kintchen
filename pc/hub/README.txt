@@ -39,16 +39,28 @@ JOBS AND ALERTS
     4. Pair the phone from that address, Share > Add to Home Screen, open it from there, Status > Turn on alerts.
   The fridge's package (weather, news, markets, what's on, recipes, horoscopes) is built on the PC too.
 
-MOVING THE FRIDGE TO THE PC (one USB step)
-  Desktop mode > Devices > Pair the fridge. It shows 3 lines (PC_URL, PC_ID, PC_KEY). Connect the Kindle by
-  USB, open extensions/shiftcal/cloud.conf in Notepad, paste the 3 lines at the end, save, eject.
+MOVING THE FRIDGE TO THE PC (no USB)
+  On the PC: Desktop mode > Devices > Pair a device (it shows a code). On the fridge: Settings > PC >
+  PAIR WITH YOUR PC, type the PC's home address (192.168...., the panel shows it) and the code.
+  (The older way still works: Devices > Pair the fridge shows 3 lines for cloud.conf.)
   From its next sync the fridge talks only to the PC over home Wi-Fi: list, check-in, logs, package, recipe
   search. If the PC is off the fridge keeps its list and fetches just weather and news itself.
-  Check PC_URL is the PC's home address (192.168...), not 127.0.0.1. Needs openssl on the Kindle (to sign);
-  if it's missing the fridge's status says so.
+  Needs openssl on the Kindle (to sign); if it's missing the fridge's status says so.
   GO BACK TO GITHUB: delete the 3 lines. Nothing else changes, the GitHub cloud is left running until you
   say it can be switched off.
   Fridge actions (sync, timer, update, note...) go in Fridge queue; logs land in the data folder\logs.
+
+KEEP IT REACHABLE (two things that make the fridge say "the PC didn't answer")
+  - The PC must not go to sleep: Windows Settings > System > Power & sleep > Sleep > Never (when plugged in).
+    A sleeping PC answers nobody; the fridge keeps its list and fetches weather and news itself until it wakes.
+  - Give the PC a fixed address: in your router's settings reserve its current 192.168.x.x address for it
+    ("DHCP reservation" / "static lease"). If the address changes the fridge can't find it until you pair again.
+
+SAFETY
+  Only your home network and Tailscale can reach the hub, and everything except the web app's own page needs a
+  paired device. The PC's own browser (127.0.0.1) is the owner and needs no pairing - but only when the request
+  really comes from that browser itself: requests that arrive through "tailscale serve" or from a web page
+  open in the PC's browser must pair like any other device (11.2.1).
 
 FRIDGE UPDATES FROM THE PC (no GitHub)
   A paired fridge gets its updates from the PC: the PC signs the list of files with the fridge's key, the

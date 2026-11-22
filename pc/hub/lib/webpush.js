@@ -25,7 +25,7 @@ function privKeyObject(k) {
 function vapidHeader(endpoint, k, subject, now) {
     const aud = new URL(endpoint).origin;
     const head = b64u(JSON.stringify({ typ: "JWT", alg: "ES256" }));
-    const body = b64u(JSON.stringify({ aud, exp: Math.floor((now || Date.now()) / 1000) + 12 * 3600, sub: subject || "mailto:kitchen-hub@localhost" }));
+    const body = b64u(JSON.stringify({ aud, exp: Math.floor((now || Date.now()) / 1000) + 12 * 3600, sub: subject || "mailto:kitchen-hub@example.com" }));
     const sig = crypto.sign("sha256", Buffer.from(head + "." + body), { key: privKeyObject(k), dsaEncoding: "ieee-p1363" });
     return "vapid t=" + head + "." + body + "." + b64u(sig) + ", k=" + k.pub;
 }
@@ -69,8 +69,8 @@ function catOf(a) {
     return "events";
 }
 class Pusher {
-    constructor(dir, log) {
-        this.dir = dir; this.log = log || (() => {});
+    constructor(dir, log, subject) {
+        this.dir = dir; this.log = log || (() => {}); this.subject = /^(mailto:[^@\s]+@[^@\s]+\.[a-z]{2,}|https:\/\/[^\s]+)$/i.test(subject || "") ? subject : "";
         this.keys = vapidKeys(dir);
         this.file = path.join(dir, "push.json");
         try { this.subs = JSON.parse(fs.readFileSync(this.file, "utf8")) || {}; } catch (e) { this.subs = {}; }
@@ -107,7 +107,7 @@ class Pusher {
             if (!s.settings.on || (s.settings.off && s.settings.off[catOf(alert)]) || (this.quiet(s.settings, now) && (alert.prio || 3) < 5)) continue;
             try {
                 const r = await fetch(s.endpoint, { method: "POST", body: encrypt(payload, s.keys.p256dh, s.keys.auth),
-                    headers: { Authorization: vapidHeader(s.endpoint, this.keys), "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream",
+                    headers: { Authorization: vapidHeader(s.endpoint, this.keys, this.subject), "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream",
                                TTL: "43200", Urgency: (alert.prio || 3) >= 4 ? "high" : "normal" }, signal: AbortSignal.timeout(20000) });
                 if (r.status === 404 || r.status === 410) { this.log("push: " + dev + " subscription gone - removed"); delete this.subs[dev]; this.save(); }
                 else if (r.ok) n++; else this.log("push: " + dev + " -> " + r.status);

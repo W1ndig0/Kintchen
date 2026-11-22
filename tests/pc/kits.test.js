@@ -48,6 +48,17 @@ function startHub(data, port) {
         const p = await startHub(data, 8794);
         try { const k = await getJson(8794, "/api/kit"); assert.strictEqual(k.kit, ""); assert.ok(/would not start/.test(fs.readFileSync(data + "/hub.log", "utf8"))); } finally { p.kill(); }
     });
+    await t("a kit that loads but keeps crashing: after 3 starts in a row the built-in copy runs (no endless restart loop)", async () => {
+        fs.writeFileSync(path.join(data, "kits", r.dir, "pc/hub/main.js"), "setTimeout(() => process.exit(3), 300);");
+        fs.writeFileSync(data + "/config.json", JSON.stringify({ kitDir: r.dir })); try { fs.unlinkSync(data + "/kitboot.json"); } catch (e) {}
+        for (let i = 0; i < 3; i++) { const x = cp.spawnSync(process.execPath, [ROOT + "/pc/hub/hub.js", "--data", data, "--port", "8797", "--no-jobs"], { timeout: 8000 }); assert.strictEqual(x.status, 3, "start " + (i + 1) + " ran the broken kit"); }
+        const p = await startHub(data, 8797);
+        try { const k = await getJson(8797, "/api/kit"); assert.strictEqual(k.kit, "", "built-in copy"); assert.ok(/crashed in 3 starts in a row/.test(fs.readFileSync(data + "/hub.log", "utf8"))); } finally { p.kill(); }
+        // a kit that stays up is marked good, so one later crash doesn't count against it (the mark is set by main.js after a minute)
+        fs.writeFileSync(data + "/kitboot.json", JSON.stringify({ kit: r.dir, tries: 2, ok: true }));
+        const x = cp.spawnSync(process.execPath, [ROOT + "/pc/hub/hub.js", "--data", data, "--port", "8797", "--no-jobs"], { timeout: 8000 });
+        assert.strictEqual(x.status, 3, "a kit marked good is run again");
+    });
     await t("the fridge's PRICE CHECK button: the PC answers in the list", async () => {
         const d2 = fs.mkdtempSync(path.join(os.tmpdir(), "khpcb-"));
         const p = await startHub(d2, 8795);

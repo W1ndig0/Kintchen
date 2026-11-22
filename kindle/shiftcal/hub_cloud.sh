@@ -198,7 +198,8 @@ pc_api() {
 pc_fail() {
     case "$1" in
         000) fail "the PC didn't answer (is it on? same Wi-Fi?)" ;;
-        401) fail "the PC refused this fridge - pair it again (desktop mode > Devices)" ;;
+        401) if grep -q 'clock' "$T/b.$$" 2>/dev/null; then fail "the fridge's clock is more than 5 minutes off the PC's - check the date and time on both"
+             else fail "the PC refused this fridge - pair it again (desktop mode > Devices)"; fi ;;
         429) fail "the PC is refusing for a while (too many bad requests)" ;;
         *) fail "the PC answered $1" ;;
     esac

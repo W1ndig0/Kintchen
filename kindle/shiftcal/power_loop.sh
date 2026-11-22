@@ -37,7 +37,7 @@
 #
 # Test hooks (all optional; defaults are the real Kindle paths):
 #   HUB_DIR, HUB_SYS_POWER_STATE, HUB_RTC_CANDIDATES, HUB_SUSPEND_CMD, HUB_SS_DIR, HUB_TEST=1
-VERSION="11.2"
+VERSION="11.2.1"
 DIR="${HUB_DIR:-/mnt/us/extensions/shiftcal}"
 MESQ="$DIR/mesquite"
 STATE_JS="$MESQ/state.js"
@@ -506,7 +506,7 @@ start_sync() {   # 10.10: "" = full SYNC (you asked) | lists = edit burst (lists
             fi
             if [ "$1" = "lists" ] && grep -q '^PC_KEY=[0-9a-f]' "$DIR/cloud.conf" 2>/dev/null; then
                 BT0=$(cat "$DIR/.bundle_ts" 2>/dev/null)
-                ONLY_IF_NEW=1 BUNDLE_ONLY=1 nice -n 10 /bin/sh "$DIR/sync_data.sh"
+                USE_CLOUD_DATA=$USE_CLOUD_DATA ONLY_IF_NEW=1 BUNDLE_ONLY=1 nice -n 10 /bin/sh "$DIR/sync_data.sh"
                 if [ -n "$(cat "$DIR/.bundle_ts" 2>/dev/null)" ] && [ "$(cat "$DIR/.bundle_ts" 2>/dev/null)" != "$BT0" ]; then
                     date +%s > "$LAST_SYNC_F"; log "edit burst also brought the PC's new package (counts as the scheduled sync)"
                 fi

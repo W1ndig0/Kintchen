@@ -62,7 +62,7 @@ const { Books } = require("./lib/books.js");
 const { Prices } = require("./lib/prices.js");
 const prices = new Prices({ dataDir: DATA, log, postal: cfg.postal });
 const books = new Books({ booksDir: cfg.booksDir || path.join(os.homedir(), "Documents", "Kitchen Hub Books"), dataDir: DATA, store, log });
-const pusher = new Pusher(DATA, log);
+const pusher = new Pusher(DATA, log, cfg.pushSubject);
 const jobs = new BrainHost({ store, dataDir: DATA, log, env: cfg.jobsEnv || {}, onAlert: a => pusher.send(a).catch(() => {}) });
 const server = createServer({ store, auth, dataDir: DATA, webDir: path.join(__dirname, "web"),
                               kindleDir: path.join(ROOT, "kindle", "shiftcal", "mesquite"), log, jobs, pusher, books, prices, calToken: cfg.calToken, pkgToken: cfg.pkgToken, shiftcalDir: path.join(ROOT, "kindle", "shiftcal"), port: PORT,
@@ -76,17 +76,20 @@ function publishPrice(r) {
     if (r && r.summary && (!old || old.text !== r.summary)) store.merge(HubData.makeLine(Math.max(Date.now(), old ? old.ts + 1 : 0), "pricecheck", "pc", "open", r.summary.slice(0, 300)));
 }
 let priceBusy = false;
-store.onChange(() => {
+function answerPriceAsks() {
     if (priceBusy) return;
     const asks = HubData.items(store.text, "pcreq").filter(i => i.state === "open" && i.text === "pricecheck");
     if (!asks.length) return;
     priceBusy = true;
-    const done = () => { store.merge(asks.map(a => HubData.makeLine(Math.max(Date.now(), a.ts + 1), a.id, "pcreq", "done", "pricecheck"))); priceBusy = false; };
-    const list = HubData.items(store.text, "shop").filter(i => i.state === "open" && i.text[0] !== "~").map(i => { const x = HubData.HubCal.parseShop(i.text); return { name: x.name, qty: x.qty }; }).filter(i => i.name);
+    // the asks are marked done AFTER the answer; one that arrives while a check runs is picked up by the next round
+    const done = () => { try { store.merge(asks.map(a => HubData.makeLine(Math.max(Date.now(), a.ts + 1), a.id, "pcreq", "done", "pricecheck"))); } catch (e) { log("price check: " + e.message); } priceBusy = false; setTimeout(answerPriceAsks, 50); };
+    let list = [];
+    try { list = HubData.items(store.text, "shop").filter(i => i.state === "open" && i.text[0] !== "~").map(i => { const x = HubData.HubCal.parseShop(i.text); return { name: x.name, qty: x.qty }; }).filter(i => i.name); } catch (e) {}
     if (!list.length) { publishPrice({ summary: "The list is empty." }); done(); return; }
-    prices.check(list).then(r => { publishPrice(r); pusher.send({ title: "Price check", body: r.summary, prio: 3, cat: "price" }).catch(() => {}); log("price check asked by the fridge"); })
+    Promise.resolve().then(() => prices.check(list)).then(r => { publishPrice(r); pusher.send({ title: "Price check", body: r.summary, prio: 3, cat: "price" }).catch(() => {}); log("price check asked by the fridge"); })
           .catch(e => log("price check failed: " + e.message)).then(done, done);
-});
+}
+store.onChange(answerPriceAsks);
 server.on("error", e => { log("cannot start: " + e.message + (e.code === "EADDRINUSE" ? " (is the hub already running?)" : "")); process.exit(1); });
 jobs.start().then(() => {
     server.listen(PORT, "0.0.0.0", () => log("Kitchen Hub " + VERSION + " on port " + PORT + ", data in " + DATA));
@@ -94,4 +97,5 @@ jobs.start().then(() => {
     scanBooks(); setInterval(scanBooks, 2 * 60000);
     if (!process.argv.includes("--no-jobs")) { jobs.schedule(); setTimeout(() => { const m = new Date().getMinutes(); if (!((m >= 0 && m < 7) || (m >= 30 && m < 37))) jobs.run("start"); }, 20000); }      // not when a scheduled run is due within minutes (that would run twice)
 });
+if (process.env.KH_KIT) setTimeout(() => { try { fs.writeFileSync(path.join(DATA, "kitboot.json"), JSON.stringify({ kit: process.env.KH_KIT, tries: 0, ok: true })); } catch (e) {} }, 60000).unref();     // see hub.js: this kit stayed up
 process.on("SIGINT", () => { log("stopped"); process.exit(0); });

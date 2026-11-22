@@ -17,7 +17,7 @@
         if (!qr || !hint || !st) return;
         qr.innerHTML = "";
         hint.innerHTML = c.pc ? "Paired with your PC at <b>" + esc(pcAddr()) + "</b>. Phones and computers pair in the PC's control panel (Devices &rsaquo; Pair a device)."
-                              : "Not paired with your PC yet. On the PC: control panel &rsaquo; Devices &rsaquo; Pair the fridge, and put the 3 lines it shows in cloud.conf. Lists still work on the fridge alone.";
+                              : "Not paired with your PC yet. On the PC: control panel &rsaquo; Devices &rsaquo; Pair a device (it shows a code), then tap PAIR WITH YOUR PC below. Lists still work on the fridge alone.";
         var shopN = itemsOf("shop").length, rcN = itemsOf("recipe").length;
         var line1 = (CLOUD_ST === "never" || !CLOUD_ST) ? "No sync with the PC yet." : (CLOUD_ST.indexOf("ok") === 0 ? "Last sync with the PC: ok." : esc(CLOUD_ST) + ".");
         st.innerHTML = line1 + "<br>" + shopN + " shopping item" + (shopN === 1 ? "" : "s") + " &middot; " + rcN + " recipe" + (rcN === 1 ? "" : "s") +

@@ -22,6 +22,33 @@ function sigFor(secret, ts, method, p, body) {
     return crypto.createHmac("sha256", Buffer.from(secret, "hex")).update(ts + "\n" + method + "\n" + p + "\n" + sha256hex(body)).digest("hex");
 }
 function isLocal(addr) { return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1"; }
+const PROXY_HEADERS = ["x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "x-real-ip", "forwarded", "via", "tailscale-user-login", "tailscale-user-name"];
+// Is this request the PC's OWN browser (the tray window) and nothing else? 11.2.1: a loopback address alone is not enough:
+//   - `tailscale serve` (the iPhone's https address) forwards every phone request from 127.0.0.1, with X-Forwarded-For etc.:
+//     those must pair like any other device, so any proxy header means "not the PC itself"
+//   - a web page the owner has open in the PC's browser can send requests to http://127.0.0.1:8770 too (a form or fetch to
+//     another site's address, or DNS rebinding): the Host must be the loopback name itself, and a request that changes
+//     something must come from this page's own origin (browsers always say where a request came from in Origin)
+function isOwnerRequest(req) {
+    if (!isLocal(req.socket.remoteAddress)) return false;
+    const h = req.headers;
+    if (PROXY_HEADERS.some(k => h[k] !== undefined)) return false;
+    const host = String(h.host || "");
+    if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d{1,5})?$/i.test(host)) return false;
+    const origin = h.origin;
+    if (origin !== undefined && !/^(GET|HEAD)$/.test(req.method)) {
+        let o; try { o = new URL(origin); } catch (e) { return false; }
+        if (o.host.toLowerCase() !== host.toLowerCase()) return false;
+    }
+    if (String(h["sec-fetch-site"] || "same-origin") === "cross-site") return false;
+    return true;
+}
+// who the request is from, for lockouts: behind the loopback proxy it is the address the proxy saw
+function clientAddr(req) {
+    const a = req.socket.remoteAddress;
+    if (isLocal(a)) { const f = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim(); if (/^[0-9a-f.:]{3,45}$/i.test(f)) return f; }
+    return a;
+}
 
 class Auth {
     constructor(dir, now) {
@@ -71,8 +98,8 @@ class Auth {
     }
     // -> { who: "owner" | device id } or { error }
     check(req, body, ownerLocal) {
-        const addr = req.socket.remoteAddress;
-        if (ownerLocal !== false && isLocal(addr)) return { who: "owner" };
+        const addr = clientAddr(req);
+        if (ownerLocal !== false && isOwnerRequest(req)) return { who: "owner" };
         if (this.locked(addr)) return { error: "too many bad requests - try again later", code: 429 };
         const id = req.headers["x-kh-dev"], ts = req.headers["x-kh-ts"], sig = req.headers["x-kh-sig"];
         const d = id && this.devices[id];
@@ -85,8 +112,9 @@ class Auth {
         for (const [k, v] of this.seen) if (t - v > 2 * SKEW_MS) this.seen.delete(k);
         if (this.seen.has(sig)) return bad("request was already used");
         this.seen.set(sig, t);
+        this.fails.delete(addr);        // 11.2.1: a good request clears the bad-request count (ten slips over weeks used to lock a fridge out for 15 minutes)
         if (t - (d.seen || 0) > 60000 || d.addr !== addr) { d.seen = t; d.addr = addr; this.save(); }
         return { who: id, device: d };
     }
 }
-module.exports = { Auth, sigFor, sha256hex, isLocal };
+module.exports = { Auth, sigFor, sha256hex, isLocal, isOwnerRequest, clientAddr };

@@ -13,7 +13,15 @@ const DATA = arg("data") || process.env.KH_DATA ||
 let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(path.join(DATA, "config.json"), "utf8")); } catch (e) {}
 const note = (m) => { try { fs.mkdirSync(DATA, { recursive: true }); fs.appendFileSync(path.join(DATA, "hub.log"), new Date().toISOString().replace("T", " ").slice(0, 19) + " " + m + "\n"); } catch (e) {} };
 const kitMain = cfg.kitDir ? path.join(DATA, "kits", cfg.kitDir, "pc", "hub", "main.js") : "";
-if (kitMain && fs.existsSync(kitMain) && !process.env.KH_BUILTIN) {
+// 11.2.1: a kit that loads but then crashes within a minute, again and again (run-hub.cmd keeps restarting it), would keep the
+// hub down for good. main.js marks the start as good after a minute; three starts in a row that never got there = the built-in copy.
+const bootF = path.join(DATA, "kitboot.json");
+let boot = {}; try { boot = JSON.parse(fs.readFileSync(bootF, "utf8")) || {}; } catch (e) {}
+const same = boot.kit === cfg.kitDir && boot.ok !== true;
+if (kitMain && fs.existsSync(kitMain) && !process.env.KH_BUILTIN && same && boot.tries >= 3) {
+    note("the installed kit " + cfg.kitDir + " crashed in " + boot.tries + " starts in a row - running the built-in copy (Status > Install a kit file to try another)");
+} else if (kitMain && fs.existsSync(kitMain) && !process.env.KH_BUILTIN) {
+    try { fs.writeFileSync(bootF, JSON.stringify({ kit: cfg.kitDir, tries: same ? boot.tries + 1 : 1, ok: false })); } catch (e) {}
     try { process.env.KH_KIT = cfg.kitDir; require(kitMain); return; }
     catch (e) { note("the installed kit " + cfg.kitDir + " would not start (" + e.message + ") - running the built-in copy"); delete process.env.KH_KIT; }
 }

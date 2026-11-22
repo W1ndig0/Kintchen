@@ -1,0 +1,24 @@
+KITCHEN HUB 11.2.1 - A FULL BUG HUNT
+Installs by itself from your PC: Settings > Updates > CHECK FOR UPDATE (the PC part needs "Install a kit file" first).
+Everything from 11.0 to 11.2 gone over again, looking for faults. These were found and fixed.
+
+SAFETY
+ 1  Phones that reach the PC through "tailscale serve" were treated as the PC itself (no pairing needed). They now
+    pair like any other device. A web page open in the PC's browser can no longer talk to the hub as the owner.
+ 2  The fridge's key only opens what the fridge needs: it can no longer make pairing codes, list or remove devices, or run jobs.
+
+FIXES
+ 3  A big book (a long PDF) is sent in 1.5 MB parts instead of one piece, so the Kindle's small temporary memory is not overrun.
+ 4  One book file that is still being copied or is open in another program no longer stops the whole book folder scan.
+ 5  Ten bad requests spread over weeks no longer lock a device out for 15 minutes (a good request clears the count).
+ 6  A kit that loads but keeps crashing is dropped after 3 starts in a row, and the built-in copy runs (no endless restart loop).
+ 7  The price check can no longer get stuck, and a second ask that comes in during a check is answered too.
+ 8  A job run that cannot start no longer leaves the PC thinking it is still running.
+ 9  "Get the newest kit" never waits for a password prompt nobody can see.
+10  Push to the iPhone uses a contact address Apple accepts (can be changed with "pushSubject" in config.json).
+11  The fridge says so when its clock is more than 5 minutes off the PC's, instead of "pair again".
+12  The fridge's pairing hint no longer talks about editing cloud.conf.
+
+NOTES
+13  Windows copies of the kit keep their scripts with the right line endings (.gitattributes).
+14  README: the PC must not sleep and should have a fixed address in the router - those are the two reasons the fridge says "the PC didn't answer".
