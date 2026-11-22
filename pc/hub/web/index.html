@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kitchen Hub">
+<meta name="theme-color" content="#111111">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Kitchen Hub</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="pairing" class="hidden">
+  <div class="card narrow">
+    <h1>Kitchen Hub</h1>
+    <p>This device isn't paired yet. On the PC, open desktop mode, go to <b>Devices</b> and press <b>Pair a device</b>. Then scan the code or type it here.</p>
+    <label>Pairing code <input id="pair-code" autocomplete="off" autocapitalize="characters" maxlength="10" placeholder="ABCD2345"></label>
+    <label>Name for this device <input id="pair-name" maxlength="40" placeholder="My iPhone"></label>
+    <button id="pair-go" class="primary">Pair</button>
+    <p id="pair-msg" class="msg"></p>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header id="top">
+    <div class="brand">Kitchen Hub</div>
+    <div id="conn" class="conn">…</div>
+    <label class="dm"><input type="checkbox" id="dm-switch"> Desktop mode</label>
+  </header>
+  <nav id="nav">
+    <button data-tab="list" class="sel">List</button>
+    <button data-tab="status">Status</button>
+    <button data-tab="kindle" class="desk">Virtual Kindle</button>
+    <button data-tab="queue" class="desk">Fridge queue</button>
+    <button data-tab="devices" class="desk">Devices</button>
+  </nav>
+  <main>
+    <section id="tab-list">
+      <form id="add" class="add">
+        <input id="add-name" placeholder="Add to the list" autocomplete="off" maxlength="120">
+        <input id="add-qty" type="number" min="1" max="99" value="1" title="How many">
+        <button class="primary">Add</button>
+      </form>
+      <div id="pending" class="msg"></div>
+      <ul id="shop" class="items"></ul>
+      <h3 class="sub">Ticked off</h3>
+      <ul id="shop-done" class="items done"></ul>
+    </section>
+    <section id="tab-status" class="hidden"><div id="status" class="grid"></div></section>
+    <section id="tab-kindle" class="hidden">
+      <div class="row">
+        <button id="vk-rot">Rotate</button>
+        <button id="vk-reload">Reload</button>
+        <span class="msg">The real fridge page, fed with the PC's data. Taps here don't reach the fridge; use the queue for that.</span>
+      </div>
+      <div id="vk-wrap"><iframe id="vk" title="Virtual Kindle"></iframe></div>
+    </section>
+    <section id="tab-queue" class="hidden">
+      <div class="row" id="q-buttons">
+        <button data-a="sync">Sync now</button>
+        <button data-a="update-check">Check for update</button>
+        <button data-a="update-install">Install update</button>
+        <button data-a="log">Upload log</button>
+        <button data-a="reload">Reload page</button>
+        <button data-a="timer">Timer…</button>
+        <button data-a="note">Pin a note…</button>
+      </div>
+      <p class="msg">The fridge sleeps most of the time: actions are delivered at its next wake.</p>
+      <ul id="queue" class="items"></ul>
+    </section>
+    <section id="tab-devices" class="hidden">
+      <div class="row"><button id="pair-new" class="primary">Pair a device</button></div>
+      <div id="pair-box" class="hidden card">
+        <div id="pair-qr" class="qr"></div>
+        <div><div class="big" id="pair-show"></div><p class="msg" id="pair-until"></p>
+        <p class="msg">Scan with the phone camera (on home Wi-Fi or Tailscale), or type the code on the other device. Single use.</p></div>
+      </div>
+      <ul id="devices" class="items"></ul>
+    </section>
+  </main>
+</div>
+<script src="hubdata.js"></script>
+<script src="qr.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

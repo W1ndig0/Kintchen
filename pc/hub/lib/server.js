@@ -1,0 +1,168 @@
+/* Kitchen Hub v11 - the hub's web server (Node built-ins only).
+ *
+ *   /                 the web app (phone layout, desktop mode on wide screens)          no key (no data in it)
+ *   /api/hello        "is this a Kitchen Hub?"                                          no key
+ *   /api/pair         a device trades a pairing code for its key                       no key (code-limited)
+ *   /api/*            everything else                                                   PC itself or a signed request
+ *   /kindle/*         the real fridge page, read-only, with the PC's data files         view cookie (desktop mode)
+ *
+ * Only addresses on the home network, Tailscale (100.64.0.0/10) and the PC itself are answered at all. */
+"use strict";
+const http = require("http"), fs = require("fs"), path = require("path"), crypto = require("crypto");
+const { atomicWrite } = require("./store.js");
+const { isLocal } = require("./auth.js");
+
+const VERSION = "11.0-dev";
+const MAX_BODY = 2 * 1024 * 1024;
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+                ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml",
+                ".webmanifest": "application/manifest+json", ".ico": "image/x-icon", ".txt": "text/plain; charset=utf-8" };
+const QUEUE_ACTIONS = /^(sync|update-check|update-install|log|reload|timer:\d{1,3}|note:.{1,280}|screen:[a-z0-9_-]{1,24}|front:(on|off)|contrast:\d{1,2})$/;
+
+function homeAddr(a) {
+    a = String(a || "").replace(/^::ffff:/, "");
+    if (a === "::1" || a === "127.0.0.1") return true;
+    const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(a);
+    if (m) {
+        const p = m.slice(1).map(Number);
+        return p[0] === 10 || (p[0] === 192 && p[1] === 168) || (p[0] === 172 && p[1] >= 16 && p[1] <= 31) ||
+               (p[0] === 100 && p[1] >= 64 && p[1] <= 127) || (p[0] === 169 && p[1] === 254);
+    }
+    return /^f[cd][0-9a-f]{2}:/i.test(a) || /^fe80:/i.test(a);       // IPv6 private / link-local (Tailscale uses fd7a:)
+}
+function readJson(f, d) { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch (e) { return d; } }
+function jsStr(s) { return JSON.stringify(String(s)).replace(/[\u2028\u2029]/g, c => c === "\u2028" ? "\\u2028" : "\\u2029"); }
+
+function createServer(opts) {
+    const { store, auth, dataDir, webDir, kindleDir, log = () => {} } = opts;
+    const now = opts.now || Date.now;
+    const queueFile = path.join(dataDir, "queue.json");
+    let queue = readJson(queueFile, []);
+    const views = new Map();        // view cookie -> expiry
+    const saveQueue = () => atomicWrite(queueFile, JSON.stringify(queue, null, 1));
+
+    function send(res, code, body, type, extra) {
+        const b = Buffer.isBuffer(body) ? body : Buffer.from(typeof body === "string" ? body : JSON.stringify(body));
+        res.writeHead(code, Object.assign({ "Content-Type": type || "application/json", "Content-Length": b.length, "Cache-Control": "no-store",
+                                            "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" }, extra || {}));
+        res.end(b);
+    }
+    const err = (res, code, m) => send(res, code, { error: m });
+
+    function serveFile(res, root, rel, extra) {
+        const f = path.normalize(path.join(root, rel));
+        if (!f.startsWith(path.normalize(root + path.sep)) && f !== path.normalize(root)) return err(res, 404, "not found");
+        fs.stat(f, (e, st) => {
+            if (e || !st.isFile()) return err(res, 404, "not found");
+            fs.readFile(f, (e2, b) => e2 ? err(res, 500, "read failed") : send(res, 200, b, TYPES[path.extname(f).toLowerCase()] || "application/octet-stream",
+                                                                          Object.assign({ "Cache-Control": "no-cache" }, extra || {})));
+        });
+    }
+    function viewOk(req) {
+        if (isLocal(req.socket.remoteAddress)) return true;
+        const m = /(?:^|;\s*)kh_view=([0-9a-f]{48})/.exec(req.headers.cookie || "");
+        const t = m && views.get(m[1]);
+        return !!(t && t > now());
+    }
+    function kindleItemsJs() {
+        const lines = store.text.split("\n").filter(l => l && l[0] !== "#");
+        return "window.HUB_ITEMS = { st: \"ok\", pending: 0, at: " + Math.floor(now() / 1000) + ", lines: [" +
+               lines.map(jsStr).join(",\n") + (lines.length ? "," : "") + "\"\"] };\n";
+    }
+
+    async function api(req, res, url, body, who) {
+        const p = url.pathname, m = req.method;
+        if (p === "/api/status" && m === "GET") {
+            const kin = auth.list().filter(d => d.kind === "kindle").sort((a, b) => b.seen - a.seen)[0];
+            return send(res, 200, { app: "kitchen-hub", version: VERSION, time: now(), items: store.items().length,
+                                    devices: auth.list().length, kindleSeen: kin ? kin.seen : 0, queue: queue.filter(q => q.state !== "done").length, you: who });
+        }
+        if (p === "/api/store") {
+            if (m === "GET") {
+                const tag = store.etag();
+                if (req.headers["if-none-match"] === tag) { res.writeHead(304, { ETag: tag }); return res.end(); }
+                return send(res, 200, store.text, "text/plain; charset=utf-8", { ETag: tag });
+            }
+            if (m === "POST") {
+                const changed = store.merge(body.toString("utf8"), now());
+                if (changed) log("store: merged from " + who);
+                return send(res, 200, store.text, "text/plain; charset=utf-8", { ETag: store.etag(), "X-KH-Changed": changed ? "1" : "0" });
+            }
+        }
+        if (p === "/api/pair/code" && m === "POST") return send(res, 200, auth.newCode());
+        if (p === "/api/devices" && m === "GET") return send(res, 200, auth.list());
+        let dm = /^\/api\/devices\/(d[0-9a-f]{12})(\/name)?$/.exec(p);
+        if (dm && m === "DELETE" && !dm[2]) return auth.revoke(dm[1]) ? (log("device revoked " + dm[1]), send(res, 200, { ok: 1 })) : err(res, 404, "no such device");
+        if (dm && m === "POST" && dm[2]) { let j = {}; try { j = JSON.parse(body); } catch (e) {} return auth.rename(dm[1], j.name) ? send(res, 200, { ok: 1 }) : err(res, 404, "no such device"); }
+        if (p === "/api/queue" && m === "GET") return send(res, 200, queue);
+        if (p === "/api/queue" && m === "POST") {
+            let j = {}; try { j = JSON.parse(body); } catch (e) {}
+            const a = String(j.action || "");
+            if (!QUEUE_ACTIONS.test(a)) return err(res, 400, "unknown action");
+            const q = { id: "q" + crypto.randomBytes(5).toString("hex"), action: a, state: "queued", at: now(), by: who };
+            queue.push(q); queue = queue.slice(-100); saveQueue(); log("queued " + a);
+            return send(res, 200, q);
+        }
+        let qm = /^\/api\/queue\/(q[0-9a-f]{10})$/.exec(p);
+        if (qm && m === "DELETE") {
+            const q = queue.find(x => x.id === qm[1]);
+            if (!q) return err(res, 404, "no such action");
+            if (q.state !== "queued") return err(res, 409, "already delivered");
+            queue = queue.filter(x => x !== q); saveQueue(); return send(res, 200, { ok: 1 });
+        }
+        if (p === "/api/view" && m === "POST") {       // a cookie so the virtual Kindle frame can load its data files
+            const v = crypto.randomBytes(24).toString("hex"), until = now() + 12 * 3600000;
+            for (const [k, t] of views) if (t < now()) views.delete(k);
+            views.set(v, until);
+            return send(res, 200, { ok: 1 }, null, { "Set-Cookie": "kh_view=" + v + "; Path=/kindle/; HttpOnly; SameSite=Strict; Max-Age=43200" });
+        }
+        return err(res, 404, "not found");
+    }
+
+    const server = http.createServer((req, res) => {
+        const addr = req.socket.remoteAddress;
+        if (!homeAddr(addr)) { req.destroy(); return; }
+        let url; try { url = new URL(req.url, "http://hub"); } catch (e) { return err(res, 400, "bad address"); }
+        const chunks = []; let size = 0;
+        req.on("data", c => { size += c.length; if (size > MAX_BODY) { err(res, 413, "too big"); req.destroy(); } else chunks.push(c); });
+        req.on("end", async () => {
+            if (res.writableEnded) return;
+            const body = Buffer.concat(chunks), p = url.pathname;
+            try {
+                if (p === "/api/hello") return send(res, 200, { app: "kitchen-hub", version: VERSION });
+                if (p === "/api/pair" && req.method === "POST") {
+                    if (auth.locked(addr)) return err(res, 429, "too many tries - wait 15 minutes");
+                    let j = {}; try { j = JSON.parse(body); } catch (e) {}
+                    const r = auth.pair(j.code, j.name, j.kind);
+                    if (r.error) { auth.failed(addr); return err(res, 403, r.error); }
+                    log("paired " + j.kind + " '" + j.name + "' from " + addr);
+                    return send(res, 200, r);
+                }
+                if (p.startsWith("/api/")) {
+                    const a = auth.check(req, body);
+                    if (a.error) return err(res, a.code || 401, a.error);
+                    return await api(req, res, url, body, a.who);
+                }
+                if (p.startsWith("/kindle/")) {
+                    if (!viewOk(req)) return err(res, 403, "open the virtual Kindle from desktop mode");
+                    const rel = decodeURIComponent(p.slice(8)) || "index.html";
+                    if (rel === "hub_items.js") return send(res, 200, kindleItemsJs(), TYPES[".js"]);
+                    const fromData = path.join(dataDir, "kindle", rel);
+                    if (/^[\w.-]+\.js$/.test(rel) && fs.existsSync(fromData)) return serveFile(res, path.join(dataDir, "kindle"), rel);
+                    // a data file the PC hasn't made yet: an empty script, like a fridge that hasn't synced (no console errors)
+                    if (/^[\w.-]+\.js$/.test(rel) && !fs.existsSync(path.join(kindleDir, rel))) return send(res, 200, "/* not made yet */\n", TYPES[".js"]);
+                    return serveFile(res, kindleDir, rel);
+                }
+                const rel = decodeURIComponent(p) === "/" ? "index.html" : decodeURIComponent(p).slice(1);
+                if (opts.shared && opts.shared[rel]) return serveFile(res, path.dirname(opts.shared[rel]), path.basename(opts.shared[rel]));
+                return serveFile(res, webDir, rel, rel === "index.html" ? { "Content-Security-Policy": "default-src 'self'; frame-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'" } : null);
+            } catch (e) {
+                log("error " + (e && e.stack || e));
+                if (!res.headersSent) err(res, 500, "hub error");
+            }
+        });
+    });
+    server.homeAddr = homeAddr;
+    return server;
+}
+module.exports = { createServer, homeAddr, VERSION, QUEUE_ACTIONS };
